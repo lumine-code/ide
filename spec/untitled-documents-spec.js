@@ -142,6 +142,20 @@ describe("Unsaved language-server documents", () => {
     expect(manager.rootForEditor(editor, adapter)).toBe(tempDir);
   });
 
+  it("carries a grammar extension and replaces its URI when the language changes", () => {
+    let fileTypes = ["sass"];
+    const scratch = { getPath: () => null, getGrammar: () => ({ fileTypes }) };
+    const sassUri = manager.uriForEditor(scratch);
+    expect(sassUri.startsWith("untitled:")).toBe(true);
+    expect(sassUri.endsWith(".sass")).toBe(true);
+    expect(manager.uriForEditor(scratch)).toBe(sassUri);
+    fileTypes = ["*.unsupported", "html"];
+    const htmlUri = manager.uriForEditor(scratch);
+    expect(htmlUri.endsWith(".html")).toBe(true);
+    expect(manager.resolveUri(sassUri)).toBeNull();
+    expect(manager.resolveUri(htmlUri)).toEqual({ kind: "untitled", editor: scratch });
+  });
+
   for (const shape of ["changes", "documentChanges"]) {
     it(`applies a rename to the existing unsaved editor through ${shape}`, async () => {
       editor.setText("<div></div>");
