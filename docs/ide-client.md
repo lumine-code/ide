@@ -66,6 +66,8 @@ interface LanguageServerAdapter {
     context: { session: LanguageServerSession },
   ): void;
   features?: Partial<Record<LanguageServerFeature, boolean>>;
+  featuresKeyPath?: string;
+  isFeatureAvailable?(feature: LanguageServerFeature, editor?: TextEditor): boolean;
   managedServer?: ManagedServerDescriptor;
   managedServerDisplayName?: string;
   bundledServer?: boolean;
@@ -202,7 +204,7 @@ The `languageId` sent to the server is resolved in order: `languageIdForScope(sc
 
 The core handlers include server-initiated `workspace/workspaceFolders`. Its result is the same current folder list sent during initialize, so a server may query it later without an adapter hook. The client also sends folder-change notifications to sessions that declare support for them.
 
-`transformDocumentText` can adapt an editor's text before `didOpen`, `didChange`, and `didSave`, including notebook cell text. An adapter that uses it receives full-document changes so the server never sees a mixture of transformed and original text. `restoreDocumentText` reverses the adaptation in formatting, rename, and workspace edits before they reach the editor. A transform must preserve line positions outside the text it intentionally hides.
+`transformDocumentText` can adapt an editor's text before `didOpen`, `didChange`, and `didSave`, including notebook cell text. For ordinary editor documents the client waits for `whenGrammarSettled()` before reading a projection, coalesces pending full-document changes, and holds document requests until the latest change has reached the server. An adapter that uses it receives full-document changes so the server never sees a mixture of transformed and original text. `restoreDocumentText` reverses the adaptation in formatting, rename, and workspace edits before they reach the editor. A transform must preserve line positions outside the text it intentionally hides. An irreversible projection must refuse host-wide editing features through `isFeatureAvailable`.
 
 `transformDiagnostics` is the adapter's last word on what its server reported, for the diagnostic a server insists on and its own users do not want — `ide-json` drops "Comments are not permitted in JSON" with it. Every route arrives at the same funnel, push notifications and pulled reports alike, so what it returns is what is stored, emitted, counted and handed to a code-action request as context; there is no unfiltered copy behind it. Returning the array unchanged is free. Prefer it over `transformDocumentText` whenever the goal is what the server _says_ rather than what it _sees_: hiding text costs a reversal in every edit that comes back, and one that survives a reformat is rarely writable.
 
@@ -377,7 +379,7 @@ Declare them in your `package.json` under `features`, listing **only what your s
 }
 ```
 
-The hub reads `<adapter id>.features.<name>`, so the key path follows from your `id` and nothing has to be registered. Every switch is read through the editor's scope, so a user can override one per language. A feature nobody named is on.
+The hub reads `<adapter id>.features.<name>` by default. Set `featuresKeyPath` to an explicit base such as `ide-css.features` when several adapters share one package's settings. Every switch is read through the editor's scope, so a user can override one per language. A feature nobody named is on. `isFeatureAvailable(feature, editor)` can return `false` to refuse a capability the adapter cannot safely offer in that document; configuration cannot override this restriction. For example, an HTML projection can complete embedded markup while refusing to format its host document.
 
 The `features` field on the adapter object is the fallback for an adapter with no config namespace — a custom server from `language-servers.json`, whose id carries a colon. A package should use `configSchema`, which the user can actually change; that wins over the field.
 

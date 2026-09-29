@@ -72,7 +72,7 @@ consumeIdeClient(ideClient) {
 }
 ```
 
-Commands are spawned directly with `shell: false`; arguments belong in `args`. The default session scope is one server per project root; a server whose capabilities declare multi-root support is handed further folders instead of being started again, so `sessionScope: "workspace"` is needed only for servers with no notion of a root. Editors without a file path are not attached to language servers. The complete public shapes are documented in `lib/main.d.ts`.
+Commands are spawned directly with `shell: false`; arguments belong in `args`. The default session scope is one server per project root; a server whose capabilities declare multi-root support is handed further folders instead of being started again, so `sessionScope: "workspace"` is needed only for servers with no notion of a root. New, unsaved editors use stable `untitled:` document URIs and the first project root, falling back to the working directory when no project is open. Saving closes that document and opens the file URI in the appropriate session. The complete public shapes are documented in `lib/main.d.ts`.
 
 Text edits from `WorkspaceEdit` are applied to versioned editor buffers by this package. Filesystem inspection and resource operations are delegated to the optional `file-operations` infrastructure instead; `ide-client` never falls back to reading or mutating paths itself. The executor's lifecycle lets the hub retarget buffers and replace private staging noise with durable LSP file events, and a session advertises create, rename and delete support only when that executor was available during initialize.
 

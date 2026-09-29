@@ -464,7 +464,7 @@ describe("LanguageServerManager external documents", () => {
     const filePath = path.resolve("proj", "a.py");
     const editor = { getPath: () => filePath };
     expect(manager.uriForEditor(editor)).toBe(C.pathToUri(filePath));
-    expect(manager.uriForEditor({ getPath: () => null })).toBeNull();
+    expect(manager.uriForEditor({ getPath: () => null }).startsWith("untitled:")).toBe(true);
   });
 
   it("asks only sessions that hold the cell document about a cell", () => {

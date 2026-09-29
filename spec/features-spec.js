@@ -71,6 +71,27 @@ describe("feature switches", () => {
       expect(featureEnabled(adapterFor("ide-a"), "hover", stubEditor())).toBe(false);
       expect(featureEnabled(adapterFor("ide-b"), "hover", stubEditor())).toBe(true);
     });
+    it("shares a package's scoped settings between its server adapters", () => {
+      const adapter = adapterFor("ide-b", { featuresKeyPath: "ide-a.features" });
+      lumine.config.set("ide-a.features.hover", false);
+      lumine.config.set("ide-a.features.hover", true, { scopeSelector: ".source.js" });
+      expect(featuresKeyPath(adapter)).toBe("ide-a.features");
+      expect(featureEnabled(adapter, "hover", stubEditor("source.js"))).toBe(true);
+      expect(featureEnabled(adapter, "hover", stubEditor("source.py"))).toBe(false);
+      lumine.config.unset("ide-a.features.hover", { scopeSelector: ".source.js" });
+    });
+    it("cannot enable formatting an adapter's read-only projection", () => {
+      const adapter = adapterFor("ide-a", {
+        isFeatureAvailable: (feature, editor) =>
+          feature !== "format" || editor?.getGrammar().scopeName !== "source.py",
+      });
+      lumine.config.set("ide-a.features.format", true);
+      expect(featureEnabled(adapter, "format", stubEditor("source.py"))).toBe(false);
+      expect(featureEnabled(adapter, "format", stubEditor("source.js"))).toBe(true);
+      expect(featureEnabled(adapter, "hover", stubEditor("source.py"))).toBe(true);
+      const session = sessionFor(adapter, { documentFormattingProvider: true });
+      expect(session.supports("textDocument/formatting", stubEditor("source.py"))).toBe(false);
+    });
     it("honours a scoped override", () => {
       lumine.config.set("ide-a.features.inlayHints", true);
       lumine.config.set("ide-a.features.inlayHints", false, { scopeSelector: ".source.js" });

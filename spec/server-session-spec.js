@@ -613,6 +613,9 @@ describe("ServerSession against a fake server", () => {
 
     await session.openEditor(editor);
     await editor.save();
+    await until(async () =>
+      (await receivedMessages(session)).some(({ method }) => method === "textDocument/didSave"),
+    );
 
     const save = (await receivedMessages(session)).find(
       ({ method }) => method === "textDocument/didSave",
@@ -950,12 +953,202 @@ describe("ServerSession against a fake server", () => {
     const editor = await lumine.workspace.open(filePath);
     await session.openEditor(editor);
     editor.setText("changed secret\n");
+    await session.request("textDocument/completion", {
+      textDocument: { uri: C.pathToUri(filePath) },
+      position: { line: 0, character: 0 },
+    });
 
     const received = await receivedMessages(session);
     const didOpen = received.find((message) => message.method === "textDocument/didOpen");
     const didChange = received.find((message) => message.method === "textDocument/didChange");
     expect(didOpen.params.textDocument.text).toBe("visible hidden\n");
     expect(didChange.params.contentChanges).toEqual([{ text: "changed hidden\n" }]);
+  });
+
+  it("waits for grammar settlement before opening a transformed document", async () => {
+    const filePath = path.join(tempDir, "waiting.js");
+    fs.writeFileSync(filePath, "visible secret\n");
+    const session = await startSession(
+      { capabilities: { textDocumentSync: 2 } },
+      { transformDocumentText: (text) => text.replaceAll("secret", "hidden") },
+    );
+    const editor = await lumine.workspace.open(filePath);
+    let settle;
+    const grammar = new Promise((resolve) => (settle = resolve));
+    spyOn(editor, "whenGrammarSettled").and.returnValue(grammar);
+    const opening = session.openEditor(editor);
+
+    expect(
+      (await receivedMessages(session)).some(({ method }) => method === "textDocument/didOpen"),
+    ).toBe(false);
+    settle(true);
+    await opening;
+    const opened = (await receivedMessages(session)).find(
+      ({ method }) => method === "textDocument/didOpen",
+    );
+    expect(opened.params.textDocument.text).toBe("visible hidden\n");
+  });
+
+  it("withdraws a failed initial projection and can reopen after grammar recovery", async () => {
+    const filePath = path.join(tempDir, "failed-projection.js");
+    fs.writeFileSync(filePath, "visible secret\n");
+    const session = await startSession(
+      { capabilities: { textDocumentSync: 2 } },
+      { transformDocumentText: (text) => text.replaceAll("secret", "hidden") },
+    );
+    const editor = await lumine.workspace.open(filePath);
+    spyOn(editor, "whenGrammarSettled").and.resolveTo(false);
+    await session.openEditor(editor);
+    const uri = C.pathToUri(filePath);
+    const params = { textDocument: { uri }, position: { line: 0, character: 0 } };
+    await expectAsync(session.request("textDocument/completion", params)).toBeRejectedWithError(
+      "Language server document is closed",
+    );
+    expect(
+      (await receivedMessages(session)).some(({ method }) => method === "textDocument/didOpen"),
+    ).toBe(false);
+    expect(session.documents.has(C.uriKey(uri))).toBe(false);
+    editor.whenGrammarSettled.and.resolveTo(true);
+    await session.openEditor(editor);
+    await session.request("textDocument/completion", params);
+    expect(session.documents.has(C.uriKey(uri))).toBe(true);
+  });
+
+  it("does not query a stale projection after grammar settlement fails during editing", async () => {
+    const filePath = path.join(tempDir, "failed-change-projection.js");
+    fs.writeFileSync(filePath, "visible secret\n");
+    const session = await startSession(
+      { capabilities: { textDocumentSync: 2 } },
+      { transformDocumentText: (text) => text.replaceAll("secret", "hidden") },
+    );
+    const editor = await lumine.workspace.open(filePath);
+    await session.openEditor(editor);
+    spyOn(editor, "whenGrammarSettled").and.resolveTo(false);
+    const uri = C.pathToUri(filePath);
+    editor.setText("latest secret\n");
+    await expectAsync(
+      session.request("textDocument/completion", {
+        textDocument: { uri },
+        position: { line: 0, character: 0 },
+      }),
+    ).toBeRejectedWithError("Language server document is closed");
+    const received = await receivedMessages(session);
+    expect(received.some(({ method }) => method === "textDocument/didChange")).toBe(false);
+    expect(received.some(({ method }) => method === "textDocument/completion")).toBe(false);
+    expect(received.some(({ method }) => method === "textDocument/didClose")).toBe(true);
+  });
+
+  it("cancels a waiting request without cancelling the document's shared synchronization", async () => {
+    const filePath = path.join(tempDir, "cancelled-projection.js");
+    fs.writeFileSync(filePath, "visible secret\n");
+    const session = await startSession(
+      { capabilities: { textDocumentSync: 2 } },
+      { transformDocumentText: (text) => text.replaceAll("secret", "hidden") },
+    );
+    const editor = await lumine.workspace.open(filePath);
+    let settle;
+    const grammar = new Promise((resolve) => (settle = resolve));
+    spyOn(editor, "whenGrammarSettled").and.returnValue(grammar);
+    const opening = session.openEditor(editor);
+    const uri = C.pathToUri(filePath);
+    const controller = new AbortController();
+    const params = { textDocument: { uri }, position: { line: 0, character: 0 } };
+    const request = session.request("textDocument/completion", params, {
+      signal: controller.signal,
+    });
+    const rejected = expectAsync(request).toBeRejected();
+    controller.abort();
+    await rejected;
+    expect(session.documents.get(C.uriKey(uri)).syncAbortController.signal.aborted).toBe(false);
+    expect(
+      (await receivedMessages(session)).some(({ method }) => method === "textDocument/completion"),
+    ).toBe(false);
+    settle(true);
+    await opening;
+    await session.request("textDocument/completion", params);
+    expect(
+      (await receivedMessages(session)).filter(({ method }) => method === "textDocument/completion")
+        .length,
+    ).toBe(1);
+  });
+
+  it("combines edits during parsing and synchronizes them before a document request", async () => {
+    const filePath = path.join(tempDir, "queued.js");
+    fs.writeFileSync(filePath, "visible secret\n");
+    const session = await startSession(
+      { capabilities: { textDocumentSync: 2 }, responses: { "textDocument/completion": [] } },
+      { transformDocumentText: (text) => text.replaceAll("secret", "hidden") },
+    );
+    const editor = await lumine.workspace.open(filePath);
+    await session.openEditor(editor);
+    let settle;
+    const grammar = new Promise((resolve) => (settle = resolve));
+    spyOn(editor, "whenGrammarSettled").and.returnValue(grammar);
+    editor.setText("first secret\n");
+    editor.setText("latest secret\n");
+    const completion = session.request("textDocument/completion", {
+      textDocument: { uri: C.pathToUri(filePath) },
+      position: { line: 0, character: 0 },
+    });
+    const before = await receivedMessages(session);
+    expect(before.some(({ method }) => method === "textDocument/didChange")).toBe(false);
+    expect(before.some(({ method }) => method === "textDocument/completion")).toBe(false);
+    settle(true);
+    await completion;
+
+    const received = await receivedMessages(session);
+    const changes = received.filter(({ method }) => method === "textDocument/didChange");
+    expect(changes.length).toBe(1);
+    expect(changes[0].params.textDocument.version).toBe(3);
+    expect(changes[0].params.contentChanges).toEqual([{ text: "latest hidden\n" }]);
+    const methods = received.map(({ method }) => method);
+    expect(methods.indexOf("textDocument/didChange")).toBeLessThan(
+      methods.indexOf("textDocument/completion"),
+    );
+  });
+
+  it("abandons a queued projection and request when its document closes", async () => {
+    const filePath = path.join(tempDir, "closed-projection.js");
+    fs.writeFileSync(filePath, "visible secret\n");
+    const session = await startSession(
+      { capabilities: { textDocumentSync: 2 } },
+      { transformDocumentText: (text) => text.replaceAll("secret", "hidden") },
+    );
+    const editor = await lumine.workspace.open(filePath);
+    await session.openEditor(editor);
+    let settle;
+    const grammar = new Promise((resolve) => (settle = resolve));
+    spyOn(editor, "whenGrammarSettled").and.returnValue(grammar);
+    editor.setText("latest secret\n");
+    const completion = session.request("textDocument/completion", {
+      textDocument: { uri: C.pathToUri(filePath) },
+      position: { line: 0, character: 0 },
+    });
+    const uri = C.pathToUri(filePath);
+    const synchronization = session.documents.get(C.uriKey(uri)).syncPromise;
+    session.closeDocument(uri);
+    settle(true);
+    await synchronization;
+    await expectAsync(completion).toBeRejectedWithError("Language server document is closed");
+
+    const received = await receivedMessages(session);
+    expect(received.some(({ method }) => method === "textDocument/didChange")).toBe(false);
+    expect(received.some(({ method }) => method === "textDocument/completion")).toBe(false);
+    expect(received.some(({ method }) => method === "textDocument/didClose")).toBe(true);
+  });
+
+  it("does not wait for a grammar when the adapter synchronizes unchanged text", async () => {
+    const filePath = path.join(tempDir, "plain.js");
+    fs.writeFileSync(filePath, "plain\n");
+    const session = await startSession({ capabilities: { textDocumentSync: 2 } });
+    const editor = await lumine.workspace.open(filePath);
+    spyOn(editor, "whenGrammarSettled").and.returnValue(new Promise(() => {}));
+    await session.openEditor(editor);
+    editor.setText("changed\n");
+    expect(editor.whenGrammarSettled).not.toHaveBeenCalled();
+    expect(
+      (await receivedMessages(session)).some(({ method }) => method === "textDocument/didChange"),
+    ).toBe(true);
   });
 
   it("restores transformed text before applying a server workspace edit", async () => {

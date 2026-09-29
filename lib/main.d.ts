@@ -208,6 +208,10 @@ export interface LanguageServerAdapter {
    * instead, where the user can change them; those win over these.
    */
   features?: Partial<Record<LanguageServerFeature, boolean>>;
+  /** Share feature settings between adapters owned by the same package. */
+  featuresKeyPath?: string;
+  /** Refuse a feature the adapter cannot safely provide for this document. */
+  isFeatureAvailable?(feature: LanguageServerFeature, editor?: TextEditor): boolean;
   /** Reversibly adapt editor text before synchronizing it to the server. */
   transformDocumentText?(text: string, context: DocumentTextContext): string;
   /** Restore transformed text in formatting and workspace edits from the server. */

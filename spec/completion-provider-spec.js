@@ -337,6 +337,51 @@ describe("CompletionProvider resolve and commands", () => {
   });
 });
 
+describe("CompletionProvider duplicate server data", () => {
+  const request = {
+    editor: stubEditor("<"),
+    bufferPosition: { row: 0, column: 1 },
+    prefix: "<",
+  };
+
+  it("merges identical insertions from one server and keeps available documentation", async () => {
+    const item = itemWithEdit("link", 1);
+    const session = sessionWith(() => ({
+      items: [item, { ...item, documentation: { kind: "markdown", value: "A stylesheet link." } }],
+    }));
+    const provider = new CompletionProvider(managerWith(session));
+    const suggestions = await provider.getSuggestions(request);
+    expect(suggestions.length).toBe(1);
+    expect(suggestions[0].descriptionMarkdown).toBe("A stylesheet link.");
+  });
+
+  it("preserves distinct edits, resolve identities and overload signatures", async () => {
+    const item = itemWithEdit("link", 1);
+    const session = sessionWith(() => ({
+      items: [
+        item,
+        { ...item, textEdit: { ...item.textEdit, newText: 'link href="$1"' } },
+        { ...item, data: { symbol: 1 } },
+        { ...item, data: { symbol: 2 } },
+        { ...item, detail: "(path: string)" },
+        { ...item, detail: "(path: URL)" },
+      ],
+    }));
+    const provider = new CompletionProvider(managerWith(session));
+    expect((await provider.getSuggestions(request)).length).toBe(6);
+  });
+
+  it("keeps identical suggestions from independent servers on their original sessions", async () => {
+    const response = () => ({ items: [itemWithEdit("link", 1)] });
+    const first = sessionWith(response);
+    const second = sessionWith(response);
+    const provider = new CompletionProvider(managerWith(first, second));
+    const suggestions = await provider.getSuggestions(request);
+    expect(suggestions.length).toBe(2);
+    expect(suggestions.map((item) => item._lspSession)).toEqual([first, second]);
+  });
+});
+
 describe("CompletionProvider caching", () => {
   it("grows the cached edit range as the user keeps typing", async () => {
     const session = sessionWith(() => ({
