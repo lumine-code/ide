@@ -61,6 +61,14 @@ jobs:
         with:
           repository: lumine-code/lumine
           path: lumine
+      - uses: actions/checkout@v6
+        with:
+          repository: lumine-code/language-ipython
+          path: language-ipython
+      - uses: actions/checkout@v6
+        with:
+          repository: lumine-code/ide-pyright
+          path: ide-pyright
       - uses: actions/setup-node@v6
         with:
           node-version-file: lumine/.nvmrc
@@ -79,6 +87,9 @@ jobs:
         run: git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
       - name: Install package dependencies
         working-directory: ide-client
+        run: npm ci --ignore-scripts
+      - name: Install real Basedpyright integration dependency
+        working-directory: ide-pyright
         run: npm ci --ignore-scripts
       - name: Install editor dependencies
         working-directory: lumine

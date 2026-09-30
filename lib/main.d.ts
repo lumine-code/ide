@@ -1,4 +1,4 @@
-import type { Disposable, Range as LumineRange, TextEditor } from "lumine";
+import type { Disposable, Point, Range as LumineRange, TextEditor } from "lumine";
 
 export type ServerTransport = "stdio" | "ipc" | "socket";
 export interface ServerLaunch {
@@ -114,6 +114,21 @@ export interface DocumentTextContext {
   editor: TextEditor;
   uri: string;
 }
+/** A settled analysis copy whose mappings never mutate the source editor. */
+export interface DocumentProjection {
+  source: string;
+  text: string;
+  isCurrent(): boolean;
+  isPythonPosition(point: Point | [number, number]): boolean;
+  isPythonRange?(range: LumineRange | [[number, number], [number, number]]): boolean;
+  toServerPosition(point: Point | [number, number]): Point | null;
+  fromServerPosition(point: Point | [number, number]): Point | null;
+  toServerRange(range: LumineRange | [[number, number], [number, number]]): LumineRange | null;
+  fromServerRange(range: LumineRange | [[number, number], [number, number]]): LumineRange | null;
+  mapEdits(
+    edits: Array<{ oldRange: LumineRange | [[number, number], [number, number]]; newText: string }>,
+  ): Array<{ oldRange: LumineRange; newText: string }> | null;
+}
 /** An LSP diagnostic, as the server sent it. */
 export interface Diagnostic {
   range: { start: { line: number; character: number }; end: { line: number; character: number } };
@@ -214,6 +229,25 @@ export interface LanguageServerAdapter {
   isFeatureAvailable?(feature: LanguageServerFeature, editor?: TextEditor): boolean;
   /** Reversibly adapt editor text before synchronizing it to the server. */
   transformDocumentText?(text: string, context: DocumentTextContext): string;
+  /** Preserve incremental sync for documents that need no adaptation. */
+  needsDocumentTransform?(editor?: TextEditor): boolean;
+  /** Prepare an immutable snapshot after grammar settlement; unavailable projections must reject. */
+  getDocumentProjection?(
+    editor: TextEditor,
+    context: { uri: string; signal?: AbortSignal },
+  ): Promise<DocumentProjection>;
+  /** Format isolated Python blocks and return already restored source-coordinate edits. */
+  formatProjectedDocument?(
+    editor: TextEditor,
+    projection: DocumentProjection,
+    context: {
+      method: "file" | "range" | "save";
+      range?: LumineRange;
+      options: { tabSize: number; insertSpaces: boolean };
+      signal?: AbortSignal;
+      session: LanguageServerSession;
+    },
+  ): Promise<Array<{ oldRange: LumineRange; newText: string }> | null>;
   /** Restore transformed text in formatting and workspace edits from the server. */
   restoreDocumentText?(text: string, context: DocumentTextContext): string;
   /** Filter or rewrite what the server reported, before anything else sees it. */
@@ -264,6 +298,14 @@ export interface LanguageServerSession {
   supports(method: string, editor?: TextEditor, feature?: LanguageServerFeature): boolean;
   capabilityOptions(method: string, editor?: TextEditor): Record<string, any> | undefined;
   request(method: string, params?: unknown, options?: RequestOptions): Promise<any>;
+  /** Serialize isolated, non-file-backed analysis documents and close each in finally. */
+  withTemporaryDocument<T>(
+    item: { uri: string; languageId: string; text: string },
+    callback: (uri: string) => Promise<T>,
+    options?: { signal?: AbortSignal },
+  ): Promise<T>;
+  currentDocumentProjection(editor: TextEditor): Promise<DocumentProjection | null>;
+  responseProjection(result: object): DocumentProjection | null;
   notify(method: string, params?: unknown): void;
   onDidChangeState(
     callback: (event: { session: LanguageServerSession; state: string; error?: Error }) => void,
