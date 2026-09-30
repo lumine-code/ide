@@ -241,6 +241,7 @@ export interface LanguageServerAdapter {
     editor: TextEditor,
     projection: DocumentProjection,
     context: {
+      uri: string;
       method: "file" | "range" | "save";
       range?: LumineRange;
       options: { tabSize: number; insertSpaces: boolean };
