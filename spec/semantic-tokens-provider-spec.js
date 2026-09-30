@@ -7,6 +7,12 @@ const flush = async () => {
   for (let i = 0; i < 20; i++) await Promise.resolve();
 };
 
+const deferred = () => {
+  let resolve;
+  const promise = new Promise((done) => (resolve = done));
+  return { promise, resolve };
+};
+
 const LEGEND = {
   tokenTypes: ["keyword", "variable", "string"],
   tokenModifiers: ["declaration", "deprecated"],
@@ -144,6 +150,30 @@ describe("SemanticTokensProvider", () => {
     ]);
   });
 
+  it("requests a full result after the editor's document URI changes", async () => {
+    const session = makeSession(() => ({ data: [0, 0, 5, 0, 0], resultId: "r1" }));
+    provider = new SemanticTokensProvider(makeManager(session));
+
+    await provider.semanticTokens(editor);
+    editor.getBuffer().setPath(path.join(os.tmpdir(), "semantic-tokens-provider-renamed.js"));
+    await provider.semanticTokens(editor);
+    await provider.semanticTokens(editor);
+
+    // A delta result id belongs to one document, even when Save As keeps the
+    // same editor and language-server session.
+    expect(session.requests.map(({ method }) => method)).toEqual([
+      "textDocument/semanticTokens/full",
+      "textDocument/semanticTokens/full",
+      "textDocument/semanticTokens/full/delta",
+    ]);
+    expect(session.requests[1].params.textDocument.uri).not.toBe(
+      session.requests[0].params.textDocument.uri,
+    );
+    expect(session.requests[2].params.textDocument.uri).toBe(
+      session.requests[1].params.textDocument.uri,
+    );
+  });
+
   it("sends a plain full request when the server offers no delta", async () => {
     const session = makeSession(
       (method) =>
@@ -197,6 +227,52 @@ describe("SemanticTokensProvider", () => {
     ]);
   });
 
+  it("does not restore a delta cache from a full request overtaken by a range", async () => {
+    const pending = deferred();
+    let fullAnswer = pending.promise;
+    const session = makeSession((method) =>
+      method === "textDocument/semanticTokens/range" ? { data: [] } : fullAnswer,
+    );
+    provider = new SemanticTokensProvider(makeManager(session));
+
+    const full = provider.semanticTokens(editor);
+    await flush();
+    await provider.semanticTokensInRange(editor, [0, 1]);
+    pending.resolve({ data: [0, 0, 5, 0, 0], resultId: "old-full" });
+    await full;
+    fullAnswer = { data: [] };
+    await provider.semanticTokens(editor);
+
+    expect(session.requests.map(({ method }) => method)).toEqual([
+      "textDocument/semanticTokens/full",
+      "textDocument/semanticTokens/range",
+      "textDocument/semanticTokens/full",
+    ]);
+  });
+
+  it("keeps the newest delta base when full requests finish in reverse order", async () => {
+    const first = deferred();
+    const second = deferred();
+    let answer = first.promise;
+    const session = makeSession(() => answer);
+    provider = new SemanticTokensProvider(makeManager(session));
+
+    const old = provider.semanticTokens(editor);
+    await flush();
+    answer = second.promise;
+    const fresh = provider.semanticTokens(editor);
+    await flush();
+    second.resolve({ data: [0, 0, 5, 0, 0], resultId: "fresh" });
+    await fresh;
+    first.resolve({ data: [0, 0, 5, 1, 0], resultId: "old" });
+    await old;
+    answer = { edits: [], resultId: "next" };
+    await provider.semanticTokens(editor);
+
+    expect(session.requests[2].method).toBe("textDocument/semanticTokens/full/delta");
+    expect(session.requests[2].params.previousResultId).toBe("fresh");
+  });
+
   it("declines a mode the server does not serve, and an editor with no session", async () => {
     const fullOnly = makeSession(() => ({ data: [] }), { legend: LEGEND, full: true });
     provider = new SemanticTokensProvider(makeManager(fullOnly));
@@ -239,6 +315,27 @@ describe("SemanticTokensProvider", () => {
 
     await provider.semanticTokens(editor);
     manager.requestRefresh({}, "semanticTokens");
+    await provider.semanticTokens(editor);
+
+    expect(session.requests.map(({ method }) => method)).toEqual([
+      "textDocument/semanticTokens/full",
+      "textDocument/semanticTokens/full",
+    ]);
+  });
+
+  it("does not cache a response that was pending when the server requested a refresh", async () => {
+    const pending = deferred();
+    let answer = pending.promise;
+    const session = makeSession(() => answer);
+    const manager = makeManager(session);
+    provider = new SemanticTokensProvider(manager);
+
+    const full = provider.semanticTokens(editor);
+    await flush();
+    manager.requestRefresh(session, "semanticTokens");
+    pending.resolve({ data: [0, 0, 5, 0, 0], resultId: "old" });
+    await full;
+    answer = { data: [], resultId: "fresh" };
     await provider.semanticTokens(editor);
 
     expect(session.requests.map(({ method }) => method)).toEqual([
