@@ -13,9 +13,13 @@ describe("LSP diagnostics linter mapping", () => {
         source: "typescript",
         code: 2304,
         codeDescription: { href: "https://example.test/2304" },
+        data: { resolutionToken: "server-owned-fix" },
       },
     ]);
     expect(result.filePath).toBe(filePath);
+    // Protocol-only data stays in the manager's diagnostic store. Rebuilt raw
+    // objects would otherwise make unchanged linter messages look updated.
+    expect(result.messages[0].lspDiagnostic).toBeUndefined();
     expect(result.messages[0]).toEqual(
       jasmine.objectContaining({
         severity: "error",
@@ -139,6 +143,7 @@ describe("LSP diagnostics linter mapping", () => {
         },
       ]);
       expect(filePath).toBe(notebookPath);
+      expect(messages[0].lspDiagnostic).toBeUndefined();
       expect(messages[0]).toEqual(
         jasmine.objectContaining({
           severity: "warning",

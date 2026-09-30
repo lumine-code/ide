@@ -372,7 +372,11 @@ describe("RefactorProvider", () => {
 
 describe("IntentionsProvider", () => {
   it("passes overlapping diagnostics as context and maps priorities", async () => {
-    const diagnostic = { range: lspRange(0, 6, 11), message: "unused" };
+    const diagnostic = {
+      range: lspRange(0, 6, 11),
+      message: "unused",
+      data: { resolutionToken: "server-owned-fix" },
+    };
     const requests = [];
     const session = sessionWith((method, params) => {
       requests.push({ method, params });
@@ -396,6 +400,7 @@ describe("IntentionsProvider", () => {
       bufferPosition: { row: 0, column: 8 },
     });
     expect(requests[0].params.context.diagnostics).toEqual([diagnostic]);
+    expect(requests[0].params.context.diagnostics[0].data).toBe(diagnostic.data);
     expect(requests[0].params.range).toEqual(diagnostic.range);
     expect(intentions.map((item) => item.title)).toEqual([
       "Preferred fix",
