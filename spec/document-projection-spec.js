@@ -399,4 +399,53 @@ describe("AST document projections", () => {
     expect(diagnostics.some((item) => item.range.start.line === 7)).toBe(true);
     expect(diagnostics.some((item) => [3, 5].includes(item.range.start.line))).toBe(false);
   }, 30000);
+  it("maps definitions and validates renames from ordinary Python into an open projection", async () => {
+    const targetUri = C.pathToUri(editor.getPath());
+    await start(
+      {},
+      {
+        "textDocument/definition": [
+          {
+            uri: targetUri,
+            range: {
+              start: { line: 0, character: 0 },
+              end: { line: 0, character: 16 },
+            },
+          },
+        ],
+        "textDocument/rename": {
+          changes: {
+            [targetUri]: [
+              {
+                range: {
+                  start: { line: 7, character: 0 },
+                  end: { line: 7, character: 6 },
+                },
+                newText: "renamed",
+              },
+            ],
+          },
+        },
+      },
+    );
+    await session.openEditor(editor);
+    const filePath = path.join(directory, "caller.py");
+    fs.writeFileSync(filePath, "value = 1\n");
+    const caller = await lumine.workspace.open(filePath);
+    await lumine.packages.activatePackage("language-python");
+    try {
+      await session.openEditor(caller);
+      const request = {
+        textDocument: { uri: C.pathToUri(filePath) },
+        position: { line: 0, character: 1 },
+      };
+      const definitions = await session.request("textDocument/definition", request);
+      expect(definitions[0].range.end.character).toBe(10);
+      const edit = await session.request("textDocument/rename", { ...request, newName: "renamed" });
+      expect(await manager.applyWorkspaceEdit(edit, "cross document", session)).toBe(true);
+      expect(editor.getText()).toBe(text.replace("result: int", "renamed: int"));
+    } finally {
+      caller.destroy();
+    }
+  });
 });
