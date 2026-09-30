@@ -68,6 +68,89 @@ const lspRange = (row, start, end) => ({
 });
 
 describe("CodeFormatProvider", () => {
+  it("cancels a range invocation whose selection changes while projection preparation is pending", async () => {
+    const { Range } = require("lumine");
+    let selections = [new Range([0, 0], [0, 5])];
+    const editor = { ...stubEditor(), getSelectedBufferRanges: () => selections };
+    let started, finish;
+    const preparing = new Promise((resolve) => {
+      started = resolve;
+    });
+    const projection = new Promise((resolve) => {
+      finish = resolve;
+    });
+    const format = jasmine.createSpy("projected formatter").and.resolveTo([]);
+    const session = {
+      ...sessionWith(() => []),
+      adapter: { formatProjectedDocument: format },
+      currentDocumentProjection: () => {
+        started();
+        return projection;
+      },
+      documents: new Map(),
+    };
+    const provider = new CodeFormatProvider(managerWith(session));
+    const result = provider.formatRange(editor, selections[0]);
+    await preparing;
+    selections = [new Range([0, 7], [0, 11])];
+    finish({ isCurrent: () => true });
+    expect(await result).toEqual([]);
+    expect(format).not.toHaveBeenCalled();
+    expect(session.documents.size).toBe(0);
+  });
+  it("preserves an unchanged range invocation and exposes its guard to an adapter queue", async () => {
+    const { Range } = require("lumine");
+    let selections = [new Range([0, 0], [0, 5])];
+    const editor = { ...stubEditor(), getSelectedBufferRanges: () => selections };
+    let observed;
+    const format = jasmine
+      .createSpy("projected formatter")
+      .and.callFake(async (_editor, _projection, context) => {
+        observed = context.isInvocationCurrent;
+        expect(observed()).toBe(true);
+        return [{ oldRange: selections[0], newText: "value" }];
+      });
+    const session = {
+      ...sessionWith(() => []),
+      adapter: { formatProjectedDocument: format },
+      currentDocumentProjection: async () => ({ isCurrent: () => true }),
+      documents: new Map(),
+    };
+    const provider = new CodeFormatProvider(managerWith(session));
+    expect((await provider.formatRange(editor, selections[0])).length).toBe(1);
+    expect(format).toHaveBeenCalledTimes(1);
+    selections = [new Range([0, 7], [0, 11])];
+    expect(observed()).toBe(false);
+  });
+  it("refuses source edits when a selection changes during the adapter's formatting wait", async () => {
+    const { Range } = require("lumine");
+    let selections = [new Range([0, 0], [0, 5])];
+    const editor = { ...stubEditor(), getSelectedBufferRanges: () => selections };
+    let started, finish;
+    const formatting = new Promise((resolve) => {
+      started = resolve;
+    });
+    const response = new Promise((resolve) => {
+      finish = resolve;
+    });
+    const session = {
+      ...sessionWith(() => []),
+      documents: new Map(),
+      currentDocumentProjection: async () => ({ isCurrent: () => true }),
+      adapter: {
+        formatProjectedDocument: () => {
+          started();
+          return response;
+        },
+      },
+    };
+    const provider = new CodeFormatProvider(managerWith(session));
+    const result = provider.formatRange(editor, selections[0]);
+    await formatting;
+    selections = [new Range([0, 7], [0, 11])];
+    finish([{ oldRange: new Range([0, 0], [0, 5]), newText: "value" }]);
+    expect(await result).toEqual([]);
+  });
   it("maps formatting edits and editor options", async () => {
     const requests = [];
     const session = sessionWith((method, params) => {

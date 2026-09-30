@@ -247,6 +247,8 @@ export interface LanguageServerAdapter {
       options: { tabSize: number; insertSpaces: boolean };
       signal?: AbortSignal;
       session: LanguageServerSession;
+      /** Captured before the client's first await, including adapter queue waits. */
+      isInvocationCurrent?: () => boolean;
     },
   ): Promise<Array<{ oldRange: LumineRange; newText: string }> | null>;
   /** Restore transformed text in formatting and workspace edits from the server. */
