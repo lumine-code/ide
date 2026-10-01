@@ -131,6 +131,12 @@ export interface DocumentProjection {
     edits: Array<{ oldRange: LumineRange | [[number, number], [number, number]]; newText: string }>,
   ): Array<{ oldRange: LumineRange; newText: string }> | null;
 }
+/** A restored file/save result independently validated by code-format before one application. */
+export interface ProjectedFormatPlan {
+  text: string;
+  edits: Array<{ oldRange: LumineRange; newText: string }>;
+  isCurrent(): boolean;
+}
 /** An LSP diagnostic, as the server sent it. */
 export interface Diagnostic {
   range: { start: { line: number; character: number }; end: { line: number; character: number } };
@@ -252,7 +258,7 @@ export interface LanguageServerAdapter {
       /** Captured before the client's first await, including adapter queue waits. */
       isInvocationCurrent?: () => boolean;
     },
-  ): Promise<Array<{ oldRange: LumineRange; newText: string }> | null>;
+  ): Promise<Array<{ oldRange: LumineRange; newText: string }> | ProjectedFormatPlan | null>;
   /** Restore transformed text in formatting and workspace edits from the server. */
   restoreDocumentText?(text: string, context: DocumentTextContext): string;
   /** Filter or rewrite what the server reported, before anything else sees it. */
