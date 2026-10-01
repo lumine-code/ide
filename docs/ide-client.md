@@ -67,7 +67,10 @@ interface LanguageServerAdapter {
   ): void;
   features?: Partial<Record<LanguageServerFeature, boolean>>;
   featuresKeyPath?: string;
-  isFeatureAvailable?(feature: LanguageServerFeature, editor?: TextEditor): boolean;
+  isFeatureAvailable?(
+    feature: LanguageServerFeature,
+    context?: TextEditor | { getRootScopeDescriptor(): ScopeDescriptor | string[] },
+  ): boolean;
   managedServer?: ManagedServerDescriptor;
   managedServerDisplayName?: string;
   bundledServer?: boolean;
@@ -383,7 +386,7 @@ Declare them in your `package.json` under `features`, listing **only what your s
 }
 ```
 
-The hub reads `<adapter id>.features.<name>` by default. Set `featuresKeyPath` to an explicit base such as `ide-css.features` when several adapters share one package's settings. Every switch is read through the editor's scope, so a user can override one per language. A feature nobody named is on. `isFeatureAvailable(feature, editor)` can return `false` to refuse a capability the adapter cannot safely offer in that document; configuration cannot override this restriction. For example, an HTML projection can complete embedded markup while refusing to format its host document.
+The hub reads `<adapter id>.features.<name>` by default. Set `featuresKeyPath` to an explicit base such as `ide-css.features` when several adapters share one package's settings. Every switch is read through the editor's scope, so a user can override one per language. A feature nobody named is on. `isFeatureAvailable(feature, context)` can return `false` to refuse a capability the adapter cannot safely offer in that document; configuration cannot override this restriction. The context may be a full editor, a scope-only object exposing `getRootScopeDescriptor()`, or absent. Scope-only contexts are used for adapter-level checks and diagnostics for paths without an open editor, including after a document closes; they do not have `getGrammar()` or `getPath()`. The descriptor may be a `ScopeDescriptor` or an array of scope names. For example, an HTML projection can complete embedded markup while refusing to format its host document.
 
 The `features` field on the adapter object is the fallback for an adapter with no config namespace — a custom server from `language-servers.json`, whose id carries a colon. A package should use `configSchema`, which the user can actually change; that wins over the field.
 
