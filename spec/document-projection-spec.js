@@ -643,6 +643,68 @@ describe("AST document projections", () => {
     expect(diagnostics.some((item) => item.range.start.line === 7)).toBe(true);
     expect(diagnostics.some((item) => [3, 5].includes(item.range.start.line))).toBe(false);
   }, 30000);
+  it("serves one real Python document across cell imports and references while excluding fenced and raw text", async () => {
+    editor.setText(
+      [
+        "import math",
+        "shared = 4",
+        "# %% [markdown]",
+        "```python",
+        "fenced_only = missing_from_markdown",
+        "```",
+        "# %% [raw]",
+        "raw <bytes>",
+        "# %% [code]",
+        "answer: float = math.sqrt(shared)",
+        "broken: int = 'wrong'",
+        "",
+      ].join("\n"),
+    );
+    const { resolveServer } = require("../../ide-pyright/lib/server");
+    session = new ServerSession(
+      manager,
+      {
+        id: "basedpyright-cross-cell-projection",
+        displayName: "Basedpyright cross-cell projection",
+        grammarScopes: ["source.python.ipy"],
+        needsDocumentTransform: () => true,
+        getDocumentProjection: (item, options) => source.project(item, options),
+        getSettings: () => ({
+          python: { analysis: { typeCheckingMode: "basic", diagnosticMode: "openFilesOnly" } },
+        }),
+        getWorkspaceConfiguration: (section) =>
+          section?.endsWith("analysis")
+            ? { typeCheckingMode: "basic", diagnosticMode: "openFilesOnly" }
+            : { analysis: { typeCheckingMode: "basic", diagnosticMode: "openFilesOnly" } },
+      },
+      directory,
+      await resolveServer(""),
+    );
+    await session.start();
+    await session.openEditor(editor);
+    const uri = C.pathToUri(editor.getPath());
+    const document = session.documents.get(C.uriKey(uri));
+    expect(document.uri).toBe(uri);
+    expect(document.projection.text).toContain("import math");
+    expect(document.projection.text).toContain("math.sqrt(shared)");
+    expect(document.projection.text).not.toContain("fenced_only");
+    expect(document.projection.text).not.toContain("raw <bytes>");
+    const report = await session.request("textDocument/diagnostic", { textDocument: { uri } });
+    const diagnostics = session.transformDiagnostics(report.items || [], uri, document);
+    expect(diagnostics.some((item) => item.range.start.line === 10)).toBe(true);
+    expect(
+      diagnostics.some((item) => item.range.start.line >= 3 && item.range.start.line <= 9),
+    ).toBe(false);
+    const result = await session.request("textDocument/definition", params(9, 28));
+    const definitions = Array.isArray(result) ? result : [result];
+    expect(
+      definitions.some((item) => {
+        const target = item?.uri || item?.targetUri;
+        const targetRange = item?.range || item?.targetSelectionRange || item?.targetRange;
+        return target && C.uriKey(target) === C.uriKey(uri) && targetRange?.start.line === 1;
+      }),
+    ).toBe(true);
+  }, 30000);
   it("maps definitions and validates renames from ordinary Python into an open projection", async () => {
     const targetUri = C.pathToUri(editor.getPath());
     await start(
