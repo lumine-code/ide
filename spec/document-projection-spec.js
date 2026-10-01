@@ -342,6 +342,100 @@ describe("AST document projections", () => {
       1,
     );
   });
+  it("tags a stale projection before RPC without sending its coordinates", async () => {
+    await start();
+    await session.openEditor(editor);
+    const document = session.documents.get(C.uriKey(C.pathToUri(editor.getPath())));
+    document.projection = { ...document.projection, isCurrent: () => false };
+    const request = spyOn(session.connection, "request").and.resolveTo([]);
+    let error;
+    try {
+      await session.request("textDocument/references", params(1, 2));
+    } catch (value) {
+      error = value;
+    }
+    expect(error?.code).toBe("PROJECTION_STALE");
+    expect(request).not.toHaveBeenCalled();
+  });
+  it("tags an edited source after RPC rather than mapping an old response through new coordinates", async () => {
+    await start();
+    await session.openEditor(editor);
+    let entered, reply;
+    const started = new Promise((resolve) => (entered = resolve));
+    const waiting = new Promise((resolve) => (reply = resolve));
+    spyOn(session.connection, "request").and.callFake(() => {
+      entered();
+      return waiting;
+    });
+    const pending = session.request("textDocument/references", params(1, 2)).then(
+      () => null,
+      (error) => error,
+    );
+    await started;
+    editor.setTextInBufferRange(
+      [
+        [0, 0],
+        [0, 0],
+      ],
+      "changed = 1\n",
+    );
+    reply([
+      {
+        uri: C.pathToUri(editor.getPath()),
+        range: { start: { line: 1, character: 0 }, end: { line: 1, character: 9 } },
+      },
+    ]);
+    expect((await pending)?.code).toBe("PROJECTION_STALE");
+  });
+  for (const scope of ["source.python", "source.python.ipy"]) {
+    it(`uses captured reference target geometry from a ${scope} origin`, async () => {
+      if (scope === "source.python") {
+        editor.setText("value = 1\n");
+        lumine.grammars.assignLanguageMode(editor.getBuffer(), scope);
+        await editor.whenGrammarSettled();
+      }
+      const filename = path.join(directory, "reference-target.ipy");
+      fs.writeFileSync(filename, "x = %p\nnext_name = x\n");
+      const target = await lumine.workspace.open(filename);
+      try {
+        await start();
+        await session.openEditor(editor);
+        await session.openEditor(target);
+        const uri = C.pathToUri(filename),
+          location = {
+            uri,
+            range: { start: { line: 0, character: 0 }, end: { line: 0, character: 12 } },
+          };
+        const send = session.connection.request.bind(session.connection);
+        let entered,
+          reply,
+          reads = 0;
+        const started = new Promise((resolve) => (entered = resolve));
+        const waiting = new Promise((resolve) => (reply = resolve));
+        spyOn(session.connection, "request").and.callFake((method, ...args) => {
+          if (method !== "textDocument/references") return send(method, ...args);
+          if (++reads === 1) return Promise.resolve([location]);
+          entered();
+          return waiting;
+        });
+        const unchanged = await session.request("textDocument/references", params(0, 2));
+        expect(unchanged[0].range.end.character).toBe(6);
+        const pending = session.request("textDocument/references", params(0, 2)).then(
+          () => null,
+          (error) => error,
+        );
+        await started;
+        target.setText("x = 123456789012\nnext_name = x\n");
+        await session.waitForDocumentSync(session.documents.get(C.uriKey(uri)));
+        expect(session.projectionForEditor(target).isIdentity).toBe(true);
+        expect(session.projectionForEditor(editor)?.isCurrent() ?? true).toBe(true);
+        reply([location]);
+        expect((await pending)?.code).toBe("PROJECTION_STALE");
+      } finally {
+        target.destroy();
+      }
+    });
+  }
   it("filters synthetic diagnostics without discarding ordinary Python reports", async () => {
     await start();
     await session.openEditor(editor);
