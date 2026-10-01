@@ -2839,6 +2839,45 @@ describe("ServerSession against a fake server", () => {
     await session.stop();
   });
 
+  it("accepts physical exit after a transport-failure kill returns false", async () => {
+    const session = await startSession();
+    spyOn(manager, "scheduleRestart").and.stub();
+    const child = session.process;
+    const kill = child.kill.bind(child);
+    spyOn(child, "kill").and.callFake(() => {
+      setImmediate(() => kill("SIGKILL"));
+      return false;
+    });
+
+    session.onConnectionClose();
+    await until(() => session.processExited);
+    await session.stop();
+
+    expect(child.kill).toHaveBeenCalledWith("SIGKILL");
+    expect(session.state).toBe("stopped");
+    expect(manager.getLog("fake")).not.toContain("refused SIGKILL");
+    expect(manager.getLog("fake")).not.toContain("Could not deliver exit");
+  });
+
+  it("reports a refused transport-failure kill only if the process stays alive", async () => {
+    const session = await startSession({ ignoreExit: true });
+    spyOn(manager, "scheduleRestart").and.stub();
+    const child = session.process;
+    const kill = child.kill.bind(child);
+    spyOn(child, "kill").and.returnValue(false);
+
+    session.onConnectionClose();
+
+    expect(session.state).toBe("failed");
+    expect(manager.getLog("fake")).not.toContain("refused SIGKILL");
+    await until(() => manager.getLog("fake").includes("refused SIGKILL"));
+    expect(session.processExited).toBe(false);
+    child.kill.and.callFake(kill);
+    session.kill();
+    await until(() => session.processExited);
+    await session.stop();
+  });
+
   it("lets the server exit on its own rather than killing it mid-frame", async () => {
     const session = await startSession();
     const child = session.process;
@@ -3193,10 +3232,11 @@ describe("ServerSession against a fake server", () => {
     const child = session.process;
     session.request("test/crash").catch(() => {});
     await until(() => child.exitCode != null || child.signalCode != null);
+    const notify = spyOn(session.connection, "notify").and.callThrough();
     await session.stop();
     expect(session.state).toBe("stopped");
-    // Reported into the server's log, not thrown at the renderer.
-    expect(manager.getLog("fake")).toContain("Could not deliver exit");
+    expect(notify).not.toHaveBeenCalled();
+    expect(manager.getLog("fake")).not.toContain("Could not deliver exit");
   });
 
   describe("notebook documents", () => {
