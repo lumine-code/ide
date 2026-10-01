@@ -118,6 +118,8 @@ export interface DocumentTextContext {
 export interface DocumentProjection {
   source: string;
   text: string;
+  /** True only when text is the exact original source, with original UTF-16 coordinates. */
+  readonly isIdentity?: boolean;
   isCurrent(): boolean;
   isPythonPosition(point: Point | [number, number]): boolean;
   isPythonRange?(range: LumineRange | [[number, number], [number, number]]): boolean;

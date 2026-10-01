@@ -66,6 +66,250 @@ describe("AST document projections", () => {
     position: { line: row, character: column },
   });
 
+  async function useIdentitySource() {
+    editor.setText("first = 1\n# %% [code]\nsecond = 2\n");
+    await editor.whenGrammarSettled();
+    expect((await source.project(editor)).isIdentity).toBe(true);
+  }
+  it("sends original incremental ranges when both AST snapshots use original text", async () => {
+    await useIdentitySource();
+    await start();
+    await session.openEditor(editor);
+    editor.setTextInBufferRange(
+      [
+        [0, 8],
+        [0, 9],
+      ],
+      "3",
+    );
+    await session.request("textDocument/hover", params(0, 2));
+    const changes = (await messages()).filter((item) => item.method === "textDocument/didChange");
+    expect(changes.length).toBe(1);
+    expect(changes[0].params.contentChanges).toEqual([
+      {
+        range: { start: { line: 0, character: 8 }, end: { line: 0, character: 9 } },
+        rangeLength: 1,
+        text: "3",
+      },
+    ]);
+    expect(session.projectionForEditor(editor).isCurrent()).toBe(true);
+  });
+  it("coalesces identity edits in original transaction order before concurrent queries", async () => {
+    await useIdentitySource();
+    await start();
+    await session.openEditor(editor);
+    let release, entered;
+    const waiting = new Promise((resolve) => {
+      release = resolve;
+    });
+    const preparing = new Promise((resolve) => {
+      entered = resolve;
+    });
+    session.adapter.getDocumentProjection = async (item, options) => {
+      entered();
+      await waiting;
+      return source.project(item, options);
+    };
+    editor.setTextInBufferRange(
+      [
+        [0, 0],
+        [0, 0],
+      ],
+      "pre_",
+    );
+    await preparing;
+    editor.setTextInBufferRange(
+      [
+        [0, 4],
+        [0, 4],
+      ],
+      "post_",
+    );
+    editor.setTextInBufferRange(
+      [
+        [2, 9],
+        [2, 10],
+      ],
+      "4",
+    );
+    const requests = Promise.all(
+      [0, 1, 2].map(() => session.request("textDocument/hover", params(0, 2))),
+    );
+    release();
+    await requests;
+    const traffic = await messages();
+    const changes = traffic.filter((item) => item.method === "textDocument/didChange");
+    expect(changes.length).toBe(1);
+    expect(changes[0].params.textDocument.version).toBe(4);
+    expect(changes[0].params.contentChanges.map((item) => item.text)).toEqual([
+      "pre_",
+      "post_",
+      "4",
+    ]);
+    const opened = traffic.find((item) => item.method === "textDocument/didOpen");
+    const { TextBuffer } = require("lumine");
+    const serverBuffer = new TextBuffer({ text: opened.params.textDocument.text });
+    try {
+      for (const change of changes[0].params.contentChanges)
+        serverBuffer.setTextInRange(C.rangeFromLsp(change.range), change.text);
+      expect(serverBuffer.getText()).toBe(editor.getText());
+    } finally {
+      serverBuffer.destroy();
+    }
+    expect(traffic.indexOf(changes[0])).toBeLessThan(
+      traffic.findIndex((item) => item.method === "textDocument/hover"),
+    );
+    expect(traffic.filter((item) => item.method === "textDocument/hover").length).toBe(3);
+  });
+  for (const transition of ["raw cell", "foreign cell magic", "expanded assignment magic"]) {
+    it(`uses full updates across ${transition} transitions and resumes safe original ranges`, async () => {
+      await useIdentitySource();
+      await start();
+      await session.openEditor(editor);
+      let restore;
+      if (transition === "raw cell") {
+        editor.setTextInBufferRange(
+          [
+            [1, 0],
+            [1, editor.getBuffer().lineLengthForRow(1)],
+          ],
+          "# %% [raw]",
+        );
+        restore = () =>
+          editor.setTextInBufferRange(
+            [
+              [1, 0],
+              [1, editor.getBuffer().lineLengthForRow(1)],
+            ],
+            "# %% [code]",
+          );
+      } else if (transition === "foreign cell magic") {
+        editor.setTextInBufferRange(
+          [
+            [2, 0],
+            [2, 0],
+          ],
+          "%%bash\n",
+        );
+        restore = () =>
+          editor.setTextInBufferRange(
+            [
+              [2, 0],
+              [3, 0],
+            ],
+            "",
+          );
+      } else {
+        editor.setTextInBufferRange(
+          [
+            [0, 8],
+            [0, 9],
+          ],
+          "%pwd",
+        );
+        restore = () =>
+          editor.setTextInBufferRange(
+            [
+              [0, 8],
+              [0, 12],
+            ],
+            "1",
+          );
+      }
+      await session.request("textDocument/hover", params(0, 2));
+      expect(session.projectionForEditor(editor).isIdentity).toBe(false);
+      restore();
+      await session.request("textDocument/hover", params(0, 2));
+      expect(session.projectionForEditor(editor).isIdentity).toBe(true);
+      editor.setTextInBufferRange(
+        [
+          [0, 8],
+          [0, 9],
+        ],
+        "3",
+      );
+      await session.request("textDocument/hover", params(0, 2));
+      const changes = (await messages()).filter((item) => item.method === "textDocument/didChange");
+      expect(changes.length).toBe(3);
+      expect(
+        changes
+          .slice(0, 2)
+          .every(
+            (item) =>
+              item.params.contentChanges.length === 1 && !item.params.contentChanges[0].range,
+          ),
+      ).toBe(true);
+      expect(changes[2].params.contentChanges[0].range).toEqual({
+        start: { line: 0, character: 8 },
+        end: { line: 0, character: 9 },
+      });
+      expect(changes[2].params.contentChanges[0].text).toBe("3");
+      expect(changes[0].params.contentChanges[0].text).not.toContain("%%bash");
+      expect(changes[0].params.contentChanges[0].text).not.toContain("%pwd");
+    });
+  }
+  it("keeps full synchronization for snapshots without an explicit identity contract", async () => {
+    await useIdentitySource();
+    await start({
+      getDocumentProjection: async (item, options) => ({
+        ...(await source.project(item, options)),
+        isIdentity: undefined,
+      }),
+    });
+    await session.openEditor(editor);
+    editor.setTextInBufferRange(
+      [
+        [0, 8],
+        [0, 9],
+      ],
+      "3",
+    );
+    await session.request("textDocument/hover", params(0, 2));
+    const changes = (await messages()).filter((item) => item.method === "textDocument/didChange");
+    expect(changes.length).toBe(1);
+    expect(changes[0].params.contentChanges).toEqual([{ text: editor.getText() }]);
+  });
+  it("does not replay identity edits already represented by a pending didOpen snapshot", async () => {
+    await useIdentitySource();
+    let release, entered;
+    const waiting = new Promise((resolve) => {
+      release = resolve;
+    });
+    const preparing = new Promise((resolve) => {
+      entered = resolve;
+    });
+    await start({
+      getDocumentProjection: async (item, options) => {
+        entered();
+        await waiting;
+        return source.project(item, options);
+      },
+    });
+    const opening = session.openEditor(editor);
+    await preparing;
+    editor.setTextInBufferRange(
+      [
+        [0, 0],
+        [0, 0],
+      ],
+      "pre_",
+    );
+    const request = session.request("textDocument/hover", params(0, 2));
+    release();
+    await opening;
+    await request;
+    const traffic = await messages();
+    const opened = traffic.find((item) => item.method === "textDocument/didOpen");
+    const changes = traffic.filter((item) => item.method === "textDocument/didChange");
+    expect(opened.params.textDocument.text).toBe(editor.getText());
+    expect(changes.length).toBe(1);
+    expect(changes[0].params.contentChanges).toEqual([{ text: editor.getText() }]);
+    expect(traffic.indexOf(opened)).toBeLessThan(traffic.indexOf(changes[0]));
+    expect(traffic.indexOf(changes[0])).toBeLessThan(
+      traffic.findIndex((item) => item.method === "textDocument/hover"),
+    );
+  });
+
   it("opens only projected source under the original .ipy URI", async () => {
     await start();
     await session.openEditor(editor);
