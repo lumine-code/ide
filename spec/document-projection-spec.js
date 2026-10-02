@@ -16,9 +16,7 @@ describe("AST document projections", () => {
     jasmine.useRealClock();
     directory = fs.mkdtempSync(path.join(os.tmpdir(), "ide-projection-"));
     lumine.project.setPaths([directory]);
-    const grammar = await lumine.packages.activatePackage(
-      path.join(__dirname, "../../language-ipython"),
-    );
+    const grammar = await lumine.packages.activatePackage("language-ipython");
     source = grammar.mainModule.provideIPythonSource();
     manager = new Manager();
     const filename = path.join(directory, "source.ipy");
@@ -706,7 +704,9 @@ describe("AST document projections", () => {
     expect(session.documents.size).toBe(1);
   });
   it("serves real Basedpyright diagnostics only for retained Python", async () => {
-    const { resolveServer } = require("../../ide-pyright/lib/server");
+    const { resolveServer } = require(
+      path.join(lumine.packages.resolvePackagePath("ide-pyright"), "lib", "server"),
+    );
     const launch = await resolveServer("");
     session = new ServerSession(
       manager,
@@ -754,7 +754,9 @@ describe("AST document projections", () => {
         "",
       ].join("\n"),
     );
-    const { resolveServer } = require("../../ide-pyright/lib/server");
+    const { resolveServer } = require(
+      path.join(lumine.packages.resolvePackagePath("ide-pyright"), "lib", "server"),
+    );
     session = new ServerSession(
       manager,
       {

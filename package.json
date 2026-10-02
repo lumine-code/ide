@@ -35,6 +35,10 @@
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
+  "specPackages": [
+    "language-ipython",
+    "ide-pyright"
+  ],
   "configSchema": {
     "trace": {
       "title": "Protocol Trace",
