@@ -71,4 +71,18 @@ describe("IDE hover rendering through the hover service", () => {
     expect(pre.querySelector(".syntax--storage.syntax--function").textContent).toBe("def");
     expect(pre.querySelector(".syntax--entity.syntax--function").textContent).toBe("_cache_input");
   });
+
+  it("renders an unlabeled this type as method declarations through the IDE provider", async () => {
+    const source = "this: { initialize(): void; activate(): void; }";
+    const item = await show("typescript", source);
+    const pre = item.querySelector("pre");
+    expect(pre).not.toBeNull();
+    if (!pre) return;
+    expect(pre.textContent).toBe(source);
+    expect(
+      [...pre.querySelectorAll(".syntax--attribute-name.syntax--method")].map(
+        (span) => span.textContent,
+      ),
+    ).toEqual(["initialize", "activate"]);
+  });
 });

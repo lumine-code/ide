@@ -65,6 +65,56 @@ describe("TypeScript display signatures in IDE hover", () => {
     expect(pre.querySelector(".syntax--type.syntax--predefined").textContent).toBe("string");
   });
 
+  it("recognizes every method in an unlabeled this type, including the first", async () => {
+    const text = `this: {
+    initialize(): void;
+    activate(_state: any, { signal, cause }?: {}): void;
+    deactivate(): void;
+    deserializeAboutView(state: any): any;
+    ensureModel(): any;
+    createModel(): any;
+}`;
+    const pre = await render(text);
+    expect(pre).not.toBeNull();
+    if (!pre) return;
+    expect(pre.textContent).toBe(text);
+    expect(
+      [...pre.querySelectorAll(".syntax--attribute-name.syntax--method")].map(
+        (span) => span.textContent,
+      ),
+    ).toEqual([
+      "initialize",
+      "activate",
+      "deactivate",
+      "deserializeAboutView",
+      "ensureModel",
+      "createModel",
+    ]);
+    expect(pre.querySelector(".syntax--variable.syntax--language.syntax--this").textContent).toBe(
+      "this",
+    );
+    expect(pre.querySelector(".syntax--variable.syntax--parameter").textContent).toBe("_state");
+    expect(
+      [...pre.querySelectorAll(".syntax--type.syntax--predefined")].map((span) => span.textContent),
+    ).toEqual(["void", "any", "void", "void", "any", "any", "any", "any"]);
+    expect(pre.querySelector(".syntax--support.syntax--function")).toBeNull();
+  });
+
+  it("recognizes named and composite this types without reinterpreting source expressions", async () => {
+    for (const text of ["this: Renderer", "this: Renderer | undefined", "this: Array<string>"]) {
+      const pre = await render(text);
+      expect(pre).withContext(text).not.toBeNull();
+      if (!pre) continue;
+      expect(pre.textContent).toBe(text);
+      expect(pre.querySelector(".syntax--variable.syntax--language.syntax--this").textContent).toBe(
+        "this",
+      );
+      expect(pre.querySelector(".syntax--support.syntax--storage")).not.toBeNull();
+    }
+    expect(await render("this.initialize();")).toBeNull();
+    expect(await render("this: { initialize(: }")).toBeNull();
+  });
+
   it("uses the same projection path for properties, parameters and function declarations", async () => {
     for (const [text, selector, expected] of [
       ["(property) Map<string, ns.Item>.size: number", ".syntax--attribute-name", "size"],
