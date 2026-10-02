@@ -62,7 +62,12 @@ describe("HoverProvider", () => {
   });
   it("normalizes MarkedString values to markdown", async () => {
     const result = await hoverFor({ contents: { language: "js", value: "const x = 1;" } });
-    expect(result.contents).toEqual({ kind: "markdown", value: "```js\nconst x = 1;\n```" });
+    const { renderCodeBlock, ...markup } = result.contents;
+    expect(markup).toEqual({
+      kind: "markdown",
+      value: "```js\nconst x = 1;\n```",
+    });
+    expect(typeof renderCodeBlock).toBe("function");
   });
   it("joins MarkedString arrays", async () => {
     const result = await hoverFor({ contents: ["first", { language: "js", value: "second" }] });

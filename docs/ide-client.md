@@ -11,6 +11,8 @@ Registers a language server with the editor. The adapter says how to launch it a
 
 An adapter package is small — a manifest entry, a `resolveServer`, and a grammar list. Everything a language server can do then arrives in the editor at once, because `ide-client` implements the UI-facing services (`autocomplete.provider`, `symbol.provider`, `hover.provider`, `hyperclick.provider`, `refactor.provider`, `find-references.provider`, `intentions.list`, `code-lens.provider`, `inlay-hints.provider`, `semantic-tokens.provider`, and the four `code-format.*`) on every adapter's behalf. You do not implement any of them.
 
+Hover fences use their own declared language, which may differ from the file being edited: a JavaScript hover can describe TypeScript types. The client supplies the hover service's optional code-block renderer for display signatures that are not valid source, including descriptive labels and overload counts. It parses a private declaration with the editor's grammar and maps scopes back to the original text; the displayed and copied signature stays unchanged. Unsupported forms, failed parses and ordinary source use the normal renderer. Language-specific signature handling belongs here, while the hover package remains a language-independent presentation surface.
+
 The full types are `lib/main.d.ts` in this package.
 
 ## Registration
