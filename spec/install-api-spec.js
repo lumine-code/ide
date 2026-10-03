@@ -142,6 +142,22 @@ describe("InstallApi", () => {
       expect(fs.readdirSync(target)).toEqual(["tool"]);
     });
 
+    it("routes verified XZ tar payloads to extraction and removes the temporary archive", async () => {
+      const payload = Buffer.from("verified xz payload");
+      routes["https://x/tool.tar.xz"] = payload;
+      const target = path.join(scratch, "xz");
+      spyOn(managed, "extract").and.callFake(async (archive, destination, name) => {
+        expect(fs.readFileSync(archive)).toEqual(payload);
+        expect(name).toMatch(/\.tar\.xz$/);
+        fs.writeFileSync(path.join(destination, "tool"), "installed");
+      });
+      await api.downloadFile("https://x/tool.tar.xz", target, {
+        type: "xz-tar",
+        digest: `sha256:${crypto.createHash("sha256").update(payload).digest("hex")}`,
+      });
+      expect(fs.readdirSync(target)).toEqual(["tool"]);
+    });
+
     it("rejects a download before writing or extracting a checksum mismatch", async () => {
       routes["https://x/wrong.tar.gz"] = await tarball({ "tool/tool": "payload" });
       const target = path.join(scratch, "wrong");

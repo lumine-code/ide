@@ -334,19 +334,23 @@ async installServer({ storagePath, api }) {
 
 Fill `storagePath` and return `{ version, binary }` or `{ version, module }` naming what to launch, relative to the install directory. An adapter with `bundledServer: true` may return only `{ version }` when the managed payload contains companion tools and the server itself remains the bundled copy; `managedServerDisplayName` gives that toolchain its own label in Manage Servers. Everything else is unchanged: the hub stages, swaps atomically, restores an interrupted swap from its backup on the next start, writes the same `install.json`, stops and restarts sessions in the same order, and reports the same status. It is the descriptor path without the descriptor.
 
-| primitive                                          |                                                                                                                                    |
-| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `latestGithubRelease(repository, { preRelease })`  | `{ version, tag, assets: [{ name, url, size, digest? }] }`; throws with the status rather than resolving empty                     |
-| `githubReleaseByTag(repository, tag)`              | the same shape                                                                                                                     |
-| `npmPackageLatestVersion(name)`                    |                                                                                                                                    |
-| `npmPackageInstalledVersion(name, directory)`      | `null` when absent                                                                                                                 |
-| `npmInstallPackage(name, version, directory)`      | installs the package and its tree; `--omit=dev --ignore-scripts`                                                                   |
-| `downloadFile(url, destination, { type, digest })` | verifies an optional `algorithm:hex` digest before writing or extracting; `type` ∈ `uncompressed` \| `gzip` \| `gzip-tar` \| `zip` |
-| `makeFileExecutable(path)`                         | no-op on Windows                                                                                                                   |
-| `verifyFileChecksum(path, digest)`                 | verifies an already-written file against an `algorithm:hex` digest                                                                 |
-| `setServerInstallationStatus(status)`              | `checking` \| `downloading` \| `installing` \| `failed` \| `null`                                                                  |
+| primitive                                          |                                                                                                                                                |
+| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `latestGithubRelease(repository, { preRelease })`  | `{ version, tag, assets: [{ name, url, size, digest? }] }`; throws with the status rather than resolving empty                                 |
+| `githubReleaseByTag(repository, tag)`              | the same shape                                                                                                                                 |
+| `npmPackageLatestVersion(name)`                    |                                                                                                                                                |
+| `npmPackageInstalledVersion(name, directory)`      | `null` when absent                                                                                                                             |
+| `npmInstallPackage(name, version, directory)`      | installs the package and its tree; `--omit=dev --ignore-scripts`                                                                               |
+| `downloadFile(url, destination, { type, digest })` | verifies an optional `algorithm:hex` digest before writing or extracting; `type` ∈ `uncompressed` \| `gzip` \| `gzip-tar` \| `xz-tar` \| `zip` |
+| `makeFileExecutable(path)`                         | no-op on Windows                                                                                                                               |
+| `verifyFileChecksum(path, digest)`                 | verifies an already-written file against an `algorithm:hex` digest                                                                             |
+| `setServerInstallationStatus(status)`              | `checking` \| `downloading` \| `installing` \| `failed` \| `null`                                                                              |
 
 Two things to know. **`managedServer` and `installServer` are mutually exclusive** — declaring both leaves it ambiguous which one fills the staging directory, and is rejected at `registerAdapter`. And a custom installer still owns verification policy: pass the release asset's `digest` to `downloadFile`, or call `verifyFileChecksum` for a file acquired another way; omitting both is an explicit unverified download.
+
+XZ tar archives use a small WebAssembly decoder and the existing Node tar implementation, without a native decompressor or host archive tool. Extraction validates the complete entry list before writing files: only regular files and directories are accepted, traversal and ambiguous paths are refused, and existing files or directory links cannot be overwritten or followed. Component stripping and executable permissions are preserved; temporary decoded tar data is removed after success or failure.
+
+Managed release metadata, payload and checksum GETs retry transient HTTP 429, 500, 502, 503 and 504 responses or transport failures at most twice, with 250 ms and 500 ms backoff. Each attempt allows ten seconds to receive response headers; the deadline is cleared before reading the body so large active SDK transfers continue. Permanent HTTP errors, malformed metadata, cancellation and checksum mismatches are not retried.
 
 Implement `latestServerVersion(api)` as well if the Manage Servers list should have a version to compare against; without it the row simply reports what is installed.
 

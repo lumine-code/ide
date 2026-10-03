@@ -34,7 +34,9 @@
     "lint": "eslint . --max-warnings 0",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check:zip": "node scripts/check-zip.js"
+    "check:zip": "node scripts/check-zip.js",
+    "check:xz": "node scripts/check-xz.js",
+    "check:fetch": "node scripts/check-fetch.js"
   },
   "specPackages": [
     "language-ipython",
@@ -193,6 +195,7 @@
     "picomatch": "^4.0.7",
     "tar": "^7.5.22",
     "vscode-jsonrpc": "^9.0.2",
+    "xz-decompress": "^0.2.3",
     "yauzl": "^3.4.0"
   },
   "devDependencies": {

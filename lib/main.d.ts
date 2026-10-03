@@ -23,7 +23,7 @@ export interface ServerResolutionContext {
   managedServer: ManagedServerInstall | null;
 }
 export type ServerInstallationStatus = "checking" | "downloading" | "installing" | "failed" | null;
-export type DownloadedFileType = "uncompressed" | "gzip" | "gzip-tar" | "zip";
+export type DownloadedFileType = "uncompressed" | "gzip" | "gzip-tar" | "xz-tar" | "zip";
 export interface GithubRelease {
   version: string;
   tag: string;

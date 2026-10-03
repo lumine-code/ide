@@ -46,6 +46,10 @@ jobs:
         run: npm run format:check
       - name: Validate portable ZIP extraction
         run: npm run check:zip
+      - name: Validate portable XZ extraction
+        run: npm run check:xz
+      - name: Validate bounded installer downloads
+        run: npm run check:fetch
       - name: Audit package dependencies
         run: npm audit --audit-level=moderate
       - name: Check package contents
