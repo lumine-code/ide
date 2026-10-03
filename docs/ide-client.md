@@ -49,6 +49,10 @@ interface LanguageServerAdapter {
   sessionScope?: "project-root" | "workspace";
   exclusiveGroup?: string;
   selectionPriority?: number;
+  fileWatchers?: Array<{
+    globPattern: string | { baseUri: string | { uri: string; name?: string }; pattern: string };
+    kind?: number;
+  }>;
   getInitializationOptions?(context: { rootPath: string; rootUri: string }): unknown;
   getSettings?(): unknown;
   getInitializedNotifications?(context: {
@@ -208,6 +212,8 @@ module.exports = {
 ```
 
 ## Behavior
+
+`fileWatchers` supplies standard LSP `FileSystemWatcher` entries for servers whose official clients send filesystem notifications without a server registration. String or file-backed relative globs use `kind` bits `1` (create), `2` (change), `4` (delete), defaulting to all three. The hub routes these through its existing project-file and file-operation pipeline, filters static watchers to the session's project folders, combines them with dynamic server registrations and removes consecutive duplicate URI/type events. Terminal sessions receive nothing, and unregistering the adapter removes its routes. Prefer the server's dynamic registration when it supplies one; this field does not create an independent native watcher.
 
 `prepareRequest` is an optional compatibility hook for a server's request and response conventions. It runs after document synchronization and source-to-wire projection; returning `params` replaces the outgoing request, and `mapResult` restores the response to UTF-16 wire coordinates before the client's source projection and normal result handling. Returning nothing preserves the request. The hook must preserve opaque server data and must not modify the caller's parameters. `getDocument` returns immutable snapshots of open and temporary documents as the server received them; closed-file reads belong to the adapter. The client rejects cancelled preparation, stopped sessions and results whose consulted snapshots changed during preparation or response mapping. An adapter can use `isCurrent()` for its own intermediate checks.
 

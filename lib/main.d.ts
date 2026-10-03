@@ -182,6 +182,11 @@ export interface LanguageServerAdapter {
   exclusiveGroup?: string;
   /** Higher wins within an exclusive group after configured preferred adapter IDs. */
   selectionPriority?: number;
+  /** Standard filesystem notifications required by clients of servers that do not register watchers. */
+  fileWatchers?: Array<{
+    globPattern: string | { baseUri: string | { uri: string; name?: string }; pattern: string };
+    kind?: number;
+  }>;
   resolveServer(context: ServerResolutionContext): Promise<ServerLaunch | null>;
   /** Opt in to the editor installing, updating and removing this server. */
   managedServer?: ManagedServerDescriptor;
