@@ -358,10 +358,10 @@ describe("diagnostics switch", () => {
     expect(messages.get(FILE).map(({ excerpt }) => excerpt)).toEqual(["broken"]);
   });
 
-  it("ignores what arrives while it is off", () => {
+  it("suppresses what arrives while it is off and restores it when enabled", () => {
     lumine.config.set("ide-a.features.diagnostics", false);
     push("broken");
-    expect(messages.get(FILE)).toBeUndefined();
+    expect(messages.get(FILE)).toEqual([]);
     lumine.config.set("ide-a.features.diagnostics", true);
     expect(messages.get(FILE).map(({ excerpt }) => excerpt)).toEqual(["broken"]);
   });

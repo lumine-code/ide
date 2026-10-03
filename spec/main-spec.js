@@ -11,7 +11,6 @@ const fakeStatusBar = (tiles) => ({
     return tile;
   },
 });
-const ServerSession = require("../lib/server-session");
 const makeBusySignal = require("./helpers/busy-signal");
 
 describe("ide-client package", () => {
@@ -345,6 +344,13 @@ describe("ide-client package", () => {
 
   it("publishes LSP diagnostics through linter.registry", () => {
     const main = lumine.packages.getActivePackage("ide-client").mainModule;
+    const adapter = {
+      id: "test:linter-mapping",
+      displayName: "Mapping Language Server",
+      grammarScopes: ["source.linter-test"],
+      resolveServer: async () => null,
+    };
+    main.manager.registerAdapter(adapter);
     let indieConfig;
     const delegate = {
       batches: [],
@@ -359,7 +365,7 @@ describe("ide-client package", () => {
     });
     const filePath = require("path").resolve("project", "main.ts");
     main.manager.publishDiagnostics(
-      {},
+      { adapter },
       {
         uri: require("url").pathToFileURL(filePath).href,
         diagnostics: [
@@ -401,6 +407,8 @@ describe("ide-client package", () => {
       grammarScopes: ["source.ts"],
       resolveServer: async () => null,
     };
+    main.manager.registerAdapter(adapter);
+    const ServerSession = require("../lib/server-session");
     const session = new ServerSession(main.manager, adapter, "C:\\project", {});
     const filePath = require("path").resolve("project", "unopened.ts");
     const uri = require("url").pathToFileURL(filePath).href;
@@ -466,7 +474,14 @@ describe("ide-client package", () => {
       severity: 1,
       message,
     });
-    const session = { adapter: { id: "fake-adapter", displayName: "Fake" } };
+    const adapter = {
+      id: "test:notebook-diagnostics",
+      displayName: "Notebook Language Server",
+      grammarScopes: ["source.linter-test"],
+      resolveServer: async () => null,
+    };
+    main.manager.registerAdapter(adapter);
+    const session = { adapter };
 
     main.manager.publishDiagnostics(session, {
       uri: C.cellUri(notebookPath, "c1"),

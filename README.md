@@ -79,6 +79,8 @@ Text edits from `WorkspaceEdit` are applied to versioned editor buffers by this 
 
 With `busy-signal` installed, the client reports server startup and common finite language requests when they take longer than 400 ms, even when the server does not report progress. Standard LSP progress supplies the server's own description of its work, including background indexing when the server reports it. Persistent workspace diagnostic subscriptions appear only while the server reports work. Several operations can run at once without clearing each other's indicators; each clears when it finishes or its session ends. Running servers themselves remain listed in the separate IDE status-bar item.
 
+Every registered language-server adapter appears in `linter:toggle-linter`, even before it reports diagnostics. That list can mute or restore its messages without stopping the server or disabling its other features. Removing the adapter removes its entry and messages.
+
 ## Configuration
 
 Any language server can be wired without an adapter package through `language-servers.json` in the configuration directory (open it with `ide-client:open-custom-servers-file`). Each entry needs a `command` and grammar `scopes`; `args`, `languageId`, `sessionScope`, `transport`, `env`, `initializationOptions`, `settings`, and `features` are optional. `settings` feeds both `workspace/configuration` lookups and the configuration push after startup, and `features` switches individual capabilities off — an adapter package holds the same switches in its own settings, but a custom server has no settings page to put them on:
