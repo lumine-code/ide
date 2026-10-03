@@ -45,6 +45,15 @@
     "autocomplete"
   ],
   "configSchema": {
+    "preferredServers": {
+      "title": "Preferred Servers",
+      "description": "Ordered adapter IDs to prefer when several applicable servers declare the same exclusive group. Other servers continue to run together.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
     "trace": {
       "title": "Protocol Trace",
       "description": "Log the traffic between the editor and language servers to the per-server log buffer.",

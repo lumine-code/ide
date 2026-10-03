@@ -178,6 +178,10 @@ export interface LanguageServerAdapter {
   grammarScopes: string[];
   documentSelector?: Array<{ language?: string; scheme?: string; pattern?: string }>;
   sessionScope?: "project-root" | "workspace";
+  /** Select one applicable adapter in this group without excluding unrelated servers. */
+  exclusiveGroup?: string;
+  /** Higher wins within an exclusive group after configured preferred adapter IDs. */
+  selectionPriority?: number;
   resolveServer(context: ServerResolutionContext): Promise<ServerLaunch | null>;
   /** Opt in to the editor installing, updating and removing this server. */
   managedServer?: ManagedServerDescriptor;
@@ -268,6 +272,23 @@ export interface LanguageServerAdapter {
     context: { editor?: TextEditor; uri: string; session: LanguageServerSession },
   ): Diagnostic[];
   transformServerCapabilities?(capabilities: Record<string, unknown>): Record<string, unknown>;
+  /** Adapt a request after document projection and restore its result to UTF-16 wire coordinates. */
+  prepareRequest?(
+    method: string,
+    params: unknown,
+    context: {
+      session: LanguageServerSession;
+      editor?: TextEditor;
+      signal?: AbortSignal;
+      /** Immutable open/temporary document snapshots; closed files remain adapter-owned. */
+      getDocument(
+        uri: string,
+      ): { uri: string; text: string; version: number; isCurrent(): boolean } | null;
+    },
+  ):
+    | { params?: unknown; mapResult?(result: any): unknown | Promise<unknown> }
+    | void
+    | Promise<{ params?: unknown; mapResult?(result: any): unknown | Promise<unknown> } | void>;
   /** Resolve a canonical rename declaration using source-coordinate LSP locations. */
   resolveRenameTarget?(
     target: { uri: string; position: { line: number; character: number } },
@@ -352,7 +373,11 @@ export interface LanguageServerService {
   registerAdapter(adapter: LanguageServerAdapter): Disposable;
   adaptersForEditor(editor: TextEditor): LanguageServerAdapter[];
   onDidChangeAdapters(
-    callback: (event: { adapter: LanguageServerAdapter; registered: boolean }) => void,
+    callback: (event: {
+      adapter: LanguageServerAdapter;
+      registered: boolean;
+      selectionChanged?: boolean;
+    }) => void,
   ): Disposable;
   sessionForEditor(editor: TextEditor): LanguageServerSession | null;
   /** Resolves once the session finished starting; null when absent, failed, or not running. */

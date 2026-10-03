@@ -47,6 +47,8 @@ interface LanguageServerAdapter {
   ): string | undefined;
   documentSelector?: Array<{ language?: string; scheme?: string; pattern?: string }>;
   sessionScope?: "project-root" | "workspace";
+  exclusiveGroup?: string;
+  selectionPriority?: number;
   getInitializationOptions?(context: { rootPath: string; rootUri: string }): unknown;
   getSettings?(): unknown;
   getInitializedNotifications?(context: {
@@ -85,6 +87,24 @@ interface LanguageServerAdapter {
     context: { editor?: TextEditor; uri: string; session: LanguageServerSession },
   ): Diagnostic[];
   transformServerCapabilities?(caps: Record<string, unknown>): Record<string, unknown>;
+  prepareRequest?(
+    method: string,
+    params: unknown,
+    context: {
+      session: LanguageServerSession;
+      editor?: TextEditor;
+      signal?: AbortSignal;
+      getDocument(uri: string): {
+        uri: string;
+        text: string;
+        version: number;
+        isCurrent(): boolean;
+      } | null;
+    },
+  ):
+    | { params?: unknown; mapResult?(result: unknown): unknown | Promise<unknown> }
+    | void
+    | Promise<{ params?: unknown; mapResult?(result: unknown): unknown | Promise<unknown> } | void>;
 }
 ```
 
@@ -106,8 +126,8 @@ The service you receive:
 | Member                                                            | Description                                                                              |
 | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
 | `registerAdapter(adapter)`                                        | Registers it and returns a `Disposable`.                                                 |
-| `adaptersForEditor(editor)`                                       | Every registered adapter that serves that editor, whether or not a server is running.    |
-| `onDidChangeAdapters(fn)`                                         | `{ adapter, registered }` whenever an adapter is registered or unregistered.             |
+| `adaptersForEditor(editor)`                                       | Selected adapters for that editor, whether or not their servers are running.             |
+| `onDidChangeAdapters(fn)`                                         | `{ adapter, registered, selectionChanged? }` on registration or selection changes.       |
 | `sessionForEditor(editor)`                                        | The session serving that editor, or `null`. May still be starting.                       |
 | `activeSessionForEditor(editor)`                                  | Resolves once the session has finished starting; `null` when absent, failed, or stopped. |
 | `activeSessionsForEditor(editor)`                                 | Every running session serving that editor, in adapter registration order.                |
@@ -188,6 +208,10 @@ module.exports = {
 ```
 
 ## Behavior
+
+`prepareRequest` is an optional compatibility hook for a server's request and response conventions. It runs after document synchronization and source-to-wire projection; returning `params` replaces the outgoing request, and `mapResult` restores the response to UTF-16 wire coordinates before the client's source projection and normal result handling. Returning nothing preserves the request. The hook must preserve opaque server data and must not modify the caller's parameters. `getDocument` returns immutable snapshots of open and temporary documents as the server received them; closed-file reads belong to the adapter. The client rejects cancelled preparation, stopped sessions and results whose consulted snapshots changed during preparation or response mapping. An adapter can use `isCurrent()` for its own intermediate checks.
+
+Adapters normally coexist. An optional `exclusiveGroup` selects one of that group's applicable adapters per editor: the first ID named in `ide-client.preferredServers`, then the highest `selectionPriority` (default `0`), then lexicographic ID. Preferences affect only these groups; unrelated servers and disjoint document selectors remain available. The choice does not depend on asynchronous executable discovery. Registering, unregistering or changing a preference withdraws obsolete controllers and waits for their physical process exit before a replacement starts on an overlapping route; a child that survives shutdown remains quarantined. Unregistering the winner restores the next applicable adapter. `adaptersForEditor` reports the selected coverage immediately, and `onDidChangeAdapters` also emits `{ adapter, registered: true, selectionChanged: true }` when a preference changes that coverage.
 
 `resolveServer` returning `null` is the supported way to be a no-op: an adapter whose server is not installed should return `null` rather than throw, and nothing appears in the UI.
 
