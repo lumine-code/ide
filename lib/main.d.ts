@@ -434,7 +434,15 @@ export interface LanguageServerService {
   createProjectDiagnostics(
     adapterId: string,
     delegate: { setAllMessages(messages: object[], options?: object): void },
-  ): { setAllMessages(messages: object[], options?: object): void; dispose(): void };
+  ): {
+    getMessages(): object[];
+    setAllMessages(
+      messages: object[],
+      options?: object,
+      notebookSnapshots?: ReadonlyMap<string, string>,
+    ): void;
+    dispose(): void;
+  };
   /** Fires when one of an adapter's feature switches changes. */
   onDidChangeFeatures(callback: (event: { adapter: LanguageServerAdapter }) => void): Disposable;
   /** Whether `feature` is switched on for that adapter, in that editor's scope. */

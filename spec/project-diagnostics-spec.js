@@ -51,6 +51,7 @@ describe("manual project diagnostics", () => {
       onDidChangeFeatures: (fn) => emitter.on("features", fn),
       onDidChangeAdapters: (fn) => emitter.on("adapters", fn),
       onDidChangeCapabilities: (fn) => emitter.on("capabilities", fn),
+      onDidChangeNotebook: (fn) => emitter.on("notebook", fn),
     };
     spyOn(lumine.workspace, "observeTextEditors").and.callFake((fn) => {
       fn(editor);
@@ -156,6 +157,77 @@ describe("manual project diagnostics", () => {
     coordinator.setAllMessages([first, third]);
     await publish();
     expect(delegate.setAllMessages.calls.mostRecent().args[0]).toEqual([first]);
+  });
+
+  const notebook = (cells) => {
+    filePath = path.resolve("scan-project", "book.ipynb");
+    const record = { filePath, cells, cellText: (cell) => cell.text };
+    manager.notebookDocuments = { records: new Set([record]) };
+    return record;
+  };
+  const notebookSource = (cells) =>
+    JSON.stringify({
+      cells: cells.map((cell) => ({
+        id: cell.id,
+        cell_type: cell.kind === "code" ? "code" : "markdown",
+        source: [cell.text],
+      })),
+    });
+
+  it("rejects saved notebook findings when the open notebook already differs", () => {
+    const cells = [{ id: "code-a", kind: "code", text: "missing_name" }];
+    const record = notebook(cells);
+    const snapshot = notebookSource(cells);
+    record.cells = [{ id: "markdown", kind: "markup", text: "heading" }, ...cells];
+    coordinator.setAllMessages([message(filePath, 1)], undefined, new Map([[filePath, snapshot]]));
+    expect(delegate.setAllMessages.calls.mostRecent().args[0]).toEqual([]);
+  });
+
+  it("invalidates notebook findings on reorder without needing a live server", async () => {
+    const cells = [
+      { id: "code-a", kind: "code", text: "missing_name" },
+      { id: "markdown", kind: "markup", text: "heading" },
+    ];
+    const record = notebook(cells);
+    coordinator.setAllMessages(
+      [message(filePath, 1)],
+      undefined,
+      new Map([[filePath, notebookSource(cells)]]),
+    );
+    expect(delegate.setAllMessages.calls.mostRecent().args[0].length).toBe(1);
+    record.cells = cells.toReversed();
+    emitter.emit("notebook", { record });
+    // A service edge can disappear in this turn, before the UI refresh runs.
+    expect(coordinator.getMessages()).toEqual([]);
+    await Promise.resolve();
+    expect(delegate.setAllMessages.calls.mostRecent().args[0]).toEqual([]);
+    manager.notebookDocuments.records.clear();
+    enabled = false;
+    emitter.emit("features", { adapter: session.adapter });
+    await Promise.resolve();
+    expect(delegate.setAllMessages.calls.mostRecent().args[0]).toEqual([]);
+  });
+
+  it("invalidates notebook findings after an unsaved cell edit", async () => {
+    const cells = [{ id: "code-a", kind: "code", text: "missing_name" }];
+    const record = notebook(cells);
+    coordinator.setAllMessages(
+      [message(filePath, 1)],
+      undefined,
+      new Map([[filePath, notebookSource(cells)]]),
+    );
+    record.cells[0].text = "fixed_name";
+    emitter.emit("notebook", { record });
+    await Promise.resolve();
+    expect(delegate.setAllMessages.calls.mostRecent().args[0]).toEqual([]);
+  });
+
+  it("returns valid full scan findings even while the live server owns their display", async () => {
+    const findings = [message(filePath)];
+    coordinator.setAllMessages(findings);
+    await publish();
+    expect(delegate.setAllMessages.calls.mostRecent().args[0]).toEqual([]);
+    expect(coordinator.getMessages()).toEqual(findings);
   });
 
   it("leaves the caller's delegate alive and cancels queued refreshes on disposal", async () => {
