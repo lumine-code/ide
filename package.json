@@ -40,7 +40,7 @@
   },
   "specPackages": [
     "language-ipython",
-    "ide-pyright",
+    "ide-basedpyright",
     "hover",
     "autocomplete"
   ],

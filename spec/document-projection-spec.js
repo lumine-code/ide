@@ -895,7 +895,7 @@ describe("AST document projections", () => {
   });
   it("serves real Basedpyright diagnostics only for retained Python", async () => {
     const { resolveServer } = require(
-      path.join(lumine.packages.resolvePackagePath("ide-pyright"), "lib", "server"),
+      path.join(lumine.packages.resolvePackagePath("ide-basedpyright"), "lib", "server"),
     );
     const launch = await resolveServer("");
     session = new ServerSession(
@@ -945,7 +945,7 @@ describe("AST document projections", () => {
       ].join("\n"),
     );
     const { resolveServer } = require(
-      path.join(lumine.packages.resolvePackagePath("ide-pyright"), "lib", "server"),
+      path.join(lumine.packages.resolvePackagePath("ide-basedpyright"), "lib", "server"),
     );
     session = new ServerSession(
       manager,
