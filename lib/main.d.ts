@@ -430,6 +430,11 @@ export interface LanguageServerService {
     callback: (event: { session: LanguageServerSession }) => void,
   ): Disposable;
   onDidPublishDiagnostics(callback: (event: object) => void): Disposable;
+  /** Retains manual scan findings, yielding only to live diagnostics for the same document or cell. */
+  createProjectDiagnostics(
+    adapterId: string,
+    delegate: { setAllMessages(messages: object[], options?: object): void },
+  ): { setAllMessages(messages: object[], options?: object): void; dispose(): void };
   /** Fires when one of an adapter's feature switches changes. */
   onDidChangeFeatures(callback: (event: { adapter: LanguageServerAdapter }) => void): Disposable;
   /** Whether `feature` is switched on for that adapter, in that editor's scope. */

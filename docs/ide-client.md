@@ -150,6 +150,7 @@ The service you receive:
 | `onDidChangeSession(fn)`                                          | `{ session, state, error? }` on every state transition.                                  |
 | `onDidChangeCapabilities(fn)`                                     | `{ session }` after a server dynamically registers or unregisters a capability.          |
 | `onDidPublishDiagnostics(fn)`                                     | Normalized pushed or pulled diagnostics, after the adapter transform.                    |
+| `createProjectDiagnostics(adapterId, delegate)`                   | Retains manual scan results and hides documents or cells covered by live diagnostics.    |
 | `onDidChangeFeatures(fn)`                                         | `{ adapter }` when one of an adapter's feature switches changes.                         |
 | `featureEnabled(adapter, feature, editor?)`                       | Whether that feature is on for that adapter, in that editor's scope.                     |
 | `onDidLog(fn)`, `getLog(adapterId)`                               | Server stderr and protocol log.                                                          |
@@ -168,6 +169,8 @@ The service you receive:
 | `adaptersForNotebook(filePath)`                                   | The adapters serving an open notebook — the stand-down question, notebook-shaped.        |
 | `cellUri(notebookPath, cellId)`, `parseCellUri(uri)`              | The `vscode-notebook-cell:` URI vocabulary, e.g. for configuration scope URIs.           |
 | `openNotebook`, `changeNotebook`, `saveNotebook`, `closeNotebook` | Raw per-session notebook notifications; prefer `openNotebookDocument`.                   |
+
+`createProjectDiagnostics` takes a delegate registered with `linter.registry` using `deleteOnOpen: false`. Its returned coordinator exposes `setAllMessages(messages, options?)` and `dispose()`. It retains the complete scan snapshot, yielding a document or notebook cell only after that adapter's running session has published current diagnostics with the feature enabled. Disabling diagnostics, stopping the server or closing the document restores the retained findings. An empty accepted report also owns the document. Dispose the coordinator when either service edge disappears; its delegate remains owned by the caller. Options such as `showProjectView` apply only to the explicit scan publication, so later coverage changes do not open the panel again.
 
 `opts` for `request` — both optional:
 
@@ -238,7 +241,7 @@ A `"project-root"` server that declares `workspace.workspaceFolders.supported` *
 
 `sessionForEditor` may hand back a session that is still starting. Await `activeSessionForEditor` when the next thing you do is a request.
 
-`adaptersForEditor` answers a different question, and it is the one a package outside the hub usually has: is anything already covering this editor? It reads the registration rather than the session, so it is settled the moment the adapter package activates and does not flicker while a server starts, dies, or is restarted. A linter that shells out to the same tool a server serves — `linter-ruff` beside `ide-ruff` — asks this, matches an adapter `id`, and returns no messages for that editor rather than reporting every violation twice. Pair it with `onDidChangeAdapters`, since an adapter that registers after the editor was last handled leaves the duplicate on screen until something asks for another pass.
+`adaptersForEditor` reports which registered adapters serve an editor. Its answer is settled when the adapter activates and remains stable while its server starts or restarts. Registration does not establish that diagnostics have actually arrived. An adapter that also runs manual project scans uses `createProjectDiagnostics` to yield its scan findings to accepted live reports and restore them when those reports stop covering the document.
 
 The `languageId` sent to the server is resolved in order: `languageIdForScope(scopeName, { editor, filePath })`, then path-aware built-ins, then the scope table, then the blanket `languageId`. The context is what lets one grammar scope distinguish `.js` from `.jsx`.
 
@@ -295,7 +298,7 @@ What follows from an open bridge, with no further wiring:
 - Each cell is its own text document under a `vscode-notebook-cell:` URI whose path component is the notebook's, so client and server positions are both cell-relative — identity, no mapping.
 - Only sessions whose server advertises a matching `notebookDocumentSync` ever see the notebook, and only they are asked about cell URIs. A same-grammar server without notebook sync is never consulted for a cell.
 - Cell editors route through every provider — completions, hover, signature, code actions, formatting — exactly like file editors.
-- Cell diagnostics aggregate per notebook and reach the linter against the notebook's path with `cell` numbers, the same shape `linter-ruff`'s CLI route emits; jupyter-view's adapter projects them onto the cells.
+- Cell diagnostics aggregate per notebook and reach the linter against the notebook's path with `cell` numbers, the same shape project scans emit; jupyter-view's adapter projects them onto the cells.
 - Workspace edits and `window/showDocument` targets naming cell URIs land in the right cell buffers; the descriptor's `show` callback is how server-initiated navigation reveals a cell.
 
 An untitled notebook cannot open — `openNotebookDocument` returns `null` until the notebook has a path. The bridge is **path-immutable**: on a save-as, dispose it and open a new one, which is also how servers expect a renamed notebook to behave.
