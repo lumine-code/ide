@@ -5,7 +5,7 @@ const crypto = require("crypto");
 const tar = require("tar");
 const LanguageServerManager = require("../lib/language-server-manager");
 const ManagedServers = require("../lib/managed-servers");
-const { compareVersions, parseSidecar, bsdtarPath } = ManagedServers;
+const { compareVersions, parseSidecar } = ManagedServers;
 
 const sha256 = (buffer) => crypto.createHash("sha256").update(buffer).digest("hex");
 const integrityOf = (buffer) =>
@@ -556,19 +556,22 @@ describe("ManagedServers", () => {
   });
 
   describe("zip extraction", () => {
-    // Only bsdtar reads zip. Windows ships it in System32 and macOS is /usr/bin/tar;
-    // Linux has GNU tar, which cannot, and every Linux release asset is a tarball.
-    const tarBinary = bsdtarPath();
-    const available = tarBinary && fs.existsSync(tarBinary);
+    const zip = async (files) => {
+      const archive = path.join(scratch, "server.zip");
+      const writer = new (require("yazl").ZipFile)();
+      for (const [name, value] of Object.entries(files))
+        writer.addBuffer(Buffer.from(value.text ?? value), name, { mode: value.mode ?? 0o100644 });
+      writer.end();
+      await require("stream/promises").pipeline(writer.outputStream, fs.createWriteStream(archive));
+      return archive;
+    };
 
-    it("refuses, rather than fails obscurely, where bsdtar is absent", async () => {
-      // Driven through the export instead of the host platform, so the refusal
-      // is covered on all three rather than only wherever CI happens to lack it.
-      spyOn(ManagedServers, "bsdtarPath").and.returnValue(null);
-      const destination = fs.mkdtempSync(path.join(scratch, "unzip-"));
+    it("rejects a malformed ZIP with a rejected promise", async () => {
+      const archive = path.join(scratch, "broken.zip");
+      fs.writeFileSync(archive, "not a zip archive");
       await expectAsync(
-        managed.extract(path.join(scratch, "x.zip"), destination, "x.zip"),
-      ).toBeRejectedWithError(/cannot be extracted/);
+        managed.extract(archive, path.join(scratch, "unzip"), "broken.zip"),
+      ).toBeRejected();
     });
 
     it("rejects an archive kind it does not handle", async () => {
@@ -579,24 +582,60 @@ describe("ManagedServers", () => {
       ).toBeRejectedWithError(/Unsupported archive/);
     });
 
-    const itWithBsdtar = available ? it : () => {};
-
-    itWithBsdtar("extracts a zip with bsdtar", async () => {
+    it("extracts nested ZIP files and Unicode names without a system archive tool", async () => {
       const destination = fs.mkdtempSync(path.join(scratch, "unzip-"));
-      const source = fs.mkdtempSync(path.join(scratch, "zip-src-"));
-      fs.writeFileSync(path.join(source, "testlang"), "zipped");
-      const archive = path.join(scratch, "testlang.zip");
-      await new Promise((resolve, reject) =>
-        require("child_process").execFile(
-          tarBinary,
-          ["-a", "-cf", archive, "-C", source, "testlang"],
-          (error) => (error ? reject(error) : resolve()),
-        ),
-      );
-
+      const archive = await zip({ "lib/server.dll": "server", "lib/żółć😀.json": "unicode" });
       await managed.extract(archive, destination, "testlang.zip");
+      expect(fs.readFileSync(path.join(destination, "lib/server.dll"), "utf8")).toBe("server");
+      expect(fs.readFileSync(path.join(destination, "lib/żółć😀.json"), "utf8")).toBe("unicode");
+    });
 
-      expect(fs.readFileSync(path.join(destination, "testlang"), "utf8")).toBe("zipped");
+    it("strips archive components and preserves executable permissions", async () => {
+      const archive = await zip({ "release/bin/server": { text: "#!/bin/sh\n", mode: 0o100755 } });
+      const destination = path.join(scratch, "unzip");
+      await managed.extract(archive, destination, "server.zip", 1);
+      const file = path.join(destination, "bin", "server");
+      expect(fs.readFileSync(file, "utf8")).toBe("#!/bin/sh\n");
+      if (process.platform !== "win32") expect(fs.statSync(file).mode & 0o111).toBe(0o111);
+    });
+
+    it("rejects symlink entries instead of extracting outside staging", async () => {
+      const archive = await zip({ link: { text: "../outside", mode: 0o120777 } });
+      await expectAsync(
+        managed.extract(archive, path.join(scratch, "unzip"), "server.zip"),
+      ).toBeRejectedWithError(/not a regular file/);
+    });
+
+    it("refuses an existing directory link and leaves its target untouched", async () => {
+      const destination = path.join(scratch, "unzip");
+      const outside = path.join(scratch, "outside");
+      fs.mkdirSync(destination);
+      fs.mkdirSync(outside);
+      fs.symlinkSync(
+        outside,
+        path.join(destination, "lib"),
+        process.platform === "win32" ? "junction" : "dir",
+      );
+      const archive = await zip({ "lib/server": "payload" });
+      await expectAsync(managed.extract(archive, destination, "server.zip")).toBeRejectedWithError(
+        /Unsafe ZIP directory/,
+      );
+      expect(fs.readdirSync(outside)).toEqual([]);
+    });
+
+    it("refuses traversal names from an otherwise valid ZIP", async () => {
+      const archive = await zip({ "xxx/server": "payload" });
+      const bytes = fs.readFileSync(archive);
+      let offset = 0;
+      while ((offset = bytes.indexOf(Buffer.from("xxx/server"), offset)) !== -1) {
+        bytes.write("../server", offset, "ascii");
+        offset += 9;
+      }
+      fs.writeFileSync(archive, bytes);
+      await expectAsync(
+        managed.extract(archive, path.join(scratch, "unzip"), "server.zip"),
+      ).toBeRejected();
+      expect(fs.existsSync(path.join(scratch, "server"))).toBe(false);
     });
   });
 });

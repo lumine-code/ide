@@ -5,7 +5,8 @@ export interface ServerLaunch {
   command: string;
   args?: string[];
   cwd?: string;
-  env?: Record<string, string>;
+  /** Undefined values remove an inherited environment variable. */
+  env?: Record<string, string | undefined>;
   transport?: ServerTransport;
   host?: string;
   port?: number;
@@ -267,6 +268,15 @@ export interface LanguageServerAdapter {
     context: { editor?: TextEditor; uri: string; session: LanguageServerSession },
   ): Diagnostic[];
   transformServerCapabilities?(capabilities: Record<string, unknown>): Record<string, unknown>;
+  /** Resolve a canonical rename declaration using source-coordinate LSP locations. */
+  resolveRenameTarget?(
+    target: { uri: string; position: { line: number; character: number } },
+    context: { session: LanguageServerSession; editor?: TextEditor; signal?: AbortSignal },
+  ):
+    | { uri: string; position: { line: number; character: number } }
+    | null
+    | undefined
+    | Promise<{ uri: string; position: { line: number; character: number } } | null | undefined>;
 }
 export interface RequestOptions {
   /** Aborting settles the request locally, whatever the server does next. */
@@ -308,6 +318,8 @@ export interface LanguageServerSession {
    */
   supports(method: string, editor?: TextEditor, feature?: LanguageServerFeature): boolean;
   capabilityOptions(method: string, editor?: TextEditor): Record<string, any> | undefined;
+  /** Whether the server advertised this command through static or dynamic registration. */
+  canExecuteCommand(command: string, editor?: TextEditor): boolean;
   request(method: string, params?: unknown, options?: RequestOptions): Promise<any>;
   /** Serialize isolated, non-file-backed analysis documents and close each in finally. */
   withTemporaryDocument<T>(

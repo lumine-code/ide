@@ -120,6 +120,36 @@ describe("CodeLensProvider", () => {
     expect(executed.params).toEqual({ command: "test.command", arguments: [0] });
   });
 
+  it("omits client-only commands while retaining advertised server actions", async () => {
+    const session = makeSession(
+      () => [
+        {
+          ...lspLens(0, "References"),
+          command: { title: "References", command: "editor.action.showReferences" },
+        },
+        { ...lspLens(1, "Prototype"), command: { title: "Prototype", command: "server.navigate" } },
+      ],
+      { executeCommandProvider: { commands: ["server.navigate"] } },
+    );
+    provider = new CodeLensProvider(makeManager(session));
+    const lenses = await provider.codeLenses(editor);
+    expect(lenses.map(({ title }) => title)).toEqual(["Prototype"]);
+    await lenses[0].execute();
+    expect(session.requests.at(-1).params.command).toBe("server.navigate");
+  });
+
+  it("does not execute a lens command withdrawn after rendering", async () => {
+    const session = makeSession(() => [lspLens(0, "Action")]);
+    session.canExecuteCommand = () => true;
+    provider = new CodeLensProvider(makeManager(session));
+    const [lens] = await provider.codeLenses(editor);
+    session.canExecuteCommand = () => false;
+    await lens.execute();
+    expect(session.requests.some(({ method }) => method === "workspace/executeCommand")).toBe(
+      false,
+    );
+  });
+
   it("resolves a placeholder by sending back the payload the server produced", async () => {
     const session = makeSession(
       (method, params) => {

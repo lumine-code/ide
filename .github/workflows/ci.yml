@@ -29,8 +29,8 @@ jobs:
           - os: windows-latest
             node: 24
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
           cache: npm
@@ -44,6 +44,12 @@ jobs:
         run: npm run lint
       - name: Check formatting
         run: npm run format:check
+      - name: Validate portable ZIP extraction
+        run: npm run check:zip
+      - name: Audit package dependencies
+        run: npm audit --audit-level=moderate
+      - name: Check package contents
+        run: npm pack --dry-run
 
   integration:
     # Run the Jasmine spec suite inside a real Lumine build; the specs exercise
@@ -54,14 +60,14 @@ jobs:
     env:
       LUMINE_JASMINE_REPORTER: list
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           path: ide-client
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           repository: lumine-code/lumine
           path: lumine
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version-file: lumine/.nvmrc
           cache: npm

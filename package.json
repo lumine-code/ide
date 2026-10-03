@@ -33,7 +33,8 @@
     "test": "lumine --test spec",
     "lint": "eslint . --max-warnings 0",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "check:zip": "node scripts/check-zip.js"
   },
   "specPackages": [
     "language-ipython",
@@ -191,7 +192,8 @@
   "dependencies": {
     "picomatch": "^4.0.7",
     "tar": "^7.5.22",
-    "vscode-jsonrpc": "^9.0.2"
+    "vscode-jsonrpc": "^9.0.2",
+    "yauzl": "^3.4.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -199,6 +201,7 @@
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-n": "^18.3.0",
     "globals": "^17.11.0",
-    "prettier": "^3.9.6"
+    "prettier": "^3.9.6",
+    "yazl": "^3.3.1"
   }
 }

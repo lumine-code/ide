@@ -4,6 +4,8 @@
 //   serverInfo    initialize result serverInfo
 //   responses     { method: cannedResult } for any other request
 //   responseSequences { method: [cannedResult, ...] } consumed per request
+//   responsesByIdentifier / responseSequencesByIdentifier script independent
+//     diagnostic providers rather than consuming one shared response sequence
 //   hang          methods recorded but never answered, to keep a request in flight
 //   requestProgress { method: [workDoneProgressValue, ...] } for a supplied token
 //   onOpen        messages the server emits after receiving didOpen
@@ -57,6 +59,11 @@ function handle(message) {
       params: { token: params.partialResultToken, value: config.workspaceDiagnosticPartial },
     });
   }
+  if (method === "workspace/diagnostic") {
+    const sequence = config.workspaceDiagnosticPartialsByIdentifier?.[params.identifier];
+    const partial = Array.isArray(sequence) ? sequence.shift() : sequence;
+    if (partial) send({ jsonrpc: "2.0", method: "$/progress", params: { token: params.partialResultToken, value: partial } });
+  }
   if (method === "test/crash") process.exit(1);
   if (method === "textDocument/didOpen") {
     for (const item of config.onOpen || []) send(item);
@@ -68,9 +75,13 @@ function handle(message) {
   }
   if ((config.hang || []).includes(method)) return;
   if (id != null) {
-    const sequence = (config.responseSequences || {})[method];
-    const canned = sequence?.length ? sequence.shift() : (config.responses || {})[method];
-    reply(id, canned === undefined ? null : canned);
+    const sequence = config.responseSequencesByIdentifier?.[method]?.[params?.identifier] || (config.responseSequences || {})[method];
+    const canned = sequence?.length ? sequence.shift() : config.responsesByIdentifier?.[method]?.[params?.identifier] ?? (config.responses || {})[method];
+    const errors = config.errorSequencesByIdentifier?.[method]?.[params?.identifier];
+    const error = errors?.length ? errors.shift() : config.errorsByIdentifier?.[method]?.[params?.identifier];
+    const respond = () => error ? send({ jsonrpc: "2.0", id, error }) : reply(id, canned === undefined ? null : canned);
+    const delay = config.responseDelaysByIdentifier?.[method]?.[params?.identifier];
+    if (delay) setTimeout(respond, delay); else respond();
   }
 }
 

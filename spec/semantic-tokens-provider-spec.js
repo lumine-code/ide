@@ -87,6 +87,24 @@ describe("SemanticTokensProvider", () => {
     expect(provider.grammarScopes).toEqual(["source.js"]);
     expect(provider.priority).toBe(2);
   });
+  it("clips viewport ranges to the real UTF-16 EOF including a trailing empty row", async () => {
+    editor.setText("first\n😀end");
+    const session = makeSession(() => ({ data: [] }));
+    provider = new SemanticTokensProvider(makeManager(session));
+    await provider.semanticTokensInRange(editor, [0, editor.getLastBufferRow()]);
+    expect(session.requests[0].params.range).toEqual({
+      start: { line: 0, character: 0 },
+      end: { line: 1, character: 5 },
+    });
+    editor.setText("first\n");
+    await provider.semanticTokensInRange(editor, [0, editor.getLastBufferRow()]);
+    expect(session.requests[1].params.range.end).toEqual({ line: 1, character: 0 });
+    await provider.semanticTokensInRange(editor, [4, 9]);
+    expect(session.requests[2].params.range).toEqual({
+      start: { line: 1, character: 0 },
+      end: { line: 1, character: 0 },
+    });
+  });
 
   it("decodes the packed array into absolute tokens named by the legend", async () => {
     // Two tokens on row 0 and one on row 1, relative-encoded.
@@ -191,7 +209,7 @@ describe("SemanticTokensProvider", () => {
     ).toBe(true);
   });
 
-  it("asks for a row range as an LSP range ending past the last row", async () => {
+  it("asks for a valid EOF range when the viewport lies beyond the document", async () => {
     const session = makeSession((method) =>
       method === "textDocument/semanticTokens/range" ? { data: [0, 0, 5, 0, 0] } : null,
     );
@@ -199,8 +217,8 @@ describe("SemanticTokensProvider", () => {
 
     const tokens = await provider.semanticTokensInRange(editor, [4, 9]);
     expect(session.requests[0].params.range).toEqual({
-      start: { line: 4, character: 0 },
-      end: { line: 10, character: 0 },
+      start: { line: 2, character: 0 },
+      end: { line: 2, character: 0 },
     });
     expect(tokens).toEqual([{ row: 0, column: 0, length: 5, type: "keyword", modifiers: [] }]);
   });

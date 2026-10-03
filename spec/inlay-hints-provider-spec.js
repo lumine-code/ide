@@ -95,15 +95,28 @@ describe("InlayHintsProvider", () => {
     expect(request.params.textDocument.uri).toContain("inlay-hints-provider-example.js");
   });
 
-  it("asks for the row range as an LSP range ending past the last row", async () => {
+  it("clips an out-of-document row range to the actual EOF", async () => {
     const session = makeSession(() => []);
     provider = new InlayHintsProvider(makeManager(session));
 
     await provider.inlayHints(editor, [4, 9]);
     expect(session.requests[0].params.range).toEqual({
-      start: { line: 4, character: 0 },
-      end: { line: 10, character: 0 },
+      start: { line: 3, character: 0 },
+      end: { line: 3, character: 0 },
     });
+  });
+  it("preserves the final UTF-16 column when the requested viewport includes EOF", async () => {
+    editor.setText("first\n😀end");
+    const session = makeSession(() => []);
+    provider = new InlayHintsProvider(makeManager(session));
+    await provider.inlayHints(editor, [0, editor.getLastBufferRow()]);
+    expect(session.requests[0].params.range).toEqual({
+      start: { line: 0, character: 0 },
+      end: { line: 1, character: 5 },
+    });
+    editor.setText("first\n");
+    await provider.inlayHints(editor, [0, editor.getLastBufferRow()]);
+    expect(session.requests[1].params.range.end).toEqual({ line: 1, character: 0 });
   });
 
   it("joins the parts of a label a server splits, dropping what nothing renders", async () => {
