@@ -70,6 +70,7 @@ describe("CompletionProvider item mapping", () => {
       documentation: { kind: "markdown", value: "**bold** and `code`" },
     });
     expect(suggestion.descriptionMarkdown).toBe("**bold** and `code`");
+    expect(typeof suggestion.descriptionCodeBlockRenderer).toBe("function");
     // The plain field stays populated: it is what the popup measures and what
     // any text-only consumer reads.
     expect(suggestion.description).toBe("**bold** and `code`");
@@ -81,6 +82,7 @@ describe("CompletionProvider item mapping", () => {
       documentation: { kind: "plaintext", value: "**not bold**" },
     });
     expect(suggestion.descriptionMarkdown).toBeUndefined();
+    expect(suggestion.descriptionCodeBlockRenderer).toBeUndefined();
     expect(suggestion.description).toBe("**not bold**");
   });
 
@@ -289,6 +291,71 @@ describe("CompletionProvider resolve and commands", () => {
     expect(session.requests.length).toBe(1);
   });
 
+  it("attaches the shared renderer when resolving Markdown documentation", async () => {
+    const { session, provider } = resolvingProvider((method) =>
+      method === "completionItem/resolve"
+        ? {
+            label: "console",
+            documentation: {
+              kind: "markdown",
+              value: "```typescript\n(parameter) value: string\n```",
+            },
+          }
+        : { items: [{ label: "console" }] },
+    );
+    const first = await selectFirst(provider, session);
+    expect(first.descriptionCodeBlockRenderer).toBeUndefined();
+    const detailed = await provider.getSuggestionDetailsOnSelect(first);
+    expect(typeof detailed.descriptionCodeBlockRenderer).toBe("function");
+    expect(detailed.descriptionMarkdown).toContain("(parameter) value: string");
+  });
+
+  it("replaces old Markdown and its renderer when resolve explicitly supplies plain or empty documentation", async () => {
+    for (const documentation of [
+      { kind: "plaintext", value: "Plain documentation." },
+      "Plain documentation.",
+      { kind: "markdown", value: "" },
+      null,
+    ]) {
+      const { session, provider } = resolvingProvider((method) =>
+        method === "completionItem/resolve"
+          ? { label: "console", documentation }
+          : {
+              items: [
+                {
+                  label: "console",
+                  documentation: { kind: "markdown", value: "**Old documentation**" },
+                },
+              ],
+            },
+      );
+      const first = await selectFirst(provider, session);
+      expect(typeof first.descriptionCodeBlockRenderer).toBe("function");
+      const detailed = await provider.getSuggestionDetailsOnSelect(first);
+      expect(detailed.descriptionMarkdown).toBeUndefined();
+      expect(detailed.descriptionCodeBlockRenderer).toBeUndefined();
+      expect(detailed.description).toBe(
+        typeof documentation === "string" ? documentation : documentation?.value,
+      );
+    }
+  });
+
+  it("preserves Markdown and its renderer when resolve omits documentation", async () => {
+    const { session, provider } = resolvingProvider((method) =>
+      method === "completionItem/resolve"
+        ? { label: "console", detail: "resolved detail" }
+        : {
+            items: [
+              { label: "console", documentation: { kind: "markdown", value: "**Documentation**" } },
+            ],
+          },
+    );
+    const first = await selectFirst(provider, session);
+    const detailed = await provider.getSuggestionDetailsOnSelect(first);
+    expect(detailed.descriptionMarkdown).toBe(first.descriptionMarkdown);
+    expect(detailed.descriptionCodeBlockRenderer).toBe(first.descriptionCodeBlockRenderer);
+  });
+
   it("cancels a resolve that the next selection supersedes", async () => {
     const { session, provider } = resolvingProvider(async (method, _params, options) => {
       if (method !== "completionItem/resolve") return { items: [{ label: "console" }] };
@@ -353,6 +420,7 @@ describe("CompletionProvider duplicate server data", () => {
     const suggestions = await provider.getSuggestions(request);
     expect(suggestions.length).toBe(1);
     expect(suggestions[0].descriptionMarkdown).toBe("A stylesheet link.");
+    expect(typeof suggestions[0].descriptionCodeBlockRenderer).toBe("function");
   });
 
   it("preserves distinct edits, resolve identities and overload signatures", async () => {

@@ -1,16 +1,16 @@
 describe("TypeScript display signatures in IDE hover", () => {
-  let renderHoverCodeBlock;
+  let renderDocumentationCodeBlock;
   const source =
     "(method) Array<string>.filter(predicate: (value: string, index: number, array: string[]) => unknown, thisArg?: any): string[] (+1 overload)";
 
   beforeEach(async () => {
     jasmine.useRealClock();
     await lumine.packages.activatePackage("language-typescript");
-    ({ renderHoverCodeBlock } = require("../lib/hover-code-block"));
+    ({ renderDocumentationCodeBlock } = require("../lib/documentation-code-block"));
   });
 
   const render = (text) =>
-    renderHoverCodeBlock({ text, language: "typescript", scopeName: "source.ts" });
+    renderDocumentationCodeBlock({ text, language: "typescript", scopeName: "source.ts" });
 
   it("renders the TypeScript server's JavaScript hover with actual TypeScript scopes", async () => {
     const HoverProvider = require("../lib/hover-provider");
@@ -146,7 +146,7 @@ describe("TypeScript display signatures in IDE hover", () => {
   it("declines malformed signatures, ordinary code and other languages", async () => {
     expect(await render("(method) Array<string>.filter(value: ):")).toBeNull();
     expect(await render("const values: string[] = [];")).toBeNull();
-    expect(await renderHoverCodeBlock({ text: source, scopeName: "source.js" })).toBeNull();
-    expect(await renderHoverCodeBlock({ text: source, scopeName: "source.cs" })).toBeNull();
+    expect(await renderDocumentationCodeBlock({ text: source, scopeName: "source.js" })).toBeNull();
+    expect(await renderDocumentationCodeBlock({ text: source, scopeName: "source.cs" })).toBeNull();
   });
 });

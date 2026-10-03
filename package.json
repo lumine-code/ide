@@ -38,7 +38,8 @@
   "specPackages": [
     "language-ipython",
     "ide-pyright",
-    "hover"
+    "hover",
+    "autocomplete"
   ],
   "configSchema": {
     "trace": {

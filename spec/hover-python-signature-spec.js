@@ -1,10 +1,10 @@
 describe("Python signatures in hover documentation", () => {
-  let items, renderHoverCodeBlock;
+  let items, renderDocumentationCodeBlock;
 
   beforeEach(async () => {
     jasmine.useRealClock();
     await lumine.packages.activatePackage("language-python");
-    ({ renderHoverCodeBlock } = require("../lib/hover-code-block"));
+    ({ renderDocumentationCodeBlock } = require("../lib/documentation-code-block"));
     items = [];
   });
 
@@ -20,7 +20,7 @@ describe("Python signatures in hover documentation", () => {
     const scopeName = language.includes(".")
       ? language
       : lumine.grammars.treeSitterGrammarForLanguageString(language)?.scopeName;
-    const signature = await renderHoverCodeBlock({
+    const signature = await renderDocumentationCodeBlock({
       text: source,
       scopeName,
     });
@@ -136,6 +136,71 @@ describe("Python signatures in hover documentation", () => {
         expect(signature.querySelector(".syntax--keyword.syntax--async").textContent).toBe("async");
       }
     }
+  });
+
+  it("colors completion signatures with omitted parameters and nested callable return types", async () => {
+    const source = `def limit(
+    id: Unknown | None = None,
+    func: Unknown | None = None,
+    ...
+) -> ((cls: Unknown) -> Unknown) | ((get: Unknown) -> ((cls: Unknown) -> Unknown)) | Unknown`;
+    const signature = (await render(source)).querySelector("pre");
+    expect(signature).not.toBeNull();
+    if (!signature) return;
+    expect(signature.textContent).toBe(source);
+    expect(signature.querySelector(".syntax--storage.syntax--function").textContent).toBe("def");
+    expect(
+      signature.querySelector(".syntax--entity.syntax--name.syntax--function").textContent,
+    ).toBe("limit");
+    expect(
+      [...signature.querySelectorAll(".syntax--variable.syntax--parameter.syntax--function")].map(
+        (span) => span.textContent,
+      ),
+    ).toEqual(["id", "func", "get"]);
+    expect(
+      signature.querySelectorAll(".syntax--variable.syntax--language.syntax--cls").length,
+    ).toBe(2);
+    expect(signature.querySelectorAll(".syntax--function-annotation").length).toBe(4);
+    const unknowns = document.createTreeWalker(signature, NodeFilter.SHOW_TEXT);
+    let node;
+    let unknownCount = 0;
+    while ((node = unknowns.nextNode())) {
+      if (!node.textContent.includes("Unknown")) continue;
+      unknownCount += node.textContent.match(/Unknown/g).length;
+      expect(
+        node.parentElement.closest(".syntax--support.syntax--storage.syntax--type"),
+      ).not.toBeNull();
+    }
+    expect(unknownCount).toBe(8);
+  });
+
+  it("keeps callable annotations, Unicode parameters and string defaults in their grammar roles", async () => {
+    const source = `def transform(
+    callback: (α: tuple[int, str], β: str = "(..., ->)") -> list[Result] = None,
+    value: str = "...",
+    ...,
+    name: str = "(value: Broken) -> Fake"
+) -> dict[str, (item: Entry) -> Output | None]`;
+    const signature = (await render(source)).querySelector("pre");
+    expect(signature).not.toBeNull();
+    if (!signature) return;
+    expect(signature.textContent).toBe(source);
+    expect(
+      [...signature.querySelectorAll(".syntax--variable.syntax--parameter.syntax--function")].map(
+        (span) => span.textContent,
+      ),
+    ).toEqual(["callback", "α", "β", "value", "name", "item"]);
+    expect(signature.querySelectorAll(".syntax--function-annotation").length).toBe(3);
+    expect(
+      [...signature.querySelectorAll(".syntax--string.syntax--quoted")].map((span) =>
+        span.textContent.trimEnd(),
+      ),
+    ).toEqual(['"(..., ->)"', '"..."', '"(value: Broken) -> Fake"']);
+  });
+
+  it("rejects malformed callable displays rather than assigning guessed scopes", async () => {
+    const source = "def broken(callback: (value: ) -> Unknown, ...) -> Result";
+    expect((await render(source)).childElementCount).toBe(0);
   });
 
   it("keeps complete function declarations on the ordinary Python renderer", async () => {
