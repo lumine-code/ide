@@ -25,6 +25,11 @@ describe("IDE completion documentation through autocomplete", () => {
     editor.setText(word);
     editor.setCursorBufferPosition([0, word.length]);
     await editor.whenGrammarSettled();
+    // The first pane mount can complete after workspace.open. Autocomplete's
+    // command belongs to the focused editor, so wait for the surface and focus
+    // it explicitly rather than relying on a platform's window startup focus.
+    await new Promise(requestAnimationFrame);
+    await new Promise(requestAnimationFrame);
     const scope = editor.getGrammar().scopeName;
     const session = {
       supports: () => true,
@@ -48,7 +53,10 @@ describe("IDE completion documentation through autocomplete", () => {
     });
     registration = autocompletePackage.mainModule.consumeAutocomplete(provider);
     watchRegistration = autocompletePackage.mainModule.provideAutocompleteWatchEditor()(editor);
-    lumine.commands.dispatch(editor.getElement(), "autocomplete:activate");
+    const editorElement = editor.getElement();
+    editorElement.focus();
+    expect(autocompletePackage.mainModule.autocompleteManager.editor).toBe(editor);
+    lumine.commands.dispatch(editorElement, "autocomplete:activate");
     const deadline = Date.now() + 4000;
     while (Date.now() < deadline) {
       const content = editor.getElement().querySelector(".suggestion-description-content");
