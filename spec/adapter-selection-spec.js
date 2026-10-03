@@ -82,6 +82,9 @@ describe("exclusive adapter controller lifecycle", () => {
     expect(() =>
       manager.registerAdapter({ ...makeAdapter("bad"), prepareRequest: true }),
     ).toThrowError(/prepareRequest/);
+    expect(() =>
+      manager.registerAdapter({ ...makeAdapter("bad"), getDocumentationCodeBlockProjection: true }),
+    ).toThrowError(/getDocumentationCodeBlockProjection/);
   });
   it("replaces the default, honors preference and falls back when the winner unregisters", async () => {
     const a = makeAdapter("a"),

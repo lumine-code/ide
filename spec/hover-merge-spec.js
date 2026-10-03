@@ -40,4 +40,15 @@ describe("hover merging", () => {
     expect(mergeHoverValues([null, "", "only"])).toBe("only");
     expect(mergeHoverValues([])).toBe("");
   });
+
+  it("reports the original owner of surviving sections after deduplication", () => {
+    const sections = [];
+    mergeHoverValues([null, "```python\nshared()\n```", "shared()\n\nunique"], {
+      onSection: (section, index) => sections.push({ section, index }),
+    });
+    expect(sections).toEqual([
+      { section: "```python\nshared()\n```", index: 1 },
+      { section: "unique", index: 2 },
+    ]);
+  });
 });

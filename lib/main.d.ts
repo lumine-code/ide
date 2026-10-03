@@ -165,6 +165,25 @@ export type LanguageServerFeature =
   | "inlayHints"
   | "codeLens"
   | "semanticTokens";
+export interface DocumentationCodeBlock {
+  text: string;
+  scopeName?: string;
+  language?: string;
+}
+/** Parseable source with UTF-16 spans mapped back to unchanged documentation. */
+export interface DocumentationCodeBlockProjection {
+  scopeName: string;
+  text: string;
+  regions: Array<{
+    start: number;
+    end: number;
+    /** Source offset in the projection, or explicit scopes for a display-only span. */
+    projectedStart?: number;
+    scopes?: string[];
+  }>;
+  /** Called with the Tree-sitter root after an error-free parse. */
+  validate(root: any): boolean;
+}
 export interface LanguageServerAdapter {
   id: string;
   displayName: string;
@@ -245,6 +264,10 @@ export interface LanguageServerAdapter {
   featuresKeyPath?: string;
   /** Refuse a feature the adapter cannot safely provide for this document. */
   isFeatureAvailable?(feature: LanguageServerFeature, editor?: TextEditor): boolean;
+  /** Project a code block from this server's hover or completion documentation. */
+  getDocumentationCodeBlockProjection?(
+    block: DocumentationCodeBlock,
+  ): DocumentationCodeBlockProjection | null | Promise<DocumentationCodeBlockProjection | null>;
   /** Reversibly adapt editor text before synchronizing it to the server. */
   transformDocumentText?(text: string, context: DocumentTextContext): string;
   /** Preserve incremental sync for documents that need no adaptation. */

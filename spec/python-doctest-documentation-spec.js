@@ -1,14 +1,18 @@
 describe("Python doctest documentation blocks", () => {
-  let renderDocumentationCodeBlock;
+  let renderDocumentationCodeBlock, adapter;
 
   beforeEach(async () => {
     jasmine.useRealClock();
     await lumine.packages.activatePackage("language-python");
     ({ renderDocumentationCodeBlock } = require("../lib/documentation-code-block"));
+    adapter = require("./helpers/documentation-adapter")();
   });
 
   const render = (text, options = {}) =>
-    renderDocumentationCodeBlock({ text, language: "", scopeName: "text.plain", ...options });
+    renderDocumentationCodeBlock(
+      { text, language: "", scopeName: "text.plain", ...options },
+      adapter,
+    );
 
   function expectNeutralText(pre, text) {
     const start = pre.textContent.lastIndexOf(text);
@@ -129,5 +133,17 @@ def fake(value):
     expect(await render(">>> def broken(:\n...     pass")).toBeNull();
     expect(build).toHaveBeenCalled();
     if (build.calls.any()) expect(build.calls.first().returnValue.isDestroyed()).toBe(true);
+  });
+
+  it("does not infer Python console syntax without the originating adapter", async () => {
+    for (const language of ["", "pycon", "python-console", "python"]) {
+      expect(
+        await renderDocumentationCodeBlock({
+          text: ">>> print(2)\n2",
+          language,
+          scopeName: language === "python" ? "source.python" : "text.plain",
+        }),
+      ).toBeNull();
+    }
   });
 });

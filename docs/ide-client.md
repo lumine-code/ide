@@ -11,7 +11,7 @@ Registers a language server with the editor. The adapter says how to launch it a
 
 An adapter package is small — a manifest entry, a `resolveServer`, and a grammar list. Everything a language server can do then arrives in the editor at once, because `ide-client` implements the UI-facing services (`autocomplete.provider`, `symbol.provider`, `hover.provider`, `hyperclick.provider`, `refactor.provider`, `find-references.provider`, `intentions.list`, `code-lens.provider`, `inlay-hints.provider`, `semantic-tokens.provider`, and the four `code-format.*`) on every adapter's behalf. You do not implement any of them.
 
-Hover and completion documentation fences use their own declared language, which may differ from the file being edited: JavaScript documentation can describe TypeScript types. The client supplies the presentation services' optional code-block renderers for display signatures that are not valid source, including descriptive labels, overload counts, omitted parameters and callable type notation. Both surfaces share one renderer, which parses private declarations with the editor's grammar and maps scopes back to the original text; the displayed and copied signature stays unchanged. Unsupported forms, failed parses and ordinary source use the normal renderer. Language-specific signature handling belongs here, while hover and autocomplete remain language-independent presentation surfaces.
+Hover and completion documentation fences use their own declared language, which may differ from the file being edited: JavaScript documentation can describe TypeScript types. The client supplies the presentation services' optional code-block renderers for display signatures that are not valid source, including descriptive labels, overload counts, omitted parameters and callable type notation. Both surfaces share one renderer, which parses private declarations with the editor's grammar and maps scopes back to the original text; the displayed and copied signature stays unchanged. Unsupported forms, failed parses and ordinary source use the normal renderer. An adapter can supply `getDocumentationCodeBlockProjection(block)` for its own server's documentation conventions; unlabelled blocks are never offered to an unrelated adapter.
 
 The full types are `lib/main.d.ts` in this package.
 
@@ -79,6 +79,11 @@ interface LanguageServerAdapter {
     feature: LanguageServerFeature,
     context?: TextEditor | { getRootScopeDescriptor(): ScopeDescriptor | string[] },
   ): boolean;
+  getDocumentationCodeBlockProjection?(block: {
+    text: string;
+    scopeName?: string;
+    language?: string;
+  }): DocumentationCodeBlockProjection | null | Promise<DocumentationCodeBlockProjection | null>;
   managedServer?: ManagedServerDescriptor;
   managedServerDisplayName?: string;
   bundledServer?: boolean;
@@ -124,6 +129,10 @@ Four fields are required:
 `ServerLaunch` is `{ command, args?, cwd?, env?, transport?, host?, port?, version?, fileCancellationFolder? }` with `transport` one of `"stdio"` (default), `"ipc"`, or `"socket"`. `fileCancellationFolder` is an absolute, session-unique directory for a server that uses marker files instead of `$/cancelRequest`; `ide-client` creates it and removes it with the connection.
 
 `env` overrides the child process environment; a value of `undefined` removes an inherited variable. This lets an adapter enforce its chosen transport without changing the editor's own environment.
+
+`getDocumentationCodeBlockProjection` receives a block's original text, fence language and resolved grammar scope. Return `null` to use the normal renderer, or `{ scopeName, text, regions, validate }` to parse private source with the editor's grammar. Each region has UTF-16 `start` and `end` offsets in the original block, plus either `projectedStart` in the private source or explicit `scopes`. Text outside those regions stays neutral. `validate(root)` confirms the intended Tree-sitter structure after an error-free parse. Failed hooks, invalid parses and unavailable grammars fall back to the normal renderer, and the temporary editor is always destroyed.
+
+Completion blocks belong to the session that supplied the item, including after resolve. Merged hover blocks retain the adapter of each surviving section; deduplicated sections keep their first owner. Identical blocks embedded in different sections from different servers use the normal renderer when their ownership is ambiguous.
 
 The service you receive:
 

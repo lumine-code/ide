@@ -32,6 +32,7 @@ describe("IDE completion documentation through autocomplete", () => {
     await new Promise(requestAnimationFrame);
     const scope = editor.getGrammar().scopeName;
     const session = {
+      adapter: path.endsWith(".py") ? require("./helpers/documentation-adapter")() : {},
       supports: () => true,
       capabilityOptions: () => ({ resolveProvider: true }),
       request: async (method) =>

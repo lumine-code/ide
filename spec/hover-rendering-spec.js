@@ -29,6 +29,7 @@ describe("IDE hover rendering through the hover service", () => {
       uriForEditor: () => "file:///hover.js",
       activeSessionsForEditor: async () => [
         {
+          adapter: require("./helpers/documentation-adapter")(),
           supports: () => true,
           request: async () => ({ contents: { kind: "markdown", value } }),
         },
