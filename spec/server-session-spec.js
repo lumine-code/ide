@@ -17,6 +17,35 @@ const until = async (condition, timeout = 5000) => {
   throw new Error("Timed out waiting for condition");
 };
 
+const createBusySignal = () => {
+  const providers = [];
+  return {
+    providers,
+    get titles() {
+      return providers.flatMap((provider) => [...provider.titles]);
+    },
+    create() {
+      const provider = {
+        titles: new Set(),
+        options: null,
+        add(title, options) {
+          this.titles.add(title);
+          this.options = options;
+        },
+        changeTitle(title, oldTitle) {
+          this.titles.delete(oldTitle);
+          this.titles.add(title);
+        },
+        dispose() {
+          this.titles.clear();
+        },
+      };
+      providers.push(provider);
+      return provider;
+    },
+  };
+};
+
 describe("ServerSession against a fake server", () => {
   let manager, tempDir, sessions;
 
@@ -187,6 +216,7 @@ describe("ServerSession against a fake server", () => {
     const session = await startSession();
     const received = await receivedMessages(session);
     const initialize = received.find((message) => message.method === "initialize");
+    expect(initialize.params.workDoneToken).toMatch(/^ide-client-start-/);
     expect(initialize.params.capabilities.general.positionEncodings).toEqual(["utf-16"]);
     expect(initialize.params.capabilities.textDocument.inlayHint).toBeUndefined();
     expect(initialize.params.capabilities.textDocument.semanticTokens).toBeUndefined();
@@ -2643,34 +2673,267 @@ describe("ServerSession against a fake server", () => {
   });
 
   it("routes $/progress to the busy provider", async () => {
-    const busy = {
-      added: [],
-      removed: [],
-      add(title) {
-        this.added.push(title);
-      },
-      remove(title) {
-        this.removed.push(title);
-      },
-      changeTitle() {},
-      dispose() {},
-    };
-    manager.setBusyProvider(busy);
     const session = await startSession();
+    const busy = createBusySignal();
+    manager.setBusySignal(busy);
     await session.request("test/notify", {
       jsonrpc: "2.0",
       method: "$/progress",
       params: { token: "t1", value: { kind: "begin", title: "Indexing" } },
     });
-    await until(() => busy.added.length > 0);
-    expect(busy.added).toEqual(["Fake Server: Indexing"]);
+    await until(() => busy.titles.length > 0);
+    expect(busy.titles).toEqual(["Fake Server: Indexing"]);
     await session.request("test/notify", {
       jsonrpc: "2.0",
       method: "$/progress",
       params: { token: "t1", value: { kind: "end" } },
     });
-    await until(() => busy.removed.length > 0);
-    expect(busy.removed).toEqual(["Fake Server: Indexing"]);
+    await until(() => busy.titles.length === 0);
+    expect(busy.providers.length).toBe(1);
+  });
+
+  it("tracks a slow startup and clears it when startup is stopped", async () => {
+    const busy = createBusySignal();
+    manager.setBusySignal(busy);
+    let entered;
+    const waiting = new Promise((resolve) => (entered = resolve));
+    const session = createSession(
+      {},
+      {
+        getInitializationOptions() {
+          entered();
+          return new Promise(() => {});
+        },
+      },
+    );
+    const starting = session.start();
+    await waiting;
+    await until(() => busy.titles.length > 0);
+    expect(busy.titles).toEqual(["Fake Server: Starting"]);
+    await session.stop();
+    await starting;
+    expect(busy.titles).toEqual([]);
+    expect(session.clientProgressTokens.size).toBe(0);
+  });
+
+  it("supplies distinct supported request tokens without changing caller parameters", async () => {
+    const session = await startSession({
+      capabilities: { hoverProvider: { workDoneProgress: true } },
+    });
+    const params = {
+      textDocument: { uri: C.pathToUri(path.join(tempDir, "hover.js")) },
+      position: { line: 0, character: 0 },
+    };
+    await Promise.all([
+      session.request("textDocument/hover", params),
+      session.request("textDocument/hover", params),
+    ]);
+    const requests = (await receivedMessages(session)).filter(
+      ({ method }) => method === "textDocument/hover",
+    );
+    expect(requests.length).toBe(2);
+    expect(requests[0].params.workDoneToken).toMatch(/^ide-client-request-/);
+    expect(requests[1].params.workDoneToken).not.toBe(requests[0].params.workDoneToken);
+    expect(params.workDoneToken).toBeUndefined();
+    expect(session.clientProgressTokens.size).toBe(0);
+  });
+
+  it("retires initialization progress while continuing slow client setup", async () => {
+    const busy = createBusySignal();
+    manager.setBusySignal(busy);
+    let entered, release;
+    const waiting = new Promise((resolve) => (entered = resolve));
+    const settings = new Promise((resolve) => (release = resolve));
+    const session = createSession(
+      {},
+      {
+        getSettings() {
+          entered();
+          return settings;
+        },
+      },
+    );
+    const starting = session.start();
+    await waiting;
+    const received = await session.connection.request("test/getReceived");
+    const token = received.find(({ method }) => method === "initialize").params.workDoneToken;
+    expect(session.clientProgressTokens.has(token)).toBe(false);
+    expect(session.retiredProgressTokens.has(token)).toBe(true);
+    await session.connection.request("test/notify", {
+      jsonrpc: "2.0",
+      method: "$/progress",
+      params: { token, value: { kind: "begin", title: "Expired initialize progress" } },
+    });
+    await until(() => busy.titles.length > 0);
+    expect(busy.titles).toEqual(["Fake Server: Starting"]);
+    release({});
+    await starting;
+    expect(busy.titles).toEqual([]);
+  });
+
+  it("keeps fast requests silent and does not send unsupported progress tokens", async () => {
+    const session = await startSession({ capabilities: { hoverProvider: true } });
+    const busy = createBusySignal();
+    manager.setBusySignal(busy);
+    await session.request("textDocument/hover", {});
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    const request = (await receivedMessages(session)).find(
+      ({ method }) => method === "textDocument/hover",
+    );
+    expect(request.params.workDoneToken).toBeUndefined();
+    expect(busy.providers.length).toBe(0);
+  });
+
+  it("uses dynamically registered command progress and excludes on-type formatting tokens", async () => {
+    const session = await startSession({
+      capabilities: {
+        documentOnTypeFormattingProvider: { firstTriggerCharacter: ";", workDoneProgress: true },
+      },
+    });
+    await session.request("test/notify", {
+      jsonrpc: "2.0",
+      id: 979,
+      method: "client/registerCapability",
+      params: {
+        registrations: [
+          {
+            id: "command-progress",
+            method: "workspace/executeCommand",
+            registerOptions: { commands: ["test.command"], workDoneProgress: true },
+          },
+        ],
+      },
+    });
+    await until(() => manager.dynamicOptions(session, "workspace/executeCommand"));
+    await session.request("workspace/executeCommand", { command: "test.command" });
+    await session.request("textDocument/onTypeFormatting", {
+      textDocument: { uri: C.pathToUri(path.join(tempDir, "typed.js")) },
+      position: { line: 0, character: 0 },
+      ch: ";",
+      options: { tabSize: 2, insertSpaces: true },
+    });
+    const received = await receivedMessages(session);
+    expect(
+      received.find(({ method }) => method === "workspace/executeCommand").params.workDoneToken,
+    ).toMatch(/^ide-client-request-/);
+    expect(
+      received.find(({ method }) => method === "textDocument/onTypeFormatting").params
+        .workDoneToken,
+    ).toBeUndefined();
+  });
+
+  it("shows slow silent requests and cancels them through the operation", async () => {
+    const session = await startSession({ hang: ["textDocument/hover"] });
+    const busy = createBusySignal();
+    manager.setBusySignal(busy);
+    const pending = session.request("textDocument/hover", {}).catch((error) => error);
+    await until(() => busy.titles.length > 0);
+    expect(busy.titles[0]).toContain("Fake Server: Loading hover");
+    expect(busy.titles[0]).toContain("Click to cancel");
+    busy.providers[0].options.onDidClick();
+    const error = await pending;
+    expect(error.name).toBe("AbortError");
+    expect(busy.titles).toEqual([]);
+    expect(
+      (await receivedMessages(session)).some(({ method }) => method === "$/cancelRequest"),
+    ).toBe(true);
+  });
+
+  it("uses reported progress in the request fallback and rejects late progress after abort", async () => {
+    const session = await startSession({
+      capabilities: { hoverProvider: { workDoneProgress: true } },
+      hang: ["textDocument/hover"],
+      requestProgress: {
+        "textDocument/hover": [
+          { kind: "begin", title: "Resolving imports", percentage: 0 },
+          { kind: "report", message: "3 files", percentage: 50 },
+        ],
+      },
+    });
+    const busy = createBusySignal();
+    manager.setBusySignal(busy);
+    const controller = new AbortController();
+    const pending = session
+      .request("textDocument/hover", {}, { signal: controller.signal })
+      .catch(() => {});
+    await until(() => busy.titles.length > 0);
+    expect(busy.providers.length).toBe(1);
+    expect(busy.titles[0]).toContain("Resolving imports (3 files)");
+    expect(busy.titles[0]).toContain("50%");
+    const request = (await receivedMessages(session)).find(
+      ({ method }) => method === "textDocument/hover",
+    );
+    controller.abort();
+    await pending;
+    await session.request("test/notify", {
+      jsonrpc: "2.0",
+      method: "$/progress",
+      params: {
+        token: request.params.workDoneToken,
+        value: { kind: "begin", title: "Late progress" },
+      },
+    });
+    expect(busy.titles).toEqual([]);
+    expect(session.clientProgressTokens.size).toBe(0);
+  });
+
+  it("keeps persistent diagnostic subscriptions quiet until the server reports work", async () => {
+    const session = await startSession({
+      capabilities: { diagnosticProvider: { workspaceDiagnostics: true, workDoneProgress: true } },
+      hang: ["workspace/diagnostic"],
+    });
+    const busy = createBusySignal();
+    manager.setBusySignal(busy);
+    const controller = new AbortController();
+    const pending = session
+      .request("workspace/diagnostic", { previousResultIds: [] }, { signal: controller.signal })
+      .catch(() => {});
+    await until(async () =>
+      (await receivedMessages(session)).some(({ method }) => method === "workspace/diagnostic"),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    expect(busy.providers.length).toBe(0);
+    const request = (await receivedMessages(session)).find(
+      ({ method }) => method === "workspace/diagnostic",
+    );
+    await session.request("test/notify", {
+      jsonrpc: "2.0",
+      method: "$/progress",
+      params: {
+        token: request.params.workDoneToken,
+        value: { kind: "begin", title: "Analyzing workspace" },
+      },
+    });
+    await until(() => busy.titles.length > 0);
+    controller.abort();
+    await pending;
+    expect(busy.titles).toEqual([]);
+  });
+
+  it("clears pending request indicators immediately on stop", async () => {
+    const session = await startSession({ hang: ["textDocument/hover"] });
+    const busy = createBusySignal();
+    manager.setBusySignal(busy);
+    const pending = session.request("textDocument/hover", {}).catch(() => {});
+    await until(() => busy.titles.length > 0);
+    let releaseShutdown;
+    const shutdownGate = new Promise((resolve) => (releaseShutdown = resolve));
+    const request = session.connection.request.bind(session.connection);
+    spyOn(session.connection, "request").and.callFake(async (method, ...args) => {
+      if (method === "shutdown") await shutdownGate;
+      return request(method, ...args);
+    });
+    const stopping = session.stop();
+    expect(busy.titles).toEqual([]);
+    await session.connection.request("test/notify", {
+      jsonrpc: "2.0",
+      method: "$/progress",
+      params: { token: "during-shutdown", value: { kind: "begin", title: "Late work" } },
+    });
+    expect(busy.titles).toEqual([]);
+    releaseShutdown();
+    await stopping;
+    await pending;
   });
 
   it("honors dynamic registrations in supports()", async () => {

@@ -5,6 +5,7 @@
 //   responses     { method: cannedResult } for any other request
 //   responseSequences { method: [cannedResult, ...] } consumed per request
 //   hang          methods recorded but never answered, to keep a request in flight
+//   requestProgress { method: [workDoneProgressValue, ...] } for a supplied token
 //   onOpen        messages the server emits after receiving didOpen
 //   exitDelay     milliseconds to wait after exit before terminating
 //   ignoreExit    keep running after exit, to exercise the client's hard kill
@@ -60,6 +61,10 @@ function handle(message) {
   if (method === "textDocument/didOpen") {
     for (const item of config.onOpen || []) send(item);
     return;
+  }
+  for (const value of config.requestProgress?.[method] || []) {
+    if (params?.workDoneToken != null)
+      send({ jsonrpc: "2.0", method: "$/progress", params: { token: params.workDoneToken, value } });
   }
   if ((config.hang || []).includes(method)) return;
   if (id != null) {

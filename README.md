@@ -13,6 +13,7 @@ Starts language servers lazily when matching editors open and exposes UI-indepen
 - **Feature routing**: merges answers where useful and lets adapter switches choose one of several servers where only one result can apply.
 - **Managed servers**: downloads, verifies, updates, rolls back and removes server binaries, npm packages and companion toolchains.
 - **Inspection**: exposes server state, capabilities, documents, diagnostics, logs and lifecycle actions through the server list and status bar.
+- **Activity**: reports server startup, slow requests and server-reported background work through the shared busy indicator, keeping concurrent operations independent.
 
 ## Installation
 
@@ -76,6 +77,8 @@ Commands are spawned directly with `shell: false`; arguments belong in `args`. T
 
 Text edits from `WorkspaceEdit` are applied to versioned editor buffers by this package. Filesystem inspection and resource operations are delegated to the optional `file-operations` infrastructure instead; `ide-client` never falls back to reading or mutating paths itself. The executor's lifecycle lets the hub retarget buffers and replace private staging noise with durable LSP file events, and a session advertises create, rename and delete support only when that executor was available during initialize.
 
+With `busy-signal` installed, the client reports server startup and common finite language requests when they take longer than 400 ms, even when the server does not report progress. Standard LSP progress supplies the server's own description of its work, including background indexing when the server reports it. Persistent workspace diagnostic subscriptions appear only while the server reports work. Several operations can run at once without clearing each other's indicators; each clears when it finishes or its session ends. Running servers themselves remain listed in the separate IDE status-bar item.
+
 ## Configuration
 
 Any language server can be wired without an adapter package through `language-servers.json` in the configuration directory (open it with `ide-client:open-custom-servers-file`). Each entry needs a `command` and grammar `scopes`; `args`, `languageId`, `sessionScope`, `transport`, `env`, `initializationOptions`, `settings`, and `features` are optional. `settings` feeds both `workspace/configuration` lookups and the configuration push after startup, and `features` switches individual capabilities off — an adapter package holds the same switches in its own settings, but a custom server has no settings page to put them on:
@@ -133,7 +136,7 @@ Tweak the server list, its details step, and the status-bar item from your style
 - `hyperclick.provider`: provided to hyperclick to follow language-server document links, resolving lazy targets only when clicked.
 - `file-operations.executor`: consumed to preflight and execute the create, rename and delete steps in a server `WorkspaceEdit`.
 - `linter.registry`: consumed to push server diagnostics into the linter UI, one delegate per server.
-- `busy-signal`: consumed to surface server work-done progress on the busy indicator.
+- `busy-signal`: consumed to surface server startup, slow requests and server work-done progress on the busy indicator.
 - `status-bar`: consumed to show the running servers in an item that opens the server list.
 - `tree-view.file-operations`: consumed to prepare and report create, rename and delete operations so servers can update references before a move.
 

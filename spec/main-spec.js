@@ -12,6 +12,7 @@ const fakeStatusBar = (tiles) => ({
   },
 });
 const ServerSession = require("../lib/server-session");
+const makeBusySignal = require("./helpers/busy-signal");
 
 describe("ide-client package", () => {
   beforeEach(async () => {
@@ -249,21 +250,72 @@ describe("ide-client package", () => {
 
   it("takes only the transient half of busy-signal", () => {
     const main = lumine.packages.getActivePackage("ide-client").mainModule;
-    const provider = { add() {}, remove() {}, changeTitle() {}, clear() {}, dispose() {} };
+    const signal = makeBusySignal();
     const registration = main.consumeBusySignal({
-      create: () => provider,
+      create: () => signal.create(),
       // The running servers have a status item of their own now; asking for a
       // background zone would mean the old mirroring path came back.
       createBackground: () => {
         throw new Error("createBackground must not be called");
       },
     });
-    expect(main.manager.busyProvider).toBe(provider);
+    const task = main.manager.beginActivity(null, "test", { title: "Checking" });
+    expect(signal.entries().map(({ title }) => title)).toEqual(["Checking"]);
 
     // Dropping the service unhooks the manager rather than leaving a stale
     // provider it would keep reporting into.
     registration.dispose();
-    expect(main.manager.busyProvider).toBe(null);
+    expect(main.manager.activity.busySignal).toBe(null);
+    expect(signal.providers.size).toBe(0);
+    task.dispose();
+  });
+
+  it("keeps current busy-signal attached when an older registration is disposed", () => {
+    const main = lumine.packages.getActivePackage("ide-client").mainModule;
+    const oldSignal = makeBusySignal();
+    const nextSignal = makeBusySignal();
+    const oldRegistration = main.consumeBusySignal(oldSignal);
+    const task = main.manager.beginActivity(null, "test", { title: "Checking" });
+    const nextRegistration = main.consumeBusySignal(nextSignal);
+    oldRegistration.dispose();
+    expect(oldSignal.providers.size).toBe(0);
+    expect(main.manager.activity.busySignal).toBe(nextSignal);
+    expect(nextSignal.entries().map(({ title }) => title)).toEqual(["Checking"]);
+    task.dispose();
+    nextRegistration.dispose();
+  });
+
+  it("keeps managed installation activity across service replacement", async () => {
+    const main = lumine.packages.getActivePackage("ide-client").mainModule;
+    spyOn(main, "ensureManagedServers");
+    let installationChanged;
+    const following = { dispose: jasmine.createSpy("stop following installation") };
+    main.managedServers = {
+      onDidChangeInstallation(callback) {
+        installationChanged = callback;
+        return following;
+      },
+    };
+    main.manager.adapters.set("test-install", { displayName: "Test Server" });
+    const oldSignal = makeBusySignal();
+    const nextSignal = makeBusySignal();
+    const oldRegistration = main.consumeBusySignal(oldSignal);
+    let finish;
+    const pending = new Promise((resolve) => (finish = resolve));
+    const report = jasmine.createSpy("report installation");
+    const work = main.runManaged("test-install", "Installing", report)(() => pending);
+    expect(oldSignal.entries()[0].title).toBe("Installing Test Server");
+    const nextRegistration = main.consumeBusySignal(nextSignal);
+    oldRegistration.dispose();
+    installationChanged({ adapterId: "other", status: "downloading" });
+    installationChanged({ adapterId: "test-install", status: "unpacking" });
+    expect(nextSignal.entries()[0].title).toBe("Unpacking Test Server");
+    finish({ version: "1.0.0" });
+    await work;
+    expect(report).toHaveBeenCalledWith("Test Server", { version: "1.0.0" });
+    expect(following.dispose).toHaveBeenCalledTimes(1);
+    expect(nextSignal.providers.size).toBe(0);
+    nextRegistration.dispose();
   });
 
   it("adds its status-bar item to the code-intelligence band", () => {
