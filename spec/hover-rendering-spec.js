@@ -72,6 +72,37 @@ describe("IDE hover rendering through the hover service", () => {
     expect(pre.querySelector(".syntax--entity.syntax--function").textContent).toBe("_cache_input");
   });
 
+  it("renders Python console examples with continuation prompts and neutral output", async () => {
+    const source = `>>> def double(value):
+...     return value * 2
+...
+>>> double(3)
+6
+>>> # another example
+>>> double(4)
+8`;
+    const item = await show("pycon", source);
+    const pre = item.querySelector("pre");
+    expect(pre).not.toBeNull();
+    if (!pre) return;
+    expect(pre.textContent).toBe(source);
+    expect(pre.querySelector(".syntax--source.syntax--python")).not.toBeNull();
+    expect(pre.querySelector(".syntax--storage.syntax--function").textContent).toBe("def");
+    expect(pre.querySelector(".syntax--entity.syntax--function").textContent).toBe("double");
+    expect(pre.querySelector(".syntax--comment").textContent).toBe("# another example");
+    expect(
+      [...pre.querySelectorAll(".syntax--punctuation.syntax--definition.syntax--prompt")].map(
+        (span) => span.textContent,
+      ),
+    ).toEqual([">>>", "...", "...", ">>>", ">>>", ">>>"]);
+    expect(
+      [...pre.querySelectorAll(".syntax--constant.syntax--numeric")].map(
+        (span) => span.textContent,
+      ),
+    ).toEqual(["2", "3", "4"]);
+    expect(item.textContent).toContain("Documentation stays intact.");
+  });
+
   it("renders an unlabeled this type as method declarations through the IDE provider", async () => {
     const source = "this: { initialize(): void; activate(): void; }";
     const item = await show("typescript", source);

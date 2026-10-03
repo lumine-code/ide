@@ -95,6 +95,36 @@ describe("IDE completion documentation through autocomplete", () => {
     expect(content.textContent).toContain("Documentation stays intact.");
   });
 
+  it("colors unlabelled Python doctest documentation after resolving a completion", async () => {
+    const source = `>>> from bacadra import units as U
+>>>
+>>> # arithmetic with units
+>>> length = 5 * U.m
+>>> def work(force):
+...     return force * length
+...
+>>> work(10 * U.kN)
+50 kJ`;
+    const content = await show("completion.py", "work", "", source);
+    const pre = content.querySelector("pre");
+    expect(pre.textContent).toBe(source);
+    expect(pre.querySelector(".syntax--source.syntax--python")).not.toBeNull();
+    expect(pre.querySelector(".syntax--storage.syntax--function").textContent).toBe("def");
+    expect(pre.querySelector(".syntax--entity.syntax--function").textContent).toBe("work");
+    expect(pre.querySelector(".syntax--comment").textContent).toBe("# arithmetic with units");
+    expect(
+      [...pre.querySelectorAll(".syntax--punctuation.syntax--definition.syntax--prompt")].map(
+        (span) => span.textContent,
+      ),
+    ).toEqual([">>>", ">>>", ">>>", ">>>", ">>>", "...", "...", ">>>"]);
+    expect(
+      [...pre.querySelectorAll(".syntax--constant.syntax--numeric")].map(
+        (span) => span.textContent,
+      ),
+    ).toEqual(["5", "10"]);
+    expect(content.textContent).toContain("Documentation stays intact.");
+  });
+
   it("uses TypeScript grammar for typed documentation returned about a JavaScript completion", async () => {
     const signature =
       "(method) Array<string>.filter(predicate: (value: string) => unknown): string[] (+1 overload)";
