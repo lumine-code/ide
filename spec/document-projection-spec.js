@@ -5,6 +5,7 @@ const C = require("../lib/converters");
 const ServerSession = require("../lib/server-session");
 const Manager = require("../lib/language-server-manager");
 const Projections = require("../lib/document-projections");
+const CompletionProvider = require("../lib/completion-provider");
 
 describe("AST document projections", () => {
   let directory, manager, session, source, editor;
@@ -478,6 +479,195 @@ describe("AST document projections", () => {
     );
     expect(result).toBeNull();
     expect(editor.getText()).toBe(text);
+  });
+  async function completionFixture({ sourceText, textEdit, resolve } = {}) {
+    editor.setText(sourceText || "import os\n# %% [code]\npr\n");
+    await editor.whenGrammarSettled();
+    await start();
+    session.capabilities.completionProvider = { resolveProvider: true };
+    await session.openEditor(editor);
+    spyOn(manager, "activeSessionsForEditor").and.resolveTo([session]);
+    const item = {
+      label: "print",
+      textEdit: textEdit || {
+        range: { start: { line: 2, character: 0 }, end: { line: 2, character: 2 } },
+        newText: "print",
+      },
+      additionalTextEdits: [
+        {
+          range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
+          newText: "from package import print\n",
+        },
+      ],
+      data: { symbol: "print" },
+      command: { command: "server.afterImport" },
+    };
+    const send = session.connection.request.bind(session.connection);
+    const wire = spyOn(session.connection, "request").and.callFake((method, params, options) => {
+      if (method === "textDocument/completion")
+        return Promise.resolve({ isIncomplete: false, items: [item] });
+      if (method === "completionItem/resolve")
+        return Promise.resolve(
+          resolve ? resolve(params) : { ...params, documentation: "Resolved print" },
+        );
+      return send(method, params, options);
+    });
+    const provider = new CompletionProvider(manager);
+    const complete = (prefix, activatedManually = false) =>
+      provider.getSuggestions({
+        editor,
+        bufferPosition: { row: 2, column: prefix.length },
+        prefix,
+        activatedManually,
+      });
+    const append = (column, value) =>
+      editor.setTextInBufferRange(
+        [
+          [2, column],
+          [2, column],
+        ],
+        value,
+      );
+    const requests = (method) => wire.calls.allArgs().filter((args) => args[0] === method);
+    return { provider, item, complete, append, requests };
+  }
+  it("reuses complete identity suggestions with fresh resolve geometry while a prefix grows", async () => {
+    const { provider, item, complete, append, requests } = await completionFixture();
+    const first = (await complete("pr"))[0];
+    append(2, "i");
+    const second = (await complete("pri"))[0];
+    expect(requests("textDocument/completion").length).toBe(1);
+    expect(session.isResponseCurrent(first._lspItem)).toBe(false);
+    expect(session.isResponseCurrent(second._lspItem)).toBe(true);
+    expect(second.textEdit.range).toEqual([
+      [2, 0],
+      [2, 3],
+    ]);
+    expect(second._lspItem.textEdit.range.end.character).toBe(3);
+    expect(second._lspItem.data).toBe(item.data);
+    const detailed = await provider.getSuggestionDetailsOnSelect(second);
+    expect(detailed.description).toBe("Resolved print");
+    expect(requests("completionItem/resolve")[0][1].textEdit.range.end.character).toBe(3);
+    expect(detailed.textEdit.range).toEqual([
+      [2, 0],
+      [2, 3],
+    ]);
+    append(3, "n");
+    const third = (await complete("prin"))[0];
+    expect(requests("textDocument/completion").length).toBe(1);
+    expect(third.textEdit.range).toEqual([
+      [2, 0],
+      [2, 4],
+    ]);
+    expect(third.description).toBe("Resolved print");
+    editor.setTextInBufferRange(third.textEdit.range, third.textEdit.newText);
+    expect(editor.lineTextForBufferRow(2)).toBe("print");
+  });
+  it("retains native edits, import data and commands when sparse resolved suggestions are renewed", async () => {
+    const { provider, complete, append, requests } = await completionFixture({
+      resolve: () => ({ label: "print", documentation: "Sparse documentation" }),
+    });
+    const first = (await complete("pr"))[0];
+    const detailed = await provider.getSuggestionDetailsOnSelect(first);
+    expect(detailed._lspItem.data).toEqual({ symbol: "print" });
+    append(2, "i");
+    const renewed = (await complete("pri"))[0];
+    expect(requests("textDocument/completion").length).toBe(1);
+    expect(renewed.textEdit.range).toEqual([
+      [2, 0],
+      [2, 3],
+    ]);
+    expect(renewed.additionalTextEdits[0].newText).toBe("from package import print\n");
+    expect(renewed._lspItem.command.command).toBe("server.afterImport");
+    expect((await provider.getSuggestionDetailsOnSelect(renewed)).description).toBe(
+      "Sparse documentation",
+    );
+    expect(requests("completionItem/resolve").length).toBe(1);
+  });
+  it("rebases native insert and replace ranges and additional edits after the caret", async () => {
+    const { complete, append, requests, item } = await completionFixture({
+      sourceText: "import os\n# %% [code]\nprsuffix rest\n",
+      textEdit: {
+        insert: { start: { line: 2, character: 0 }, end: { line: 2, character: 2 } },
+        replace: { start: { line: 2, character: 0 }, end: { line: 2, character: 8 } },
+        newText: "print",
+      },
+    });
+    item.additionalTextEdits.push({
+      range: { start: { line: 2, character: 10 }, end: { line: 2, character: 12 } },
+      newText: "tail",
+    });
+    await complete("pr");
+    append(2, "i");
+    const renewed = (await complete("pri"))[0];
+    expect(requests("textDocument/completion").length).toBe(1);
+    expect(renewed._lspItem.textEdit.insert.end.character).toBe(3);
+    expect(renewed._lspItem.textEdit.replace.end.character).toBe(9);
+    expect(renewed.additionalTextEdits[0].range).toEqual([
+      [0, 0],
+      [0, 0],
+    ]);
+    expect(renewed.additionalTextEdits[1].range).toEqual([
+      [2, 11],
+      [2, 13],
+    ]);
+    expect(item.textEdit.insert.end.character).toBe(2);
+  });
+  for (const change of ["another row", "masked source", "grammar", "reopened document"]) {
+    it(`requests a new list after ${change} instead of renewing stale completion data`, async () => {
+      const { complete, append, requests } = await completionFixture({
+        sourceText: change === "masked source" ? "%pwd\n# %% [code]\npr\n" : undefined,
+      });
+      await complete("pr");
+      if (change === "another row")
+        editor.setTextInBufferRange(
+          [
+            [0, 7],
+            [0, 9],
+          ],
+          "sys",
+        );
+      if (change === "grammar") {
+        await lumine.packages.activatePackage("language-python");
+        lumine.grammars.assignLanguageMode(editor.getBuffer(), "source.python");
+        await editor.whenGrammarSettled();
+      }
+      if (change === "reopened document") {
+        session.closeDocument(C.pathToUri(editor.getPath()));
+        await session.openEditor(editor);
+      }
+      append(2, "i");
+      await complete("pri");
+      expect(requests("textDocument/completion").length).toBe(2);
+    });
+  }
+  it("requests a new list when reacquiring the current projection fails", async () => {
+    const { complete, append, requests } = await completionFixture();
+    await complete("pr");
+    append(2, "i");
+    spyOn(session, "currentDocumentProjection").and.rejectWith(new Error("Projection unavailable"));
+    await complete("pri");
+    expect(requests("textDocument/completion").length).toBe(2);
+  });
+  it("does not let a superseded projection failure cancel the newer completion request", async () => {
+    const { complete, append, requests } = await completionFixture();
+    await complete("pr");
+    append(2, "i");
+    let reject, entered;
+    const started = new Promise((resolve) => (entered = resolve));
+    spyOn(session, "currentDocumentProjection").and.callFake(() => {
+      entered();
+      return new Promise((_, fail) => (reject = fail));
+    });
+    const stale = complete("pri");
+    await started;
+    append(3, "n");
+    const current = await complete("prin", true);
+    reject(new Error("Superseded projection unavailable"));
+    expect(await stale).toEqual([]);
+    expect(current.length).toBe(1);
+    expect(requests("textDocument/completion").length).toBe(2);
+    expect(requests("textDocument/completion")[1][2].signal.aborted).toBe(false);
   });
   it("refuses an unavailable source provider without sending raw didOpen", async () => {
     await start({ getDocumentProjection: async () => null });

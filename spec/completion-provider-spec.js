@@ -383,6 +383,31 @@ describe("CompletionProvider duplicate server data", () => {
 });
 
 describe("CompletionProvider caching", () => {
+  it("keeps a grown plain-text edit when resolve only fills in documentation", async () => {
+    const session = sessionWith(
+      (method) =>
+        method === "completionItem/resolve"
+          ? { label: "console", documentation: "Console documentation" }
+          : { items: [itemWithEdit("console", 2)] },
+      { completionProvider: { resolveProvider: true } },
+    );
+    const provider = new CompletionProvider(managerWith(session));
+    const editor = stubEditor("con");
+    await provider.getSuggestions({ editor, bufferPosition: { row: 0, column: 2 }, prefix: "co" });
+    const grown = (
+      await provider.getSuggestions({
+        editor,
+        bufferPosition: { row: 0, column: 3 },
+        prefix: "con",
+      })
+    )[0];
+    const detailed = await provider.getSuggestionDetailsOnSelect(grown);
+    expect(detailed.textEdit.range).toEqual([
+      [0, 0],
+      [0, 3],
+    ]);
+    expect(detailed.description).toBe("Console documentation");
+  });
   it("grows the cached edit range as the user keeps typing", async () => {
     const session = sessionWith(() => ({
       isIncomplete: false,
