@@ -7,15 +7,24 @@ const { promisify } = require("node:util");
 const extract = require("../lib/extract-xz");
 const tar = require("tar");
 const runFile = promisify(execFile);
+let stage = "setup";
+process.on("uncaughtException", (error) => {
+  console.error(`XZ smoke failed during ${stage}: ${error.stack || error.message}`);
+  process.exit(1);
+});
 
 const createArchive = async (archive, source, entries) => {
   const raw = `${archive}.tar`;
   // Node creates UTF-8 tar headers; Windows bsdtar otherwise changes emoji to
   // underscores before our decoder ever sees the compressed archive.
-  await tar.c({ file: raw, cwd: source, portable: true }, entries);
+  stage = `create UTF-8 tar fixture ${path.basename(archive)}`;
+  // Tiny fixtures need no parallel pack jobs. Synchronous packing also avoids
+  // an intermittent Node tar 7.x write-after-end race during fixture cleanup.
+  tar.c({ file: raw, cwd: source, portable: true, sync: true }, entries);
   await compressRaw(archive, raw);
 };
 const compressRaw = async (archive, raw) => {
+  stage = `compress ${path.basename(archive)}`;
   if (process.platform === "linux") {
     const { stdout } = await runFile("xz", ["-c", raw], {
       encoding: "buffer",
@@ -46,15 +55,18 @@ const compressRaw = async (archive, raw) => {
     const archive = path.join(scratch, "server.tar.xz");
     await createArchive(archive, source, ["release"]);
     const destination = path.join(scratch, "valid");
+    stage = "extract valid Unicode archive";
     await extract(archive, destination, 1);
     assert.equal(fs.readFileSync(path.join(destination, "bin", "server"), "utf8"), "#!/bin/sh\n");
     assert.equal(fs.readFileSync(path.join(destination, "żółć😀.txt"), "utf8"), "unicode");
     if (process.platform !== "win32")
       assert.equal(fs.statSync(path.join(destination, "bin", "server")).mode & 0o111, 0o111);
+    stage = "reject existing destinations";
     await assert.rejects(extract(archive, destination, 1), /existing/);
     await assert.rejects(extract(archive, path.join(scratch, "negative"), -1), /non-negative/);
     const broken = path.join(scratch, "broken.tar.xz");
     fs.writeFileSync(broken, "not an XZ archive");
+    stage = "reject corrupt XZ data";
     await assert.rejects(extract(broken, path.join(scratch, "broken")));
     const linked = path.join(scratch, "linked"),
       outside = path.join(scratch, "outside");
@@ -65,11 +77,13 @@ const compressRaw = async (archive, raw) => {
       path.join(linked, "bin"),
       process.platform === "win32" ? "junction" : "dir",
     );
+    stage = "reject existing directory link";
     await assert.rejects(extract(archive, linked, 1), /existing/);
     assert.deepEqual(fs.readdirSync(outside), []);
     fs.linkSync(path.join(source, "release", "bin", "server"), path.join(source, "hardlink"));
     const hardArchive = path.join(scratch, "hard.tar.xz");
     await createArchive(hardArchive, source, ["release/bin/server", "hardlink"]);
+    stage = "reject archive hard link";
     await assert.rejects(extract(hardArchive, path.join(scratch, "hard")), /not a regular file/);
     const traversal = path.join(scratch, "traversal.tar.xz"),
       rawTraversal = `${traversal}.tar`;
@@ -90,12 +104,17 @@ const compressRaw = async (archive, raw) => {
       ]),
     );
     await compressRaw(traversal, rawTraversal);
+    stage = "reject traversal archive";
     await assert.rejects(extract(traversal, path.join(scratch, "traversal")), /Unsafe XZ path/);
     assert.equal(fs.existsSync(path.join(outside, "sentinel")), false);
     console.log(
       `Real XZ extraction, Unicode, strip, modes, corruption, traversal, hard links and existing links passed on ${process.platform}.`,
     );
+  } catch (error) {
+    error.xzStage = stage;
+    throw error;
   } finally {
+    stage = "clean fixture workspace";
     await fs.promises.rm(scratch, {
       recursive: true,
       force: true,
@@ -104,6 +123,8 @@ const compressRaw = async (archive, raw) => {
     });
   }
 })().catch((error) => {
-  console.error(error);
+  console.error(
+    `XZ smoke failed during ${error.xzStage || stage}: ${error.stack || error.message}`,
+  );
   process.exitCode = 1;
 });

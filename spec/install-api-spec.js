@@ -158,6 +158,24 @@ describe("InstallApi", () => {
       expect(fs.readdirSync(target)).toEqual(["tool"]);
     });
 
+    describe("real XZ transfers in the editor", () => {
+      beforeEach(() => {
+        jasmine.useRealClock();
+      });
+      it("decodes real verified XZ bytes in the editor package realm and preserves Unicode", async () => {
+        const payload = fs.readFileSync(path.join(__dirname, "fixtures", "install-server.tar.xz"));
+        routes["https://x/real.tar.xz"] = payload;
+        const target = path.join(scratch, "real-xz");
+        await api.downloadFile("https://x/real.tar.xz", target, {
+          type: "xz-tar",
+          digest: `sha256:${crypto.createHash("sha256").update(payload).digest("hex")}`,
+        });
+        expect(fs.readFileSync(path.join(target, "release", "server"), "utf8")).toBe("#!/bin/sh\n");
+        expect(fs.readFileSync(path.join(target, "release", "żółć😀.txt"), "utf8")).toBe("unicode");
+        expect(fs.readdirSync(target)).toEqual(["release"]);
+      });
+    });
+
     it("rejects a download before writing or extracting a checksum mismatch", async () => {
       routes["https://x/wrong.tar.gz"] = await tarball({ "tool/tool": "payload" });
       const target = path.join(scratch, "wrong");

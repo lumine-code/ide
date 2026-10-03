@@ -1,0 +1,3 @@
+install-server.tar.xz is a 268-byte original test fixture containing release/server (#!/bin/sh followed by a newline) and release/żółć😀.txt (unicode).
+
+It was generated with the package's Node tar dependency using portable=true and noMtime=true, then XZ-compressed with Windows bsdtar 3.8.4 using --format=raw. Node creates the UTF-8 tar headers because native Windows tar replaces astral filename characters during ordinary archive creation. The fixture exercises the real WebAssembly decoder inside Lumine's package realm; its HTTP transport is injected by InstallApi specs.
