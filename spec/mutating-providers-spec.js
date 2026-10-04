@@ -12,6 +12,7 @@ const stubEditor = (lines = ["const value = 1;"]) => ({
   getGrammar: () => ({ scopeName: "source.js", name: "JavaScript" }),
   getTabLength: () => 2,
   getSoftTabs: () => true,
+  getText: () => lines.join("\n"),
   getBuffer: () => ({ lineForRow: (row) => lines[row] }),
 });
 
@@ -94,7 +95,7 @@ describe("CodeFormatProvider", () => {
     await preparing;
     selections = [new Range([0, 7], [0, 11])];
     finish({ isCurrent: () => true });
-    expect(await result).toEqual([]);
+    expect(await result).toBeNull();
     expect(format).not.toHaveBeenCalled();
     expect(session.documents.size).toBe(0);
   });
@@ -149,7 +150,7 @@ describe("CodeFormatProvider", () => {
     await formatting;
     selections = [new Range([0, 7], [0, 11])];
     finish([{ oldRange: new Range([0, 0], [0, 5]), newText: "value" }]);
-    expect(await result).toEqual([]);
+    expect(await result).toBeNull();
   });
   it("maps formatting edits and editor options", async () => {
     const requests = [];
@@ -212,6 +213,127 @@ describe("CodeFormatProvider", () => {
     );
     await withoutWillSave.formatOnSave(stubEditor());
     expect(requests).toEqual(["textDocument/formatting"]);
+  });
+  it("declines unsupported features while treating an empty server response as handled", async () => {
+    const session = sessionWith(() => []);
+    session.supports = (method) => method === "textDocument/formatting";
+    spyOn(session, "request").and.callThrough();
+    const provider = new CodeFormatProvider(managerWith(session));
+    const editor = stubEditor();
+
+    expect(await provider.fileProvider().canFormat(editor)).toBe(true);
+    expect(await provider.rangeProvider().canFormat(editor)).toBe(false);
+    expect(await provider.onTypeProvider().canFormat(editor)).toBe(false);
+    expect(await provider.onSaveProvider().canFormat(editor)).toBe(true);
+    expect(
+      await provider.formatRange(editor, [
+        [0, 0],
+        [0, 5],
+      ]),
+    ).toBeNull();
+    expect(session.request).not.toHaveBeenCalled();
+    expect(await provider.formatFile(editor)).toEqual([]);
+    expect(session.request).toHaveBeenCalledTimes(1);
+  });
+  it("recognizes save-only servers and honors will-save capability routing", async () => {
+    const session = sessionWith(() => [], { textDocumentSync: { willSaveWaitUntil: true } });
+    session.supports = (method) => method === "textDocument/willSaveWaitUntil";
+    spyOn(session, "request").and.callThrough();
+    const provider = new CodeFormatProvider(managerWith(session));
+    const editor = stubEditor();
+
+    expect(await provider.fileProvider().canFormat(editor)).toBe(false);
+    expect(await provider.onSaveProvider().canFormat(editor)).toBe(true);
+    expect(await provider.formatOnSave(editor)).toEqual([]);
+    expect(session.request.calls.mostRecent().args[0]).toBe("textDocument/willSaveWaitUntil");
+
+    session.supports = (method) => method === "textDocument/formatting";
+    await provider.formatOnSave(editor);
+    expect(session.request.calls.mostRecent().args[0]).toBe("textDocument/formatting");
+  });
+  it("declines eligibility when the caller aborts during session lookup", async () => {
+    const controller = new AbortController();
+    let release;
+    const lookup = new Promise((resolve) => {
+      release = resolve;
+    });
+    const session = sessionWith(() => []);
+    const provider = new CodeFormatProvider(
+      managerWith(session, { activeSessionForFeature: () => lookup }),
+    );
+    const pending = provider.fileProvider().canFormat(stubEditor(), {
+      signal: controller.signal,
+      isCurrent: () => true,
+    });
+    controller.abort();
+    release(session);
+    expect(await pending).toBe(false);
+  });
+  it("passes cancellation to the server and discards a reply that arrives after abort", async () => {
+    const controller = new AbortController();
+    let started, release;
+    const requesting = new Promise((resolve) => {
+      started = resolve;
+    });
+    const response = new Promise((resolve) => {
+      release = resolve;
+    });
+    const session = sessionWith(() => []);
+    session.request = jasmine.createSpy("request").and.callFake((_method, _params, options) => {
+      expect(options.signal).toBe(controller.signal);
+      started();
+      return response;
+    });
+    const provider = new CodeFormatProvider(managerWith(session));
+    const pending = provider.formatFile(stubEditor(), {
+      signal: controller.signal,
+      isCurrent: () => true,
+    });
+    await requesting;
+    controller.abort();
+    release([{ range: lspRange(0, 0, 5), newText: "late" }]);
+    expect(await pending).toBeNull();
+  });
+  it("keeps the caller and document cancellation guards on a complete formatting plan", async () => {
+    const controller = new AbortController();
+    const documentController = new AbortController();
+    let current = true,
+      context;
+    const plan = { text: "formatted", edits: [], isCurrent: () => true };
+    const session = {
+      ...sessionWith(() => []),
+      documents: new Map([[C.uriKey(fileUri), { syncAbortController: documentController }]]),
+      currentDocumentProjection: async () => ({ isCurrent: () => true }),
+      adapter: {
+        formatProjectedDocument: async (_editor, _projection, value) => {
+          context = value;
+          return plan;
+        },
+      },
+    };
+    const provider = new CodeFormatProvider(managerWith(session));
+    const result = await provider.formatFile(stubEditor(), {
+      signal: controller.signal,
+      isCurrent: () => current,
+    });
+    expect(result.text).toBe("formatted");
+    expect(result.isCurrent()).toBe(true);
+    current = false;
+    expect(result.isCurrent()).toBe(false);
+    current = true;
+    documentController.abort();
+    expect(context.signal.aborted).toBe(true);
+    expect(result.isCurrent()).toBe(false);
+  });
+  it("reports a server error instead of treating it as a successful no-op", async () => {
+    const provider = new CodeFormatProvider(
+      managerWith(
+        sessionWith(() => {
+          throw new Error("format failed");
+        }),
+      ),
+    );
+    await expectAsync(provider.formatFile(stubEditor())).toBeRejectedWithError("format failed");
   });
 });
 

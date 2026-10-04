@@ -194,6 +194,96 @@ describe("ide-client package", () => {
     expect(typeof first.getSuggestions).toBe("function");
   });
 
+  it("keeps all four formatting eligibility checks behind the lazy facade", async () => {
+    const main = lumine.packages.getActivePackage("ide-client").mainModule;
+    const canFormat = jasmine.createSpy("canFormat").and.resolveTo(true);
+    spyOn(main, "ensureProviders").and.returnValue({ codeFormatProvider: { canFormat } });
+    const services = [
+      [main.provideCodeFormatRange(), "formatRange"],
+      [main.provideCodeFormatFile(), "formatFile"],
+      [main.provideCodeFormatOnType(), "formatOnType"],
+      [main.provideCodeFormatOnSave(), "formatOnSave"],
+    ];
+    expect(main.ensureProviders).not.toHaveBeenCalled();
+    const editor = {},
+      request = { isCurrent: () => true };
+    for (const [service, method] of services) {
+      expect(await service.canFormat(editor, request)).toBe(true);
+      expect(canFormat).toHaveBeenCalledWith(editor, method, request);
+    }
+  });
+
+  describe("formatting through code-format", () => {
+    let main, editors;
+
+    beforeEach(() => {
+      main = lumine.packages.getActivePackage("ide-client").mainModule;
+      editors = [];
+    });
+
+    afterEach(() => {
+      for (const editor of editors) editor.destroy();
+    });
+
+    it("formats the editor that dispatched the command with an explicit language-server provider", async () => {
+      const clicked = await lumine.workspace.open();
+      const active = await lumine.workspace.open();
+      editors.push(clicked, active);
+      const executor = { formatEditor: jasmine.createSpy("formatEditor").and.resolveTo(true) };
+      main.consumeCodeFormatExecutor(executor);
+      spyOn(main, "ensureProviders").and.callThrough();
+
+      await main.format({ target: lumine.views.getView(clicked) });
+
+      expect(executor.formatEditor).toHaveBeenCalledWith(clicked, {
+        provider: "ide-client",
+        reason: "manual",
+        range: clicked.getBuffer().getRange(),
+      });
+      expect(main.ensureProviders).not.toHaveBeenCalled();
+    });
+
+    it("warns when the hub is missing or no language server can format the file", async () => {
+      const editor = await lumine.workspace.open();
+      editors.push(editor);
+      const warning = spyOn(lumine.notifications, "addWarning");
+      main.codeFormatRegistration?.dispose();
+
+      await main.format();
+      expect(warning).toHaveBeenCalledWith(
+        "Language-server formatting requires active code-format.",
+      );
+
+      main.consumeCodeFormatExecutor({ formatEditor: async () => false });
+      await main.format();
+      expect(warning).toHaveBeenCalledWith("No language-server formatter available for this file.");
+    });
+
+    it("reports executor failures and releases service edges independently", async () => {
+      const editor = await lumine.workspace.open();
+      editors.push(editor);
+      const executor = {
+        formatEditor: async () => {
+          throw new Error("server failed");
+        },
+      };
+      const first = main.consumeCodeFormatExecutor(executor);
+      const second = main.consumeCodeFormatExecutor(executor);
+      first.dispose();
+      expect(main.codeFormatExecutor).toBe(executor);
+      const failure = spyOn(lumine.notifications, "addError");
+
+      await main.format();
+
+      expect(failure).toHaveBeenCalledWith("Language-server formatting failed.", {
+        detail: "server failed",
+        dismissable: true,
+      });
+      second.dispose();
+      expect(main.codeFormatExecutor).toBeNull();
+    });
+  });
+
   it("consumes a service name that no other provided service nests under", () => {
     const { consumedServices } = lumine.packages.getLoadedPackage("ide-client").metadata;
     // A service named "x.y" is stored at the key path ["x"]["y"], so it is

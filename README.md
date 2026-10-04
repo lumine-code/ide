@@ -29,7 +29,7 @@ Commands available in `lumine-workspace`:
 - `ide-client:manage-servers`: list the language servers the editor can install and act on one of them,
 - `ide-client:restart`: restart the language servers for the active editor,
 - `ide-client:toggle-problems`: open the linter panel with the server diagnostics,
-- `ide-client:format`: format the active document,
+- `ide-client:format`: format the active document through `code-format`, choosing its language-server provider,
 - `ide-client:show-log`: open the active server's log in a new editor,
 - `ide-client:open-custom-servers-file`: open the custom servers configuration file,
 - `ide-client:fold-server-ranges`: fold every range the active file's language server reports,
@@ -136,6 +136,7 @@ Tweak the server list, its details step, and the status-bar item from your style
 - `inlay-hints.provider`: provided to the inlay hints UI to serve the labels a server computes for the visible rows.
 - `semantic-tokens.provider`: provided to the semantic tokens UI to serve the server's classification of the identifiers.
 - `hyperclick.provider`: provided to hyperclick to follow language-server document links, resolving lazy targets only when clicked.
+- `code-format.executor`: consumed to run `ide-client:format` through the same guarded editor formatting path as the hub's commands and save hook. Install and enable `code-format` to use this command.
 - `file-operations.executor`: consumed to preflight and execute the create, rename and delete steps in a server `WorkspaceEdit`.
 - `linter.registry`: consumed to push server diagnostics into the linter UI, one delegate per server.
 - `busy-signal`: consumed to surface server startup, slow requests and server work-done progress on the busy indicator.
