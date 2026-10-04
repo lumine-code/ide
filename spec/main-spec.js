@@ -259,6 +259,17 @@ describe("ide-client package", () => {
       expect(warning).toHaveBeenCalledWith("No language-server formatter available for this file.");
     });
 
+    it("stays silent when the hub cancels an obsolete formatting request", async () => {
+      const editor = await lumine.workspace.open();
+      editors.push(editor);
+      const warning = spyOn(lumine.notifications, "addWarning");
+      main.consumeCodeFormatExecutor({ formatEditor: async () => null });
+
+      await main.format();
+
+      expect(warning).not.toHaveBeenCalled();
+    });
+
     it("reports executor failures and releases service edges independently", async () => {
       const editor = await lumine.workspace.open();
       editors.push(editor);
