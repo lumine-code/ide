@@ -194,6 +194,23 @@ describe("ide-client package", () => {
     expect(typeof first.getSuggestions).toBe("function");
   });
 
+  it("publishes separate stable symbol facades without loading the providers", () => {
+    const main = lumine.packages.getActivePackage("ide-client").mainModule;
+    spyOn(main, "ensureProviders").and.callThrough();
+    const document = main.provideDocumentSymbolProvider();
+    const workspace = main.provideWorkspaceSymbolProvider();
+    const definition = main.provideDefinitionProvider();
+    expect(main.provideDocumentSymbolProvider()).toBe(document);
+    expect(main.provideWorkspaceSymbolProvider()).toBe(workspace);
+    expect(main.provideDefinitionProvider()).toBe(definition);
+    expect(typeof document.getDocumentSymbols).toBe("function");
+    expect(typeof document.onDidInvalidateDocumentSymbols).toBe("function");
+    expect(typeof workspace.searchWorkspaceSymbols).toBe("function");
+    expect(typeof workspace.onDidInvalidateWorkspaceSymbols).toBe("function");
+    expect(typeof definition.getDefinitions).toBe("function");
+    expect(main.ensureProviders).not.toHaveBeenCalled();
+  });
+
   it("keeps all four formatting eligibility checks behind the lazy facade", async () => {
     const main = lumine.packages.getActivePackage("ide-client").mainModule;
     const canFormat = jasmine.createSpy("canFormat").and.resolveTo(true);

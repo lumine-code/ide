@@ -513,7 +513,9 @@ describe("ServerSession against a fake server", () => {
     manager.sessions.set(manager.keyFor(session.adapter, rootPath), session);
     const provider = new SymbolProvider(manager);
 
-    const symbols = await provider.getSymbols({ editor, signal: new AbortController().signal });
+    const symbols = await provider.getDocumentSymbols(editor, {
+      signal: new AbortController().signal,
+    });
     const received = await receivedMessages(session);
     const methods = received.map(({ method }) => method);
 

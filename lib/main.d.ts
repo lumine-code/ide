@@ -300,6 +300,24 @@ export interface LanguageServerAdapter {
     context: { editor?: TextEditor; uri: string; session: LanguageServerSession },
   ): Diagnostic[];
   transformServerCapabilities?(capabilities: Record<string, unknown>): Record<string, unknown>;
+  /** Search only projects already activated in this session; never starts a server or opens files. Defaults to workspace/symbol. */
+  searchWorkspaceSymbols?(
+    query: string,
+    context: { session: LanguageServerSession; signal?: AbortSignal },
+  ): Promise<
+    Array<{
+      name: string;
+      kind: number;
+      containerName?: string;
+      location: {
+        uri: string;
+        range: {
+          start: { line: number; character: number };
+          end: { line: number; character: number };
+        };
+      };
+    }>
+  >;
   /** Adapt a request after document projection and restore its result to UTF-16 wire coordinates. */
   prepareRequest?(
     method: string,
@@ -335,6 +353,59 @@ export interface RequestOptions {
    * `false` to abandon the request without telling the server about it.
    */
   cancelOnServer?: boolean;
+}
+export interface NavigationSymbol {
+  name: string;
+  tag?: string;
+  path: string | null;
+  position: [number, number];
+  range?: [[number, number], [number, number]];
+  context?: string;
+  /** Notebook cell navigation remains relative to the cell. */
+  cell?: number;
+  uri?: string;
+}
+export interface DocumentSymbolProvider {
+  name: string;
+  packageName: string;
+  canProvideDocumentSymbols(editor: TextEditor): Promise<number | false>;
+  getDocumentSymbols(
+    editor: TextEditor,
+    options?: { signal?: AbortSignal; timeoutMs?: number },
+  ): Promise<NavigationSymbol[]>;
+  onDidInvalidateDocumentSymbols(
+    callback: (event: { editor: TextEditor | null }) => void,
+  ): Disposable;
+}
+export interface WorkspaceSymbolProvider {
+  name: string;
+  packageName: string;
+  onDidInvalidateWorkspaceSymbols(callback: () => void): Disposable;
+  searchWorkspaceSymbols(
+    query: string,
+    options?: {
+      paths?: string[];
+      signal?: AbortSignal;
+      onSymbols?(symbols: NavigationSymbol[]): void;
+      onStatus?(status: {
+        state: "ready" | "unavailable" | "starting" | "partial" | "error";
+        message?: string;
+      }): void;
+    },
+  ): Promise<NavigationSymbol[]>;
+}
+export interface DefinitionProvider {
+  name: string;
+  packageName: string;
+  canProvideDefinitions(editor: TextEditor): Promise<boolean>;
+  getDefinitions(
+    editor: TextEditor,
+    options?: {
+      range?: LumineRange | [[number, number], [number, number]];
+      signal?: AbortSignal;
+      timeoutMs?: number;
+    },
+  ): Promise<NavigationSymbol[]>;
 }
 export interface HyperclickSuggestion {
   range: LumineRange | LumineRange[];

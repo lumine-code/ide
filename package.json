@@ -106,9 +106,19 @@
         "1.0.0": "provideAutocomplete"
       }
     },
-    "symbol.provider": {
+    "symbol.document-provider": {
       "versions": {
-        "1.0.0": "provideSymbol"
+        "1.0.0": "provideDocumentSymbolProvider"
+      }
+    },
+    "symbol.workspace-provider": {
+      "versions": {
+        "1.0.0": "provideWorkspaceSymbolProvider"
+      }
+    },
+    "symbol.definition-provider": {
+      "versions": {
+        "1.0.0": "provideDefinitionProvider"
       }
     },
     "context-help.provider": {

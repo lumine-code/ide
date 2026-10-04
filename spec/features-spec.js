@@ -238,9 +238,7 @@ describe("feature switches", () => {
         },
       ];
       const session = sessionFor(adapterFor("ide-a"), { documentSymbolProvider: true }, symbols);
-      const found = await new SymbolProvider(managerWith(session)).getSymbols({
-        editor: stubEditor(),
-      });
+      const found = await new SymbolProvider(managerWith(session)).getDocumentSymbols(stubEditor());
       expect(found.map(({ name }) => name)).toEqual(["thing"]);
       expect(found[0].position).toEqual([0, 0]);
       expect(found[0].range).toEqual([
@@ -272,7 +270,7 @@ describe("feature switches", () => {
       };
       const provider = new SymbolProvider(manager);
       const invalidate = jasmine.createSpy("invalidate");
-      provider.onShouldClearCache(invalidate);
+      provider.onDidInvalidateDocumentSymbols(invalidate);
 
       callbacks.session({ session, state: "starting" });
       expect(invalidate).not.toHaveBeenCalled();
@@ -286,14 +284,15 @@ describe("feature switches", () => {
       provider.destroy();
     });
 
-    it("picks the server that can serve the query the symbol type will make", async () => {
+    it("picks a document symbol server independently from references", async () => {
       // A server with only references must not be picked to list symbols.
       const referencesOnly = sessionFor(adapterFor("ide-a"), { referencesProvider: true }, []);
       const symbolsOnly = sessionFor(adapterFor("ide-b"), { documentSymbolProvider: true }, []);
       const provider = new SymbolProvider(managerWith(referencesOnly, symbolsOnly));
       const editor = stubEditor();
-      expect(await provider.sessionFor({ editor })).toBe(symbolsOnly);
-      expect(await provider.sessionFor({ editor, type: "reference" })).toBe(referencesOnly);
+      expect(await provider.canProvideDocumentSymbols(editor)).toBe(1);
+      expect(await provider.sessionFor(editor, "textDocument/documentSymbol")).toBe(symbolsOnly);
+      expect(await provider.canProvideDefinitions(editor)).toBe(false);
     });
   });
 });
