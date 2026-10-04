@@ -141,7 +141,7 @@ Tweak the server list, its details step, and the status-bar item from your style
 - `linter.registry`: consumed to push server diagnostics into the linter UI, one delegate per server.
 - `busy-signal`: consumed to surface server startup, slow requests and server work-done progress on the busy indicator.
 - `status-bar`: consumed to show the running servers in an item that opens the server list.
-- `tree-view.file-operations`: consumed to prepare and report create, rename and delete operations so servers can update references before a move.
+- `tree-view.file-operations`: consumed to prepare create and delete operations, report completed file operations, and update references for an explicitly requested rename.
 
 ## Contributing
 

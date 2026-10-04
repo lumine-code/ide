@@ -396,6 +396,8 @@ export interface FileOperationPayload {
 }
 export interface RenameFileOperationPayload {
   files: Array<{ oldPath: string; newPath: string; isDirectory?: boolean }>;
+  /** Tree-view requests reference preparation only when this is true. */
+  updateReferences?: boolean;
 }
 export interface LanguageServerService {
   registerAdapter(adapter: LanguageServerAdapter): Disposable;

@@ -308,7 +308,7 @@ describe("ide-client package", () => {
     }
   });
 
-  it("bridges the tree-view file-operation lifecycle to the manager", async () => {
+  it("prepares tree-view renames only when reference updates are requested", async () => {
     const main = lumine.packages.getActivePackage("ide-client").mainModule;
     const callbacks = new Map();
     const service = {};
@@ -325,16 +325,33 @@ describe("ide-client package", () => {
         return { dispose: () => callbacks.delete(name) };
       };
     }
-    const will = spyOn(main.manager, "willRenameFiles").and.resolveTo(true);
+    let release;
+    const waiting = new Promise((resolve) => (release = resolve));
+    const will = spyOn(main.manager, "willRenameFiles").and.returnValue(waiting);
     const did = spyOn(main.manager, "didRenameFiles");
     const registration = main.consumeTreeViewFileOperations(service);
     const payload = { files: [{ oldPath: "before", newPath: "after" }] };
 
-    expect(await callbacks.get("onWillRenameFiles")(payload)).toBe(true);
+    for (const ordinary of [payload, { ...payload, updateReferences: false }])
+      expect(callbacks.get("onWillRenameFiles")(ordinary)).toBe(true);
+    expect(will).not.toHaveBeenCalled();
+
+    const referenceUpdate = { ...payload, updateReferences: true };
+    const preparation = callbacks.get("onWillRenameFiles")(referenceUpdate);
+    let settled = false;
+    preparation.then(() => (settled = true));
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    expect(will).toHaveBeenCalledOnceWith(referenceUpdate);
+    release(false);
+    expect(await preparation).toBe(false);
+
     callbacks.get("onDidRenameFiles")(payload);
 
-    expect(will).toHaveBeenCalledWith(payload);
     expect(did).toHaveBeenCalledWith(payload);
+    will.and.resolveTo(true);
+    expect(await main.provideIdeClient().willRenameFiles(payload)).toBe(true);
+    expect(will.calls.mostRecent().args).toEqual([payload]);
     registration.dispose();
     expect(callbacks.size).toBe(0);
   });
