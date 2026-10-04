@@ -3,7 +3,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { Range } = require("lumine");
 const { Point } = require("lumine");
-const HoverProvider = require("../lib/hover-provider");
+const ContextHelpProvider = require("../lib/context-help-provider");
 const CompletionProvider = require("../lib/completion-provider");
 const Manager = require("../lib/language-server-manager");
 const Session = require("../lib/server-session");
@@ -135,7 +135,7 @@ describe("independent diagnostic providers", () => {
     expect(session.supports("textDocument/hover", editor)).toBe(true);
     expect(session.supports("textDocument/completion", editor)).toBe(true);
     spyOn(manager, "activeSessionsForEditor").and.resolveTo([session]);
-    const hover = await new HoverProvider(manager).hover(editor, new Point(0, 1));
+    const hover = await new ContextHelpProvider(manager).getHelp(editor, new Point(0, 1));
     expect(hover.contents.value).toBe("C# documentation");
     const suggestions = await new CompletionProvider(manager).getSuggestions({
       editor,

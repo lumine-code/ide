@@ -41,6 +41,7 @@
   "specPackages": [
     "language-ipython",
     "ide-basedpyright",
+    "documentation-view",
     "hover",
     "autocomplete"
   ],
@@ -102,9 +103,9 @@
         "1.0.0": "provideSymbol"
       }
     },
-    "hover.provider": {
+    "context-help.provider": {
       "versions": {
-        "1.0.0": "provideHover"
+        "1.0.0": "provideContextHelp"
       }
     },
     "hover.signature-provider": {

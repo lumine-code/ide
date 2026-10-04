@@ -1,7 +1,7 @@
-const HoverProvider = require("../lib/hover-provider");
+const ContextHelpProvider = require("../lib/context-help-provider");
 
-describe("IDE hover rendering through the hover service", () => {
-  let editor, registration, hoverPackage;
+describe("IDE context-help rendering through the tooltip", () => {
+  let editor, registration, documentationPackage;
 
   beforeEach(async () => {
     jasmine.useRealClock();
@@ -9,7 +9,8 @@ describe("IDE hover rendering through the hover service", () => {
     await lumine.packages.activatePackage("language-javascript");
     await lumine.packages.activatePackage("language-typescript");
     await lumine.packages.activatePackage("language-python");
-    hoverPackage = await lumine.packages.activatePackage("hover");
+    documentationPackage = await lumine.packages.activatePackage("documentation-view");
+    await lumine.packages.activatePackage("hover");
     editor = await lumine.workspace.open("hover.js");
     editor.setText("values.filter(Boolean)");
     editor.setCursorBufferPosition([0, 9]);
@@ -18,12 +19,13 @@ describe("IDE hover rendering through the hover service", () => {
   afterEach(async () => {
     registration?.dispose();
     await lumine.packages.deactivatePackage("hover");
+    await lumine.packages.deactivatePackage("documentation-view");
     editor?.destroy();
   });
 
-  async function show(language, text) {
+  async function show(language, text, { panel = false } = {}) {
     const value = `\`\`\`${language}\n${text}\n\`\`\`\n\nDocumentation stays intact.`;
-    const provider = new HoverProvider({
+    const provider = new ContextHelpProvider({
       addCapabilityFragment() {},
       allGrammarScopes: () => ["source.js"],
       uriForEditor: () => "file:///hover.js",
@@ -35,7 +37,15 @@ describe("IDE hover rendering through the hover service", () => {
         },
       ],
     });
-    registration = hoverPackage.mainModule.consumeHover(provider);
+    registration = documentationPackage.mainModule.consumeContextHelp(provider);
+    if (panel) {
+      const main = documentationPackage.mainModule;
+      const result = await main
+        .provideContextHelpRegistry()
+        .request(editor, editor.getCursorBufferPosition());
+      const view = await main.provideContextHelpPanel().show(result);
+      return view.element;
+    }
     lumine.commands.dispatch(editor.getElement(), "hover:toggle");
     const deadline = Date.now() + 3000;
     while (Date.now() < deadline) {
@@ -60,6 +70,23 @@ describe("IDE hover rendering through the hover service", () => {
     expect(pre.querySelector(".syntax--variable.syntax--parameter").textContent).toBe("predicate");
     expect(pre.querySelector(".syntax--type.syntax--predefined").textContent).toBe("string");
     expect(item.textContent).toContain("Documentation stays intact.");
+  });
+
+  it("renders the same projected documentation in the retained panel without a tooltip", async () => {
+    const source = "(method) Array<string>.filter(predicate: (value: string) => unknown): string[]";
+    const item = await show("typescript", source, { panel: true });
+    const pre = item.querySelector("pre");
+    expect(pre).not.toBeNull();
+    if (!pre) return;
+    expect(pre.textContent).toBe(source);
+    expect(pre.querySelector(".syntax--attribute-name.syntax--method").textContent).toBe("filter");
+    expect(pre.querySelector(".syntax--variable.syntax--parameter").textContent).toBe("predicate");
+    expect(item.textContent).toContain("Documentation stays intact.");
+    expect(
+      editor
+        .getOverlayDecorations()
+        .some((decoration) => decoration.getProperties().class === "hover-overlay"),
+    ).toBe(false);
   });
 
   it("retains Python signature highlighting through the same language-neutral service", async () => {

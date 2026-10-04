@@ -40,4 +40,14 @@ describe("ide-client package assets", () => {
       "provideHyperclick",
     );
   });
+
+  it("provides context help separately from signature help", () => {
+    expect(manifest.providedServices["context-help.provider"].versions["1.0.0"]).toBe(
+      "provideContextHelp",
+    );
+    expect(manifest.providedServices["hover.provider"]).toBeUndefined();
+    expect(manifest.providedServices["hover.signature-provider"].versions["1.0.0"]).toBe(
+      "provideHoverSignature",
+    );
+  });
 });

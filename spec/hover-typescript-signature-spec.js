@@ -13,9 +13,9 @@ describe("TypeScript display signatures in IDE hover", () => {
     renderDocumentationCodeBlock({ text, language: "typescript", scopeName: "source.ts" });
 
   it("renders the TypeScript server's JavaScript hover with actual TypeScript scopes", async () => {
-    const HoverProvider = require("../lib/hover-provider");
+    const ContextHelpProvider = require("../lib/context-help-provider");
     const value = `\`\`\`typescript\n${source}\n\`\`\`\n\nReturns matching elements.`;
-    const provider = new HoverProvider({
+    const provider = new ContextHelpProvider({
       addCapabilityFragment() {},
       allGrammarScopes: () => ["source.js"],
       uriForEditor: () => "file:///hover.js",
@@ -26,7 +26,7 @@ describe("TypeScript display signatures in IDE hover", () => {
         },
       ],
     });
-    const result = await provider.hover(
+    const result = await provider.getHelp(
       { getGrammar: () => ({ scopeName: "source.js" }) },
       { row: 0, column: 0 },
     );

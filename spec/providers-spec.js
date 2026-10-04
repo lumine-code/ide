@@ -1,5 +1,5 @@
 const path = require("path");
-const HoverProvider = require("../lib/hover-provider");
+const ContextHelpProvider = require("../lib/context-help-provider");
 const SignatureProvider = require("../lib/signature-provider");
 
 const stubEditor = {
@@ -52,9 +52,12 @@ const sessionWith = (result, capabilities = {}) => ({
   request: async () => result,
 });
 
-describe("HoverProvider", () => {
+describe("ContextHelpProvider", () => {
   const hoverFor = (result) =>
-    new HoverProvider(managerWith(sessionWith(result))).hover(stubEditor, { row: 0, column: 1 });
+    new ContextHelpProvider(managerWith(sessionWith(result))).getHelp(stubEditor, {
+      row: 0,
+      column: 1,
+    });
 
   it("passes MarkupContent through", async () => {
     const result = await hoverFor({ contents: { kind: "plaintext", value: "docs" } });
@@ -86,25 +89,105 @@ describe("HoverProvider", () => {
   it("returns null for empty responses and missing sessions", async () => {
     expect(await hoverFor(null)).toBeNull();
     expect(await hoverFor({ contents: "" })).toBeNull();
-    const provider = new HoverProvider(managerWith(null));
-    expect(await provider.hover(stubEditor, { row: 0, column: 0 })).toBeNull();
+    const provider = new ContextHelpProvider(managerWith(null));
+    expect(await provider.getHelp(stubEditor, { row: 0, column: 0 })).toBeNull();
   });
   it("stacks the answers of every server serving the editor", async () => {
-    const provider = new HoverProvider(
+    const provider = new ContextHelpProvider(
       managerWith(
         sessionWith({ contents: { kind: "markdown", value: "the type" } }),
         sessionWith({ contents: { kind: "markdown", value: "the lint rule" } }),
       ),
     );
-    const result = await provider.hover(stubEditor, { row: 0, column: 1 });
+    const result = await provider.getHelp(stubEditor, { row: 0, column: 1 });
     expect(result.contents.value).toBe("the type\n\n---\n\nthe lint rule");
   });
   it("collapses identical answers from several servers", async () => {
-    const provider = new HoverProvider(
+    const provider = new ContextHelpProvider(
       managerWith(sessionWith({ contents: "same" }), sessionWith({ contents: "same" })),
     );
-    const result = await provider.hover(stubEditor, { row: 0, column: 1 });
+    const result = await provider.getHelp(stubEditor, { row: 0, column: 1 });
     expect(result.contents.value).toBe("same");
+  });
+
+  it("keeps simultaneous requests independent and forwards each caller's cancellation signal", async () => {
+    const requests = [];
+    const session = sessionWith(null);
+    session.request = (method, params, options) =>
+      new Promise((resolve) => requests.push({ method, params, options, resolve }));
+    const provider = new ContextHelpProvider(managerWith(session));
+    const tooltip = new AbortController();
+    const panel = new AbortController();
+
+    const first = provider.getHelp(stubEditor, { row: 0, column: 1 }, { signal: tooltip.signal });
+    const second = provider.getHelp(stubEditor, { row: 0, column: 2 }, { signal: panel.signal });
+    await Promise.resolve();
+
+    expect(requests.length).toBe(2);
+    expect(requests[0].options.signal).toBe(tooltip.signal);
+    expect(requests[1].options.signal).toBe(panel.signal);
+    expect(tooltip.signal.aborted).toBe(false);
+    expect(panel.signal.aborted).toBe(false);
+    tooltip.abort();
+    requests[1].resolve({ contents: { kind: "plaintext", value: "panel documentation" } });
+    requests[0].resolve({ contents: { kind: "plaintext", value: "stale tooltip" } });
+
+    expect(await first).toBeNull();
+    expect((await second).contents.value).toBe("panel documentation");
+    expect(panel.signal.aborted).toBe(false);
+  });
+
+  it("does not start requests when the caller already cancelled", async () => {
+    const session = sessionWith({ contents: "docs" });
+    const request = spyOn(session, "request").and.callThrough();
+    const manager = managerWith(session);
+    const lookup = spyOn(manager, "activeSessionsForEditor").and.callThrough();
+    const provider = new ContextHelpProvider(manager);
+    const controller = new AbortController();
+    controller.abort();
+
+    expect(
+      await provider.getHelp(stubEditor, { row: 0, column: 1 }, { signal: controller.signal }),
+    ).toBeNull();
+    expect(lookup).not.toHaveBeenCalled();
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it("does not send a request cancelled while sessions were starting", async () => {
+    const session = sessionWith({ contents: "docs" });
+    const request = spyOn(session, "request").and.callThrough();
+    let resolveSessions;
+    const manager = managerWith(session);
+    manager.activeSessionsForEditor = () => new Promise((resolve) => (resolveSessions = resolve));
+    const provider = new ContextHelpProvider(manager);
+    const controller = new AbortController();
+    const pending = provider.getHelp(
+      stubEditor,
+      { row: 0, column: 1 },
+      {
+        signal: controller.signal,
+      },
+    );
+
+    controller.abort();
+    resolveSessions([session]);
+    expect(await pending).toBeNull();
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it("drops a reply after the source editor was destroyed", async () => {
+    let resolveRequest;
+    const session = sessionWith(null);
+    session.request = () => new Promise((resolve) => (resolveRequest = resolve));
+    const provider = new ContextHelpProvider(managerWith(session));
+    let destroyed = false;
+    const editor = { ...stubEditor, isDestroyed: () => destroyed };
+    const pending = provider.getHelp(editor, { row: 0, column: 1 });
+    await Promise.resolve();
+
+    destroyed = true;
+    resolveRequest({ contents: "stale documentation" });
+    expect(await pending).toBeNull();
   });
 });
 

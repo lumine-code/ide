@@ -1,4 +1,4 @@
-const HoverProvider = require("../lib/hover-provider");
+const ContextHelpProvider = require("../lib/context-help-provider");
 const CompletionProvider = require("../lib/completion-provider");
 const { createDocumentationCodeBlockRenderer } = require("../lib/documentation-code-block");
 
@@ -22,7 +22,7 @@ describe("adapter-owned documentation code blocks", () => {
     activeSessionsForEditor: async () => sessions,
   });
   const hoverWith = (...sessions) =>
-    new HoverProvider(managerWith(...sessions)).hover({}, { row: 0, column: 0 });
+    new ContextHelpProvider(managerWith(...sessions)).getHelp({}, { row: 0, column: 0 });
 
   // Read blocks through the real Markdown API, as the presentation services do.
   // Hooks decline rendering so these routing tests need no language parser.

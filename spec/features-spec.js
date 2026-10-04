@@ -2,7 +2,7 @@ const path = require("path");
 const ServerSession = require("../lib/server-session");
 const SymbolProvider = require("../lib/symbol-provider");
 const CodeFormatProvider = require("../lib/code-format-provider");
-const HoverProvider = require("../lib/hover-provider");
+const ContextHelpProvider = require("../lib/context-help-provider");
 const C = require("../lib/converters");
 const { FEATURES, METHOD_FEATURES, featuresKeyPath, featureEnabled } = require("../lib/features");
 
@@ -218,12 +218,12 @@ describe("feature switches", () => {
           contents: "the lint rule",
         },
       );
-      const provider = new HoverProvider(managerWith(first, second));
-      const both = await provider.hover(stubEditor(), { row: 0, column: 0 });
+      const provider = new ContextHelpProvider(managerWith(first, second));
+      const both = await provider.getHelp(stubEditor(), { row: 0, column: 0 });
       expect(both.contents.value).toBe("the type\n\n---\n\nthe lint rule");
 
       lumine.config.set("ide-b.features.hover", false);
-      const one = await provider.hover(stubEditor(), { row: 0, column: 0 });
+      const one = await provider.getHelp(stubEditor(), { row: 0, column: 0 });
       expect(one.contents.value).toBe("the type");
       expect(second.request.calls.count()).toBe(1);
     });

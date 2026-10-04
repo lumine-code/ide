@@ -123,7 +123,7 @@ Tweak the server list, its details step, and the status-bar item from your style
 - [`ide-client`](docs/ide-client.md): provided to adapter packages to register language servers and reach sessions.
 - `autocomplete.provider`: provided to autocomplete to serve language-server completions.
 - `symbol.provider`: provided to the symbol hub to serve document and project symbols.
-- `hover.provider`: provided to hover UIs to serve documentation at a buffer position.
+- `context-help.provider`: provided to serve documentation at a buffer position in tooltips and the documentation panel.
 - `hover.signature-provider`: provided to signature-help UIs to serve call signatures while typing.
 - `code-format.range`: provided to formatting orchestrators; resolves a selected range to text edits from the server.
 - `code-format.file`: provided to formatting orchestrators; resolves a whole file to text edits from the server.
