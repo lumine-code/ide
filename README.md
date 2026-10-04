@@ -77,6 +77,8 @@ Commands are spawned directly with `shell: false`; arguments belong in `args`. T
 
 Text edits from `WorkspaceEdit` are applied to versioned editor buffers by this package. Filesystem inspection and resource operations are delegated to the optional `file-operations` infrastructure instead; `ide-client` never falls back to reading or mutating paths itself. The executor's lifecycle lets the hub retarget buffers and replace private staging noise with durable LSP file events, and a session advertises create, rename and delete support only when that executor was available during initialize.
 
+Tree-view reference updates are staged until every operation guard accepts the move. Cancelling the prompt, changing its path or rejecting a later guard discards them. Language-server preparation for creation, reference updates and deletion has a shared 30-second deadline; adjust `ide-client.fileOperationPreparationTimeout` from 1 to 3600 seconds. A timeout cancels the operation and reports its reason. Reference edits stay unsaved in editor buffers, and files with real edits stay open for review; empty edit entries never open files.
+
 With `busy-signal` installed, the client reports server startup and common finite language requests when they take longer than 400 ms, even when the server does not report progress. Standard LSP progress supplies the server's own description of its work, including background indexing when the server reports it. Persistent workspace diagnostic subscriptions appear only while the server reports work. Several operations can run at once without clearing each other's indicators; each clears when it finishes or its session ends. Running servers themselves remain listed in the separate IDE status-bar item.
 
 Every registered language-server adapter appears in `linter:toggle-linter`, even before it reports diagnostics. That list can mute or restore its messages without stopping the server or disabling its other features. Removing the adapter removes its entry and messages.
@@ -141,7 +143,7 @@ Tweak the server list, its details step, and the status-bar item from your style
 - `linter.registry`: consumed to push server diagnostics into the linter UI, one delegate per server.
 - `busy-signal`: consumed to surface server startup, slow requests and server work-done progress on the busy indicator.
 - `status-bar`: consumed to show the running servers in an item that opens the server list.
-- `tree-view.file-operations`: consumed to prepare create and delete operations, report completed file operations, and update references for an explicitly requested rename.
+- `tree-view.file-operations`: consumed to stage create and delete preparations and explicitly requested reference updates, then report completed file operations.
 
 ## Contributing
 

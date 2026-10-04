@@ -311,7 +311,7 @@ describe("ide-client package", () => {
   it("prepares tree-view renames only when reference updates are requested", async () => {
     const main = lumine.packages.getActivePackage("ide-client").mainModule;
     const callbacks = new Map();
-    const service = {};
+    const service = { supportsStagedPreparations: () => true };
     for (const name of [
       "onWillCreateFiles",
       "onWillRenameFiles",
@@ -327,7 +327,7 @@ describe("ide-client package", () => {
     }
     let release;
     const waiting = new Promise((resolve) => (release = resolve));
-    const will = spyOn(main.manager, "willRenameFiles").and.returnValue(waiting);
+    const will = spyOn(main.manager, "prepareRenameFiles").and.returnValue(waiting);
     const did = spyOn(main.manager, "didRenameFiles");
     const registration = main.consumeTreeViewFileOperations(service);
     const payload = { files: [{ oldPath: "before", newPath: "after" }] };
@@ -342,19 +342,67 @@ describe("ide-client package", () => {
     preparation.then(() => (settled = true));
     await Promise.resolve();
     expect(settled).toBe(false);
-    expect(will).toHaveBeenCalledOnceWith(referenceUpdate);
-    release(false);
-    expect(await preparation).toBe(false);
+    expect(will.calls.count()).toBe(1);
+    expect(will.calls.mostRecent().args[0].files).toBe(referenceUpdate.files);
+    expect(will.calls.mostRecent().args[0].updateReferences).toBe(true);
+    expect(typeof will.calls.mostRecent().args[0].signal.addEventListener).toBe("function");
+    const stage = {
+      hasEdits: () => true,
+      commit: jasmine.createSpy("commit").and.resolveTo(true),
+      dispose: jasmine.createSpy("dispose"),
+    };
+    release(stage);
+    expect(await preparation).toBe(stage);
+    expect(stage.commit).not.toHaveBeenCalled();
 
     callbacks.get("onDidRenameFiles")(payload);
 
     expect(did).toHaveBeenCalledWith(payload);
-    will.and.resolveTo(true);
+    const direct = spyOn(main.manager, "willRenameFiles").and.resolveTo(true);
     expect(await main.provideIdeClient().willRenameFiles(payload)).toBe(true);
-    expect(will.calls.mostRecent().args).toEqual([payload]);
+    expect(direct).toHaveBeenCalledOnceWith(payload);
     registration.dispose();
     expect(callbacks.size).toBe(0);
   });
+
+  for (const hasEdits of [true, false]) {
+    it(`${hasEdits ? "refuses edits" : "accepts empty preparations"} from a tree service without staging`, async () => {
+      const main = lumine.packages.getActivePackage("ide-client").mainModule;
+      const callbacks = new Map();
+      const service = {};
+      for (const name of [
+        "onWillCreateFiles",
+        "onWillRenameFiles",
+        "onWillDeleteFiles",
+        "onDidCreateFiles",
+        "onDidRenameFiles",
+        "onDidDeleteFiles",
+      ]) {
+        service[name] = (callback) => {
+          callbacks.set(name, callback);
+          return { dispose: () => callbacks.delete(name) };
+        };
+      }
+      const stage = {
+        hasEdits: () => hasEdits,
+        commit: jasmine.createSpy("commit"),
+        dispose: jasmine.createSpy("dispose"),
+      };
+      spyOn(main.manager, "prepareRenameFiles").and.resolveTo(stage);
+      const warning = spyOn(lumine.notifications, "addWarning");
+      const registration = main.consumeTreeViewFileOperations(service);
+      const allowed = await callbacks.get("onWillRenameFiles")({
+        files: [],
+        updateReferences: true,
+      });
+
+      expect(allowed).toBe(!hasEdits);
+      expect(stage.commit).not.toHaveBeenCalled();
+      expect(stage.dispose).toHaveBeenCalledOnceWith();
+      expect(warning.calls.count()).toBe(hasEdits ? 1 : 0);
+      registration.dispose();
+    });
+  }
 
   it("hands the neutral file-operation executor to the manager", () => {
     const main = lumine.packages.getActivePackage("ide-client").mainModule;

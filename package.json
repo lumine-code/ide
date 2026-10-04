@@ -73,6 +73,14 @@
       "minimum": 0,
       "default": 3
     },
+    "fileOperationPreparationTimeout": {
+      "title": "File Operation Preparation Timeout",
+      "description": "Maximum seconds to wait for language servers to prepare file creation, reference updates or deletion. The operation is cancelled when time runs out.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 3600,
+      "default": 30
+    },
     "statusBar": {
       "title": "Status Bar",
       "description": "Indicator for the language servers this window is running.",

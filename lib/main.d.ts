@@ -393,11 +393,13 @@ export interface FileOperationEntry {
 export interface FileOperationPayload {
   paths: string[];
   entries?: FileOperationEntry[];
+  signal?: AbortSignal;
 }
 export interface RenameFileOperationPayload {
   files: Array<{ oldPath: string; newPath: string; isDirectory?: boolean }>;
   /** Tree-view requests reference preparation only when this is true. */
   updateReferences?: boolean;
+  signal?: AbortSignal;
 }
 export interface LanguageServerService {
   registerAdapter(adapter: LanguageServerAdapter): Disposable;

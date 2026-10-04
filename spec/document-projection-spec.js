@@ -775,6 +775,110 @@ describe("AST document projections", () => {
     expect(await manager.applyWorkspaceEdit(edit, "safe", session)).toBe(true);
     expect(editor.getText()).toBe(text.replace("result: int", "renamed: int"));
   });
+  async function prepareProjectedFileOperation(operation, targetUri, extra = {}) {
+    const edit = {
+      changes: {
+        [targetUri]: [
+          {
+            range: {
+              start: { line: 7, character: 0 },
+              end: { line: 7, character: 6 },
+            },
+            newText: "renamed",
+          },
+        ],
+      },
+    };
+    await start(extra, { [`workspace/will${operation}Files`]: edit });
+    session.capabilities.workspace = {
+      fileOperations: {
+        [`will${operation}`]: {
+          filters: [{ scheme: "file", pattern: { glob: "**/*.ipy", matches: "file" } }],
+        },
+      },
+    };
+    manager.sessions.set("projection-file-operation", session);
+    await session.openEditor(editor);
+    const payload =
+      operation === "Rename"
+        ? {
+            files: [
+              {
+                oldPath: editor.getPath(),
+                newPath: path.join(directory, "renamed.ipy"),
+                isDirectory: false,
+              },
+            ],
+          }
+        : {
+            paths: [editor.getPath()],
+            entries: [{ path: editor.getPath(), isDirectory: false }],
+          };
+    return manager[`prepare${operation}Files`](payload);
+  }
+  for (const operation of ["Create", "Rename", "Delete"]) {
+    it(`commits retained Python reference edits from a staged will${operation}Files response`, async () => {
+      const preparation = await prepareProjectedFileOperation(
+        operation,
+        C.pathToUri(editor.getPath()),
+      );
+      expect(preparation).not.toBe(false);
+      expect(editor.getText()).toBe(text);
+      expect(await preparation.commit()).toBe(true);
+      expect(editor.getText()).toBe(text.replace("result: int", "renamed: int"));
+      expect(
+        (await messages()).filter((item) => item.method === `workspace/will${operation}Files`)
+          .length,
+      ).toBe(1);
+    });
+    it(`rejects a staged will${operation}Files edit when its captured projection expires without a buffer change`, async () => {
+      let current = true;
+      const preparation = await prepareProjectedFileOperation(
+        operation,
+        C.pathToUri(editor.getPath()),
+        {
+          getDocumentProjection: async (item, options) => {
+            const projection = await source.project(item, options);
+            return {
+              ...projection,
+              isCurrent: () => current && projection.isCurrent(),
+            };
+          },
+        },
+      );
+      expect(preparation).not.toBe(false);
+      current = false;
+      expect(await preparation.commit()).toBe(false);
+      expect(editor.getText()).toBe(text);
+      expect(fs.readFileSync(editor.getPath(), "utf8")).toBe(text);
+    });
+  }
+  it("refuses staged file-operation edits to an unopened .ipy file without a captured projection", async () => {
+    const filename = path.join(directory, "unopened.ipy");
+    fs.writeFileSync(filename, text);
+    const preparation = await prepareProjectedFileOperation("Rename", C.pathToUri(filename));
+    try {
+      expect(preparation).not.toBe(false);
+      expect(await preparation.commit()).toBe(false);
+      expect(editor.getText()).toBe(text);
+      expect(fs.readFileSync(filename, "utf8")).toBe(text);
+      for (const target of lumine.workspace.getTextEditors()) {
+        if (
+          target.getPath() &&
+          C.uriKey(C.pathToUri(target.getPath())) === C.uriKey(C.pathToUri(filename))
+        )
+          expect(target.getText()).toBe(text);
+      }
+    } finally {
+      for (const target of lumine.workspace.getTextEditors()) {
+        if (
+          target.getPath() &&
+          C.uriKey(C.pathToUri(target.getPath())) === C.uriKey(C.pathToUri(filename))
+        )
+          target.destroy();
+      }
+    }
+  });
   it("keeps query-specific formatter documents separate from the same host file", async () => {
     await start();
     await session.openEditor(editor);

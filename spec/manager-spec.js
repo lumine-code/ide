@@ -1260,10 +1260,13 @@ describe("LanguageServerManager capabilities", () => {
 
     expect(requests[0].method).toBe("workspace/willRenameFiles");
     expect(requests[0].params.files[0].oldUri).toBe(C.pathToUri(payload.files[0].oldPath));
-    expect(manager.applyWorkspaceEdits).toHaveBeenCalledWith(
-      [{ edit: { changes: {} }, session }],
-      "Prepare file rename",
-    );
+    expect(manager.applyWorkspaceEdits.calls.count()).toBe(1);
+    const [edits, label, options] = manager.applyWorkspaceEdits.calls.mostRecent().args;
+    expect(edits[0].edit).toEqual({ changes: {} });
+    expect(edits[0].session).toBe(session);
+    expect(label).toBe("Prepare file rename");
+    expect(typeof options.signal.addEventListener).toBe("function");
+    expect(typeof options.beforeMutation).toBe("function");
     expect(notifications[0].method).toBe("workspace/didRenameFiles");
     manager.sessions.clear();
   });
