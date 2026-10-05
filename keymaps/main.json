@@ -1,4 +1,8 @@
 {
+  "lumine-workspace": {
+    "alt-i": "ide-client:servers"
+  },
+
   // Actions of the server list. Their explicit action descriptors reuse these
   // command bindings as presentation metadata. `ide-client:show-details` is
   // deliberately absent: it is the list's primary Enter action.
