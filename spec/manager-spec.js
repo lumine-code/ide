@@ -100,6 +100,26 @@ describe("LanguageServerManager adapters", () => {
   afterEach(async () => manager.deactivate());
   it("validates adapters", () =>
     expect(() => manager.registerAdapter({ id: "bad" })).toThrowError(/grammarScopes/));
+  it("validates whole-document symbol scopes as a subset of the served grammars", () => {
+    const adapter = {
+      id: "test",
+      displayName: "Test",
+      grammarScopes: ["source.test", "source.host"],
+      resolveServer: async () => null,
+    };
+    for (const documentSymbolScopes of ["source.test", [""], [" "], [null], ["source.other"]])
+      expect(() => manager.registerAdapter({ ...adapter, documentSymbolScopes }))
+        .withContext(JSON.stringify(documentSymbolScopes))
+        .toThrowError(/documentSymbolScopes/);
+    const registration = manager.registerAdapter({
+      ...adapter,
+      documentSymbolScopes: ["source.test"],
+    });
+    expect(manager.adapters.get("test").documentSymbolScopes).toEqual(["source.test"]);
+    registration.dispose();
+    manager.registerAdapter({ ...adapter, documentSymbolScopes: [] });
+    expect(manager.adapters.get("test").documentSymbolScopes).toEqual([]);
+  });
   it("rejects duplicate IDs and disposes registrations", () => {
     const adapter = {
       id: "test",

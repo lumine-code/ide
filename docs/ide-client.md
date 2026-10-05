@@ -15,6 +15,8 @@ Workspace symbol search asks every supporting session already running for the re
 
 Document symbol sources are enumerated from adapters applicable to the current editor and their existing session state, including notebook cell routing. Enumeration does not launch a server or scan the project. Each source identifies one adapter as `ide-client:<adapter.id>`, uses the adapter's display name and the short label `LS`, and reports `ready`, `starting` or `unavailable` with an optional reason. A document request carries the exact `sourceId`; an unavailable or unsupported source returns `null`, and the client never substitutes another backend. The hub owns automatic selection and a user's explicit choice.
 
+`documentSymbolScopes` declares whole-document ownership as a subset of `grammarScopes`. It defaults to `grammarScopes`; `[]` disables document symbol sources for the adapter. Each entry must be a nonempty scope already in `grammarScopes`. A server that handles foreign embedded fragments keeps their scopes in `grammarScopes` for completion, hover and navigation, but excludes them from `documentSymbolScopes`. Sources for those host buffers are omitted, and an exact request for such a source returns `null` before waiting for a session or opening a document. Eligibility uses the editor's root grammar, including a notebook cell's own grammar. This declaration does not change protocol capabilities, feature switches or workspace symbols.
+
 Hover and completion documentation fences use their own declared language, which may differ from the file being edited: JavaScript documentation can describe TypeScript types. The client supplies the presentation services' optional code-block renderers for display signatures that are not valid source, including descriptive labels, overload counts, omitted parameters and callable type notation. Both surfaces share one renderer, which parses private declarations with the editor's grammar and maps scopes back to the original text; the displayed and copied signature stays unchanged. Unsupported forms, failed parses and ordinary source use the normal renderer. An adapter can supply `getDocumentationCodeBlockProjection(block)` for its own server's documentation conventions; unlabelled blocks are never offered to an unrelated adapter.
 
 The full types are `lib/main.d.ts` in this package.
@@ -42,6 +44,7 @@ interface LanguageServerAdapter {
   id: string;
   displayName: string;
   grammarScopes: string[];
+  documentSymbolScopes?: string[];
   resolveServer(context: ServerResolutionContext): Promise<ServerLaunch | null>;
 
   languageId?: string;

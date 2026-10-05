@@ -171,6 +171,7 @@ describe("symbol services", () => {
 
   it("settles a timed-out document request before its server is ready", async () => {
     jasmine.useRealClock();
+    addSession("js", [], { capabilities: { documentSymbolProvider: true } });
     let finish;
     spyOn(manager, "activeSessionsForEditor").and.callFake(
       () =>
@@ -178,7 +179,10 @@ describe("symbol services", () => {
           finish = resolve;
         }),
     );
-    const editor = {};
+    const editor = {
+      getGrammar: () => ({ scopeName: "source.js" }),
+      getPath: () => path.join(root, "source.js"),
+    };
     await expectAsync(
       provider.getDocumentSymbols(editor, { sourceId: "ide-client:js", timeoutMs: 5 }),
     ).toBeRejectedWithError("Symbol request timed out");
@@ -317,8 +321,92 @@ describe("symbol services", () => {
     expect(enabled.request).not.toHaveBeenCalled();
   });
 
+  it("omits foreign embedded sources and refuses exact requests before opening a document", async () => {
+    const session = addSession("html", [symbol("fragment")], {
+      adapter: {
+        grammarScopes: ["text.html.basic", "source.gfm"],
+        documentSymbolScopes: ["text.html.basic"],
+      },
+      capabilities: { documentSymbolProvider: true, hoverProvider: true, definitionProvider: true },
+    });
+    const host = {
+      getGrammar: () => ({ scopeName: "source.gfm" }),
+      getPath: () => path.join(root, "readme.md"),
+    };
+    spyOn(manager, "activeSessionsForEditor").and.throwError("must not attach a foreign document");
+    spyOn(session, "openEditor").and.throwError("must not open a foreign document");
+    expect(manager.adaptersForEditor(host)).toEqual([session.adapter]);
+    expect(provider.getDocumentSymbolSources(host)).toEqual([]);
+    expect(await provider.getDocumentSymbols(host, { sourceId: "ide-client:html" })).toBeNull();
+    expect(manager.activeSessionsForEditor).not.toHaveBeenCalled();
+    expect(session.openEditor).not.toHaveBeenCalled();
+    expect(session.request).not.toHaveBeenCalled();
+    expect(session.supports("textDocument/documentSymbol", host)).toBe(true);
+    expect(session.supports("textDocument/hover", host)).toBe(true);
+    expect(session.supports("textDocument/definition", host)).toBe(true);
+    expect((await provider.searchWorkspaceSymbols("", { paths: [root] }))[0].name).toBe("fragment");
+    const native = { ...host, getGrammar: () => ({ scopeName: "text.html.basic" }) };
+    expect(provider.getDocumentSymbolSources(native)[0].state).toBe("ready");
+  });
+
+  it("uses the current root grammar and defaults ordinary adapters to their served grammars", async () => {
+    const session = addSession("js", [symbol("native")], {
+      capabilities: { documentSymbolProvider: true },
+    });
+    spyOn(manager, "activeSessionsForEditor").and.resolveTo([session]);
+    let scopeName = "source.js";
+    const editor = {
+      getGrammar: () => ({ scopeName }),
+      getPath: () => path.join(root, "source.js"),
+    };
+    expect(provider.getDocumentSymbolSources(editor)[0].id).toBe("ide-client:js");
+    expect((await provider.getDocumentSymbols(editor, { sourceId: "ide-client:js" }))[0].name).toBe(
+      "native",
+    );
+    scopeName = "source.gfm";
+    expect(provider.getDocumentSymbolSources(editor)).toEqual([]);
+    expect(await provider.getDocumentSymbols(editor, { sourceId: "ide-client:js" })).toBeNull();
+    expect(session.request.calls.count()).toBe(1);
+    scopeName = "source.js";
+    session.adapter.documentSymbolScopes = [];
+    expect(provider.getDocumentSymbolSources(editor)).toEqual([]);
+    expect(await provider.getDocumentSymbols(editor, { sourceId: "ide-client:js" })).toBeNull();
+    expect(session.request.calls.count()).toBe(1);
+  });
+
+  it("declines a document that changes to a foreign grammar while its session becomes ready", async () => {
+    const session = addSession("html", [symbol("fragment")], {
+      adapter: {
+        grammarScopes: ["text.html.basic", "source.gfm"],
+        documentSymbolScopes: ["text.html.basic"],
+      },
+      capabilities: { documentSymbolProvider: true },
+    });
+    let ready;
+    spyOn(manager, "activeSessionsForEditor").and.callFake(
+      () =>
+        new Promise((resolve) => {
+          ready = resolve;
+        }),
+    );
+    let scopeName = "text.html.basic";
+    const editor = {
+      getGrammar: () => ({ scopeName }),
+      getPath: () => path.join(root, "source.html"),
+    };
+    const pending = provider.getDocumentSymbols(editor, { sourceId: "ide-client:html" });
+    scopeName = "source.gfm";
+    ready([session]);
+    expect(await pending).toBeNull();
+    expect(session.request).not.toHaveBeenCalled();
+  });
+
   it("routes a concrete source only through a session holding the embedded cell", async () => {
     const session = addSession("cell", [symbol("cell-symbol")], {
+      adapter: {
+        grammarScopes: ["source.js", "source.gfm"],
+        documentSymbolScopes: ["source.js"],
+      },
       capabilities: { documentSymbolProvider: true },
     });
     const editor = { getGrammar: () => ({ scopeName: "source.js" }), getPath: () => undefined };
@@ -339,6 +427,10 @@ describe("symbol services", () => {
     manager.emitter.emit("did-change-notebook", { record });
     await Promise.resolve();
     expect(changed).toHaveBeenCalledWith({ editor });
+    const host = { ...editor, getGrammar: () => ({ scopeName: "source.gfm" }) };
+    expect(provider.getDocumentSymbolSources(host)).toEqual([]);
+    expect(await provider.getDocumentSymbols(host, { sourceId: "ide-client:cell" })).toBeNull();
+    expect(session.request.calls.count()).toBe(1);
   });
 
   it("invalidates document source state during normal server startup", async () => {

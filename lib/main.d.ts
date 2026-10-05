@@ -195,6 +195,8 @@ export interface LanguageServerAdapter {
     context: { editor: TextEditor; filePath: string | null },
   ): string | undefined;
   grammarScopes: string[];
+  /** Whole-document symbol ownership; defaults to grammarScopes. A subset, or [] to expose no document source. Other features and workspace symbols remain independent. */
+  documentSymbolScopes?: string[];
   documentSelector?: Array<{ language?: string; scheme?: string; pattern?: string }>;
   sessionScope?: "project-root" | "workspace";
   /** Select one applicable adapter in this group without excluding unrelated servers. */
