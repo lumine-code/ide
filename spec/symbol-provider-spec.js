@@ -184,6 +184,32 @@ describe("symbol services", () => {
     finish([]);
   });
 
+  it("declines the document request when its selected backend disappears before retrieval", async () => {
+    const session = addSession("js", [], { capabilities: { documentSymbolProvider: true } });
+    spyOn(manager, "activeSessionsForEditor").and.returnValues(
+      Promise.resolve([session]),
+      Promise.resolve([]),
+    );
+    expect(await provider.canProvideDocumentSymbols({})).toBe(1);
+    expect(await provider.getDocumentSymbols({})).toBeNull();
+    expect(session.request).not.toHaveBeenCalled();
+  });
+
+  it("declines definition retrieval when its backend becomes unavailable", async () => {
+    const session = addSession("js", [], { capabilities: { definitionProvider: true } });
+    const editor = {
+      getPath: () => path.join(root, "source.js"),
+      getLastCursor: () => ({ getBufferPosition: () => ({ row: 0, column: 0 }) }),
+    };
+    spyOn(manager, "activeSessionsForEditor").and.returnValues(
+      Promise.resolve([session]),
+      Promise.resolve([]),
+    );
+    expect(await provider.canProvideDefinitions(editor)).toBe(true);
+    expect(await provider.getDefinitions(editor)).toBeNull();
+    expect(session.request).not.toHaveBeenCalled();
+  });
+
   it("invalidates workspace results when project roots or normal server availability change", async () => {
     const callback = jasmine.createSpy("invalidate");
     provider.onDidInvalidateWorkspaceSymbols(callback);
@@ -195,6 +221,18 @@ describe("symbol services", () => {
     expect(callback.calls.count()).toBe(1);
     provider.destroy();
     manager.didChangeSession(session);
+    await Promise.resolve();
+    expect(callback.calls.count()).toBe(1);
+  });
+
+  it("invalidates workspace symbols when notebook cell topology changes", async () => {
+    const callback = jasmine.createSpy("invalidate");
+    provider.onDidInvalidateWorkspaceSymbols(callback);
+    manager.emitter.emit("did-change-notebook", { record: {} });
+    await Promise.resolve();
+    expect(callback.calls.count()).toBe(1);
+    provider.destroy();
+    manager.emitter.emit("did-change-notebook", { record: {} });
     await Promise.resolve();
     expect(callback.calls.count()).toBe(1);
   });

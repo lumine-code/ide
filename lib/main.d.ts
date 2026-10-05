@@ -372,7 +372,7 @@ export interface DocumentSymbolProvider {
   getDocumentSymbols(
     editor: TextEditor,
     options?: { signal?: AbortSignal; timeoutMs?: number },
-  ): Promise<NavigationSymbol[]>;
+  ): Promise<NavigationSymbol[] | null>;
   onDidInvalidateDocumentSymbols(
     callback: (event: { editor: TextEditor | null }) => void,
   ): Disposable;
@@ -405,7 +405,7 @@ export interface DefinitionProvider {
       signal?: AbortSignal;
       timeoutMs?: number;
     },
-  ): Promise<NavigationSymbol[]>;
+  ): Promise<NavigationSymbol[] | null>;
 }
 export interface HyperclickSuggestion {
   range: LumineRange | LumineRange[];

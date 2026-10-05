@@ -42,6 +42,7 @@ const managerWith = (...sessions) => ({
   onDidChangeSession: () => ({ dispose() {} }),
   onDidChangeFeatures: () => ({ dispose() {} }),
   onDidChangeCapabilities: () => ({ dispose() {} }),
+  onDidChangeNotebook: () => ({ dispose() {} }),
   uriForEditor: (editor) => {
     const editorPath = editor.getPath?.();
     return editorPath ? require("../lib/converters").pathToUri(editorPath) : null;
