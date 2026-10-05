@@ -365,13 +365,24 @@ export interface NavigationSymbol {
   cell?: number;
   uri?: string;
 }
+export interface DocumentSymbolSource {
+  id: string;
+  name: string;
+  shortLabel: "LS";
+  score: 1;
+  state: "ready" | "starting" | "unavailable";
+  message?: string;
+}
 export interface DocumentSymbolProvider {
   name: string;
   packageName: string;
-  canProvideDocumentSymbols(editor: TextEditor): Promise<number | false>;
+  getDocumentSymbolSources(
+    editor: TextEditor,
+    options?: { signal?: AbortSignal },
+  ): DocumentSymbolSource[];
   getDocumentSymbols(
     editor: TextEditor,
-    options?: { signal?: AbortSignal; timeoutMs?: number },
+    options: { sourceId: string; signal?: AbortSignal; timeoutMs?: number },
   ): Promise<NavigationSymbol[] | null>;
   onDidInvalidateDocumentSymbols(
     callback: (event: { editor: TextEditor | null }) => void,

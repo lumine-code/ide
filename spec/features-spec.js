@@ -40,6 +40,7 @@ const sessionFor = (adapter, capabilities, result) => {
 const managerWith = (...sessions) => ({
   addCapabilityFragment() {},
   onDidChangeSession: () => ({ dispose() {} }),
+  onDidChangeAdapters: () => ({ dispose() {} }),
   onDidChangeFeatures: () => ({ dispose() {} }),
   onDidChangeCapabilities: () => ({ dispose() {} }),
   onDidChangeNotebook: () => ({ dispose() {} }),
@@ -53,6 +54,9 @@ const managerWith = (...sessions) => ({
   },
   allGrammarScopes: () => ["source.js"],
   activeSessionsForEditor: async () => sessions,
+  adaptersForEditor: () => sessions.map(({ adapter }) => adapter),
+  sessionsForEditor: () => sessions,
+  featureEnabled,
   activeSessionForFeature: async (editor, method, feature) =>
     sessions.find((session) => session.supports(method, editor, feature)) || null,
 });
@@ -239,7 +243,10 @@ describe("feature switches", () => {
         },
       ];
       const session = sessionFor(adapterFor("ide-a"), { documentSymbolProvider: true }, symbols);
-      const found = await new SymbolProvider(managerWith(session)).getDocumentSymbols(stubEditor());
+      const found = await new SymbolProvider(managerWith(session)).getDocumentSymbols(
+        stubEditor(),
+        { sourceId: "ide-client:ide-a" },
+      );
       expect(found.map(({ name }) => name)).toEqual(["thing"]);
       expect(found[0].position).toEqual([0, 0]);
       expect(found[0].range).toEqual([
@@ -291,8 +298,12 @@ describe("feature switches", () => {
       const symbolsOnly = sessionFor(adapterFor("ide-b"), { documentSymbolProvider: true }, []);
       const provider = new SymbolProvider(managerWith(referencesOnly, symbolsOnly));
       const editor = stubEditor();
-      expect(await provider.canProvideDocumentSymbols(editor)).toBe(1);
-      expect(await provider.sessionFor(editor, "textDocument/documentSymbol")).toBe(symbolsOnly);
+      expect(
+        provider.getDocumentSymbolSources(editor).find(({ id }) => id === "ide-client:ide-b").state,
+      ).toBe("ready");
+      expect(
+        provider.getDocumentSymbolSources(editor).find(({ id }) => id === "ide-client:ide-a").state,
+      ).toBe("unavailable");
       expect(await provider.canProvideDefinitions(editor)).toBe(false);
     });
   });

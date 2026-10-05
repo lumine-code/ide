@@ -204,6 +204,7 @@ describe("ide-client package", () => {
     expect(main.provideWorkspaceSymbolProvider()).toBe(workspace);
     expect(main.provideDefinitionProvider()).toBe(definition);
     expect(typeof document.getDocumentSymbols).toBe("function");
+    expect(typeof document.getDocumentSymbolSources).toBe("function");
     expect(typeof document.onDidInvalidateDocumentSymbols).toBe("function");
     expect(typeof workspace.searchWorkspaceSymbols).toBe("function");
     expect(typeof workspace.onDidInvalidateWorkspaceSymbols).toBe("function");

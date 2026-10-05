@@ -514,6 +514,7 @@ describe("ServerSession against a fake server", () => {
     const provider = new SymbolProvider(manager);
 
     const symbols = await provider.getDocumentSymbols(editor, {
+      sourceId: `ide-client:${session.adapter.id}`,
       signal: new AbortController().signal,
     });
     const received = await receivedMessages(session);

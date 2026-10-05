@@ -609,6 +609,32 @@ describe("LanguageServerManager external documents", () => {
     expect(session.openEditor).toHaveBeenCalledOnceWith(editor);
     editor.destroy();
   });
+
+  it("waits only for the requested document source while another adapter is still starting", async () => {
+    const editor = await lumine.workspace.open();
+    const uri = manager.uriForEditor(editor);
+    const selected = {
+      adapter: { id: "selected" },
+      state: "running",
+      ready: Promise.resolve(),
+      documents: new Map(),
+      openEditor: jasmine.createSpy("openEditor").and.callFake(async () => {
+        selected.documents.set(C.uriKey(uri), { editor, uri });
+      }),
+    };
+    const starting = {
+      adapter: { id: "starting" },
+      state: "starting",
+      ready: new Promise(() => {}),
+      openEditor: jasmine.createSpy("openEditor"),
+    };
+    spyOn(manager, "sessionsForEditor").and.returnValue([starting, selected]);
+    expect(await manager.activeSessionsForEditor(editor, { adapterId: "selected" })).toEqual([
+      selected,
+    ]);
+    expect(starting.openEditor).not.toHaveBeenCalled();
+    editor.destroy();
+  });
 });
 
 describe("LanguageServerManager session lifetime", () => {

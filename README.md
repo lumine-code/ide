@@ -124,7 +124,7 @@ Tweak the server list, its details step, and the status-bar item from your style
 
 - [`ide-client`](docs/ide-client.md): provided to adapter packages to register language servers and reach sessions.
 - `autocomplete.provider`: provided to autocomplete to serve language-server completions.
-- `symbol.document-provider`: provide document symbols from the first supporting language server, with invalidation when its session, capabilities or feature switches change.
+- `symbol.document-provider`: list applicable language-server sources through `getDocumentSymbolSources(editor, { signal })` and retrieve the exact `sourceId` through `getDocumentSymbols(editor, { sourceId, signal, timeoutMs })`. Each adapter has a stable `ide-client:<adapter.id>` source ID, its full display name, the `LS` label and score `1`; sources report ready, starting or unavailable state. Session, adapter, notebook, capability and feature changes invalidate affected document results.
 - `symbol.workspace-provider`: merge workspace symbols from supporting servers already running for the requested project roots. Searching never starts a server or opens a document; unavailable, starting, partial and failed sources are reported separately from an empty successful search.
 - `symbol.definition-provider`: resolve the symbol at the requested position through the first supporting language server.
 - `context-help.provider`: provided to serve documentation at a buffer position in tooltips and the documentation panel.
