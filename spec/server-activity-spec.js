@@ -284,15 +284,18 @@ describe("Language server progress adapter", () => {
   });
 
   it("tracks slow server preparation before a session exists", async () => {
-    const controller = { adapter: session.adapter };
+    const controller = manager.createController(
+      session.adapter,
+      require("path").resolve("activity-project"),
+    );
     let finish;
-    spyOn(manager, "prepareStartupSnapshot").and.returnValue(
+    spyOn(controller, "prepareStartupSnapshot").and.returnValue(
       new Promise((resolve) => (finish = resolve)),
     );
-    const pending = manager.prepareStartup(controller, 1, 2);
+    const pending = controller.prepareStartup(1, 2);
     advanceClock(400);
     expect(signal.entries()[0].title).toBe("Test Server: Preparing server");
-    expect(manager.prepareStartupSnapshot).toHaveBeenCalledWith(controller, 1, 2);
+    expect(controller.prepareStartupSnapshot).toHaveBeenCalledWith(1, 2);
     const prepared = { stale: true };
     finish(prepared);
     expect(await pending).toBe(prepared);
@@ -301,14 +304,17 @@ describe("Language server progress adapter", () => {
   });
 
   it("clears failed preparation and replays it when the service arrives late", async () => {
-    const controller = { adapter: session.adapter };
+    const controller = manager.createController(
+      session.adapter,
+      require("path").resolve("activity-project"),
+    );
     const error = new Error("Resolver failed");
     let fail;
     manager.setBusySignal(null);
-    spyOn(manager, "prepareStartupSnapshot").and.returnValue(
+    spyOn(controller, "prepareStartupSnapshot").and.returnValue(
       new Promise((_resolve, reject) => (fail = reject)),
     );
-    const pending = manager.prepareStartup(controller, 1, 2);
+    const pending = controller.prepareStartup(1, 2);
     advanceClock(400);
     manager.setBusySignal(signal);
     expect(signal.entries()[0].title).toBe("Test Server: Preparing server");

@@ -12,6 +12,7 @@ const fakeStatusBar = (tiles) => ({
   },
 });
 const makeBusySignal = require("./helpers/busy-signal");
+const { publishSession } = require("./helpers/session-fixtures");
 
 describe("ide-client package", () => {
   beforeEach(async () => {
@@ -755,6 +756,7 @@ describe("ide-client package", () => {
     };
     // Through the manager, so this covers the subscription rather than the
     // method: deleting the wiring in activate() has to fail this.
+    publishSession(main.manager, session);
     main.manager.scheduleRestart(session);
 
     expect(lumine.notifications.addError).toHaveBeenCalled();

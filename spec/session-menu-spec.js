@@ -1,3 +1,5 @@
+const { publishSession } = require("./helpers/session-fixtures");
+
 describe("ide-client session menu", () => {
   let main, menu;
 
@@ -109,8 +111,8 @@ describe("ide-client session menu", () => {
 
   it("names every folder a server answers for, not the one that started it", () => {
     const shared = stubSession("running", "pyright", "/project", ["/project", "/work/tools"]);
-    main.manager.sessions.set("pyright:/project", shared);
-    main.manager.sessions.set("pyright:/work/tools", shared);
+    publishSession(main.manager, shared);
+    publishSession(main.manager, shared, "/work/tools");
     spyOn(lumine.project, "getPaths").and.returnValue(["/project", "/work/tools"]);
 
     const [item, ...rest] = menu.serverItems();
@@ -122,7 +124,7 @@ describe("ide-client session menu", () => {
   it("shows the whole project for a workspace-scoped server", () => {
     const session = stubSession("running", "wide", "/project");
     session.adapter.sessionScope = "workspace";
-    main.manager.sessions.set("wide:", session);
+    publishSession(main.manager, session);
     spyOn(lumine.project, "getPaths").and.returnValue(["/one", "/two"]);
 
     // Its own rootPath is just whichever folder came first.
@@ -130,7 +132,7 @@ describe("ide-client session menu", () => {
   });
 
   it("calls a single project folder a root", () => {
-    main.manager.sessions.set("stub:/project", stubSession("running"));
+    publishSession(main.manager, stubSession("running"));
     spyOn(lumine.project, "getPaths").and.returnValue(["/project"]);
     expect(menu.serverItems()[0].detail).toBe("Root · /project");
   });
@@ -140,7 +142,7 @@ describe("ide-client session menu", () => {
     // directory — the directory is an implementation detail, the file is not.
     const session = stubSession("running", "loose", "/tmp/scratch");
     session.documents = new Map([["uri", { editor: { getPath: () => "/tmp/scratch/notes.py" } }]]);
-    main.manager.sessions.set("loose:/tmp/scratch", session);
+    publishSession(main.manager, session);
     spyOn(lumine.project, "getPaths").and.returnValue(["/project"]);
 
     expect(menu.serverItems()[0].detail).toBe("File · /tmp/scratch/notes.py");
@@ -148,7 +150,7 @@ describe("ide-client session menu", () => {
 
   it("falls back to the directory when the loose file has no path yet", () => {
     const session = stubSession("running", "loose", "/tmp/scratch");
-    main.manager.sessions.set("loose:/tmp/scratch", session);
+    publishSession(main.manager, session);
     spyOn(lumine.project, "getPaths").and.returnValue(["/project"]);
 
     expect(menu.serverItems()[0].detail).toBe("File · /tmp/scratch");
@@ -157,8 +159,8 @@ describe("ide-client session menu", () => {
   it("lists the servers of the active editor first", () => {
     const other = stubSession("running", "zeta");
     const serving = stubSession("running", "alpha");
-    main.manager.sessions.set("zeta:/project", other);
-    main.manager.sessions.set("alpha:/project", serving);
+    publishSession(main.manager, other);
+    publishSession(main.manager, serving);
     spyOn(main.manager, "sessionsForEditor").and.returnValue([other]);
     spyOn(lumine.workspace, "getActiveTextEditor").and.returnValue({});
 
@@ -182,7 +184,7 @@ describe("ide-client session menu", () => {
         ["file:///a.py", {}],
         ["file:///b.py", {}],
       ]);
-      main.manager.sessions.set("pyright:/project", session);
+      publishSession(main.manager, session);
       main.manager.diagnostics.set(
         session,
         new Map([
@@ -245,7 +247,6 @@ describe("ide-client session menu", () => {
 
     it("leaves out the rows a session has nothing to report for", () => {
       const bare = stubSession("starting", "bare");
-      main.manager.sessions.set("bare:/project", bare);
       expect(menu.detailItems(bare).map((item) => item.label)).toEqual(["State", "Scope"]);
     });
 
@@ -279,7 +280,7 @@ describe("ide-client session menu", () => {
 
       // A server that appeared while the details were open must be in the
       // list the back navigation re-shows.
-      main.manager.sessions.set("late:/project", stubSession("starting", "late"));
+      publishSession(main.manager, stubSession("starting", "late"));
 
       expect(lumine.workspace.popModal()).toBe(true);
       expect(menu.serverListHost.isVisible()).toBe(true);
@@ -298,8 +299,8 @@ describe("ide-client session menu", () => {
       // Sorted by display name, so `alpha` is the row above `zeta`.
       first = stubSession("running", "alpha");
       second = stubSession("running", "zeta");
-      main.manager.sessions.set("alpha:/project", first);
-      main.manager.sessions.set("zeta:/project", second);
+      publishSession(main.manager, first);
+      publishSession(main.manager, second);
       spyOn(lumine.project, "getPaths").and.returnValue(["/project"]);
       await menu.toggle();
     });
@@ -341,7 +342,7 @@ describe("ide-client session menu", () => {
       // What a restart reports: the row's own session object is replaced, and
       // only the key it is filed under carries the identity across.
       const replacement = stubSession("starting", "zeta");
-      main.manager.sessions.set("zeta:/project", replacement);
+      publishSession(main.manager, replacement);
       await menu.refresh();
 
       expect(menu.serverList.getItems().map((item) => item.state)).toEqual(["running", "starting"]);

@@ -4,6 +4,7 @@ const SymbolProvider = require("../lib/symbol-provider");
 const CodeFormatProvider = require("../lib/code-format-provider");
 const ContextHelpProvider = require("../lib/context-help-provider");
 const C = require("../lib/converters");
+const { publishSession } = require("./helpers/session-fixtures");
 const { FEATURES, METHOD_FEATURES, featuresKeyPath, featureEnabled } = require("../lib/features");
 
 const FILE = path.join(__dirname, "example.js");
@@ -402,12 +403,11 @@ describe("diagnostics switch", () => {
 
   it("refreshes pull diagnostics when their feature switch changes", () => {
     session.refreshDiagnostics = jasmine.createSpy("refreshDiagnostics");
-    manager.sessions.set("ide-a:root", session);
+    publishSession(manager, session);
 
     lumine.config.set("ide-a.features.diagnostics", false);
     lumine.config.set("ide-a.features.diagnostics", true);
 
-    manager.sessions.clear();
     expect(session.refreshDiagnostics.calls.count()).toBe(2);
   });
 });

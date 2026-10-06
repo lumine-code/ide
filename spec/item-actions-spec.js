@@ -1,3 +1,5 @@
+const { publishSession } = require("./helpers/session-fixtures");
+
 describe("ide-client item actions", () => {
   let main, list;
 
@@ -126,7 +128,7 @@ describe("ide-client item actions", () => {
       stop() {},
       kill() {},
     };
-    main.manager.sessions.set("pyright:/project", session);
+    publishSession(main.manager, session);
     spyOn(lumine.project, "getPaths").and.returnValue(["/project"]);
     spyOn(main.manager, "restart").and.returnValue(Promise.resolve(session));
 

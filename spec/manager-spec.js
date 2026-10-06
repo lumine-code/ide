@@ -3,6 +3,7 @@ const LanguageServerManager = require("../lib/language-server-manager");
 const ServerSession = require("../lib/server-session");
 const { languageIdForEditor } = require("../lib/language-ids");
 const C = require("../lib/converters");
+const { publishSession: registerFakeSession } = require("./helpers/session-fixtures");
 
 // Lets an awaited chain that a fake-clock timer started run to its end. The
 // timers are faked, so nothing here waits on real time; only the microtasks
@@ -215,8 +216,8 @@ describe("LanguageServerManager adapters", () => {
       pushSettings: jasmine.createSpy("pushSettings").and.resolveTo(),
       stop: async () => {},
     };
-    manager.sessions.set(manager.keyFor(adapter, rootPath), session);
-    const controller = manager.controllerForSession(session, true);
+    registerFakeSession(manager, session);
+    const controller = manager.controllerForSession(session);
 
     manager.pushSettingsForAdapter(adapter);
     manager.pushSettingsForAdapter(adapter);
@@ -246,8 +247,8 @@ describe("LanguageServerManager adapters", () => {
         ),
       stop: async () => {},
     };
-    manager.sessions.set(manager.keyFor(adapter, rootPath), session);
-    const controller = manager.controllerForSession(session, true);
+    registerFakeSession(manager, session);
+    const controller = manager.controllerForSession(session);
 
     manager.pushSettingsForAdapter(adapter);
     pushed.promise.then(() => manager.pushSettingsForAdapter(adapter));
@@ -275,8 +276,8 @@ describe("LanguageServerManager adapters", () => {
         ),
       stop: async () => {},
     };
-    manager.sessions.set(manager.keyFor(adapter, rootPath), session);
-    const controller = manager.controllerForSession(session, true);
+    registerFakeSession(manager, session);
+    const controller = manager.controllerForSession(session);
     spyOn(manager, "log");
     const notification = spyOn(lumine.notifications, "addError");
 
@@ -305,8 +306,8 @@ describe("LanguageServerManager adapters", () => {
         .and.returnValues(Promise.reject(new Error("settings failed")), Promise.resolve()),
       stop: async () => {},
     };
-    manager.sessions.set(manager.keyFor(adapter, rootPath), session);
-    const controller = manager.controllerForSession(session, true);
+    registerFakeSession(manager, session);
+    const controller = manager.controllerForSession(session);
     spyOn(manager, "log");
     const notification = spyOn(lumine.notifications, "addError");
 
@@ -408,9 +409,7 @@ describe("LanguageServerManager adapters", () => {
         throw new Error("old child survived stop");
       }),
     };
-    manager.sessions.set(manager.keyFor(oldAdapter, rootPath), oldSession);
-    manager.controllerForSession(oldSession, true);
-    manager.ownedSessions.add(oldSession);
+    registerFakeSession(manager, oldSession);
     spyOn(console, "error");
     await manager.unregisterAdapter(oldAdapter);
 
@@ -523,8 +522,8 @@ describe("LanguageServerManager external documents", () => {
       folders: new Set([root]),
       stop: async () => {},
     };
-    manager.sessions.set(manager.keyFor(adapterA, root), holding);
-    manager.sessions.set(manager.keyFor(adapterB, root), notHolding);
+    registerFakeSession(manager, holding);
+    registerFakeSession(manager, notHolding);
 
     const editor = cellEditor();
     manager.registerExternalDocument(editor, { editor, uri, cellId: "c1", record: record() });
@@ -624,7 +623,7 @@ describe("LanguageServerManager external documents", () => {
       }),
       stop: async () => {},
     };
-    manager.sessions.set(manager.keyFor(adapter, root), session);
+    registerFakeSession(manager, session);
 
     expect(await manager.activeSessionsForEditor(editor)).toEqual([session]);
     expect(session.openEditor).toHaveBeenCalledOnceWith(editor);
@@ -660,9 +659,12 @@ describe("LanguageServerManager external documents", () => {
 
 describe("LanguageServerManager session lifetime", () => {
   let manager;
-  const sessionAt = (rootPath) => {
+  const sessionAt = (
+    rootPath,
+    adapter = { id: "test", displayName: "Test", grammarScopes: ["source.test"] },
+  ) => {
     const session = {
-      adapter: { id: "test", displayName: "Test", grammarScopes: ["source.test"] },
+      adapter,
       rootPath,
       state: "running",
       documents: new Map(),
@@ -671,7 +673,7 @@ describe("LanguageServerManager session lifetime", () => {
         session.state = "stopped";
       }),
     };
-    manager.sessions.set(`test:${rootPath}`, session);
+    registerFakeSession(manager, session);
     return session;
   };
 
@@ -695,12 +697,13 @@ describe("LanguageServerManager session lifetime", () => {
     // The reclaim runs from a timer, so a rejection here reaches no caller and
     // would be reported to the user as an unhandled one instead.
     spyOn(console, "error");
+    const reclaim = spyOn(manager, "reclaim").and.callThrough();
     const session = sessionAt(path.join(path.sep, "tmp", "loose"));
     session.stop.and.returnValue(Promise.reject(new Error("broken pipe")));
 
     manager.didCloseDocument(session);
     advanceClock(1000);
-    await Promise.resolve();
+    await reclaim.calls.mostRecent().returnValue;
 
     expect(session.stop).toHaveBeenCalled();
     expect(manager.sessions.size).toBe(0);
@@ -764,8 +767,7 @@ describe("LanguageServerManager session lifetime", () => {
     };
     manager.registerAdapter(adapter);
     const root = lumine.project.getPaths()[0];
-    const session = sessionAt(root);
-    session.adapter = adapter;
+    const session = sessionAt(root, adapter);
     session.documents.set(C.uriKey(require("url").pathToFileURL(filePath).href), {});
     spyOn(manager, "reattachEditor");
     spyOn(manager, "attachEditor");
@@ -815,10 +817,11 @@ describe("LanguageServerManager session lifetime", () => {
 
   it("drops pending checks when the package deactivates", async () => {
     const session = sessionAt(path.join(path.sep, "tmp", "loose"));
+    const controller = manager.controllerForSession(session);
     manager.didCloseDocument(session);
-    expect(manager.idleChecks.size).toBe(1);
+    expect(controller.idleTimer).not.toBeNull();
     await manager.deactivate();
-    expect(manager.idleChecks.size).toBe(0);
+    expect(controller.idleTimer).toBeNull();
   });
 
   it("cancels a pending first resolution when its project root is removed", async () => {
@@ -891,7 +894,7 @@ describe("LanguageServerManager multi-root servers", () => {
       notify: (method, params) => notifications.push({ method, params }),
       stop: jasmine.createSpy("stop"),
     };
-    manager.sessions.set(manager.keyFor(adapter, rootPath), session);
+    registerFakeSession(manager, session);
     return session;
   };
 
@@ -904,7 +907,7 @@ describe("LanguageServerManager multi-root servers", () => {
 
   it("hands a second folder to a server that declares multi-root support", async () => {
     const first = sessionAt(rootA, MULTI_ROOT);
-    const adopted = await manager.adoptFolder(adapter, rootB, manager.keyFor(adapter, rootB));
+    const adopted = await manager.adoptFolder(adapter, rootB);
     // No second process: the running server is told about the folder.
     expect(adopted).toBe(first);
     expect(manager.sessions.get(manager.keyFor(adapter, rootB))).toBe(first);
@@ -921,8 +924,8 @@ describe("LanguageServerManager multi-root servers", () => {
 
   it("splits adopted folders when a replacement loses multi-root support", async () => {
     const session = sessionAt(rootA, MULTI_ROOT);
-    await manager.adoptFolder(adapter, rootB, manager.keyFor(adapter, rootB));
-    const controller = manager.controllerForSession(session, true);
+    await manager.adoptFolder(adapter, rootB);
+    const controller = manager.controllerForSession(session);
     session.capabilities = {};
 
     manager.splitUnsupportedFolders(controller, session);
@@ -937,10 +940,10 @@ describe("LanguageServerManager multi-root servers", () => {
     const resolution = deferred();
     adapter.resolveServer = jasmine.createSpy("resolveServer").and.returnValue(resolution.promise);
     const shared = sessionAt(rootA, MULTI_ROOT);
-    const sharedController = manager.controllerForSession(shared, true);
+    const sharedController = manager.controllerForSession(shared);
     const displaced = manager.createController(adapter, rootB);
     displaced.explicitDemand = true;
-    const hiddenRestart = manager.requestControllerRestart(displaced, { force: true });
+    const hiddenRestart = displaced.restart({ force: true });
 
     await manager.adoptFolder(adapter, rootB);
 
@@ -957,7 +960,7 @@ describe("LanguageServerManager multi-root servers", () => {
     // No `workspaceFolders` capability: this server resolves its configuration
     // from the single root it was started with.
     sessionAt(rootA, {});
-    const adopted = await manager.adoptFolder(adapter, rootB, manager.keyFor(adapter, rootB));
+    const adopted = await manager.adoptFolder(adapter, rootB);
     expect(adopted).toBe(null);
     expect(manager.sessions.has(manager.keyFor(adapter, rootB))).toBe(false);
     expect(notifications).toEqual([]);
@@ -965,7 +968,7 @@ describe("LanguageServerManager multi-root servers", () => {
 
   it("refuses to adopt when the server takes the list only at initialize", async () => {
     sessionAt(rootA, { workspace: { workspaceFolders: { supported: true } } });
-    expect(await manager.adoptFolder(adapter, rootB, manager.keyFor(adapter, rootB))).toBe(null);
+    expect(await manager.adoptFolder(adapter, rootB)).toBe(null);
   });
 
   it("offers the folder to a running server before resolving a new one", async () => {
@@ -991,7 +994,7 @@ describe("LanguageServerManager multi-root servers", () => {
 
   it("keeps a shared server when only one of its folders leaves the project", async () => {
     const session = sessionAt(rootA, MULTI_ROOT);
-    await manager.adoptFolder(adapter, rootB, manager.keyFor(adapter, rootB));
+    await manager.adoptFolder(adapter, rootB);
     notifications.length = 0;
     spyOn(lumine.project, "getPaths").and.returnValue([rootA]);
 
@@ -1006,7 +1009,7 @@ describe("LanguageServerManager multi-root servers", () => {
 
   it("stops a shared server once its last folder leaves the project", async () => {
     const session = sessionAt(rootA, MULTI_ROOT);
-    await manager.adoptFolder(adapter, rootB, manager.keyFor(adapter, rootB));
+    await manager.adoptFolder(adapter, rootB);
     spyOn(lumine.project, "getPaths").and.returnValue([]);
 
     manager.reconcileProjects();
@@ -1236,7 +1239,7 @@ describe("LanguageServerManager capabilities", () => {
       },
       notify: (method, params) => notifications.push({ method, params }),
     };
-    manager.sessions.set("fake:root", session);
+    registerFakeSession(manager, session);
     const root = path.join("C:", "project");
     manager.routeFileEvents([
       { action: "created", path: path.join(root, "New.MD") },
@@ -1290,7 +1293,7 @@ describe("LanguageServerManager capabilities", () => {
       },
       notify: (method, params) => notifications.push({ method, params }),
     };
-    manager.sessions.set("fake:root", session);
+    registerFakeSession(manager, session);
     spyOn(manager, "applyWorkspaceEdits").and.resolveTo(true);
     const payload = {
       files: [
@@ -1322,7 +1325,7 @@ describe("LanguageServerManager capabilities", () => {
     const notifications = [];
     const filter = { pattern: { glob: "**/*.ts" } };
     for (const id of ["one", "two"]) {
-      manager.sessions.set(id, {
+      registerFakeSession(manager, {
         state: "running",
         adapter: { grammarScopes: [] },
         capabilities: { workspace: { fileOperations: { didCreate: { filters: [filter] } } } },
@@ -1358,13 +1361,13 @@ describe("LanguageServerManager capabilities", () => {
         ],
       },
     };
-    manager.sessions.set("one", {
+    registerFakeSession(manager, {
       state: "running",
       adapter: { grammarScopes: [] },
       capabilities: { workspace: { fileOperations: { willDelete: { filters: [filter] } } } },
       request: async () => edit,
     });
-    manager.sessions.set("two", {
+    registerFakeSession(manager, {
       state: "running",
       adapter: { displayName: "Second", grammarScopes: [] },
       capabilities: { workspace: { fileOperations: { willDelete: { filters: [filter] } } } },
@@ -1395,8 +1398,8 @@ describe("LanguageServerManager capabilities", () => {
       { changes: { [uri]: [{ range: lspRange(0, 0, 3), newText: "ONE" }] } },
       { changes: { [uri]: [{ range: lspRange(0, 4, 7), newText: "TWO" }] } },
     ];
-    responses.forEach((edit, index) =>
-      manager.sessions.set(String(index), {
+    responses.forEach((edit) =>
+      registerFakeSession(manager, {
         state: "running",
         adapter: { grammarScopes: [] },
         capabilities: { workspace: { fileOperations: { willRename: { filters: [filter] } } } },
@@ -1430,7 +1433,7 @@ describe("LanguageServerManager capabilities", () => {
         throw new Error("index unavailable");
       },
     };
-    manager.sessions.set("fake:root", session);
+    registerFakeSession(manager, session);
 
     expect(await manager.willDeleteFiles({ paths: [filePath] })).toBe(false);
 
@@ -1446,8 +1449,9 @@ describe("LanguageServerManager capabilities", () => {
       notify: (method, params) => notifications.push({ method, params }),
       stop: () => {},
     };
-    manager.sessions.set("fake:root", session);
+    registerFakeSession(manager, session);
     manager.knownRoots = [];
+    session.announcedProjectRoots = new Set();
     await manager.projectPathsChanged();
     const roots = lumine.project.getPaths();
     if (roots.length) {
@@ -1596,6 +1600,7 @@ describe("LanguageServerManager restart", () => {
     // and the reason sat unread in the log.
     lumine.config.set("ide-client.restartLimit", 2);
     const session = failedSession({ failureCount: 2 });
+    registerFakeSession(manager, session);
     const exhausted = [];
     manager.onDidExhaustRestarts((event) => exhausted.push(event.session));
 
@@ -1610,6 +1615,7 @@ describe("LanguageServerManager restart", () => {
   it("keeps quiet while it still has restarts left", () => {
     lumine.config.set("ide-client.restartLimit", 3);
     const session = failedSession();
+    registerFakeSession(manager, session);
     const exhausted = [];
     manager.onDidExhaustRestarts((event) => exhausted.push(event.session));
     manager.scheduleRestart(session);
@@ -1639,7 +1645,7 @@ describe("LanguageServerManager restart", () => {
     };
     const rootPath = path.join(path.sep, "tmp", "project");
     const session = new ServerSession(manager, adapter, rootPath, launch);
-    manager.sessions.set(manager.keyFor(adapter, rootPath), session);
+    registerFakeSession(manager, session);
     const exhausted = [];
     manager.onDidExhaustRestarts((event) => exhausted.push(event.session));
 
@@ -1656,7 +1662,8 @@ describe("LanguageServerManager restart", () => {
     expect(exhausted[0].failureCount).toBe(3);
     expect(exhausted[0].restartCount).toBe(3);
     // And nothing keeps trying behind the notification.
-    expect(manager.restartTimers.size).toBe(0);
+    expect(manager.controllerForSession(session).retryTimer).toBeNull();
+    expect(manager.controllerForSession(session).retrySource).toBeNull();
   });
 
   it("starts a fresh run for a restart somebody asked for", async () => {
@@ -1677,7 +1684,7 @@ describe("LanguageServerManager restart", () => {
     const session = new ServerSession(manager, adapter, rootPath, launch);
     session.restartCount = 4;
     session.failureCount = 2;
-    manager.sessions.set(key, session);
+    registerFakeSession(manager, session);
 
     const restarted = await manager.restart(session);
     expect(restarted).not.toBeNull();
@@ -1695,6 +1702,7 @@ describe("LanguageServerManager restart", () => {
     // weeks earlier.
     lumine.config.set("ide-client.restartLimit", 3);
     const session = failedSession({ failureCount: 3, runningSince: Date.now() });
+    registerFakeSession(manager, session);
     const exhausted = [];
     manager.onDidExhaustRestarts((event) => exhausted.push(event.session));
     advanceClock(60000);
@@ -1708,6 +1716,7 @@ describe("LanguageServerManager restart", () => {
   it("holds a server that only just started to its remaining retries", () => {
     lumine.config.set("ide-client.restartLimit", 3);
     const session = failedSession({ failureCount: 3, runningSince: Date.now() });
+    registerFakeSession(manager, session);
     const exhausted = [];
     manager.onDidExhaustRestarts((event) => exhausted.push(event.session));
     advanceClock(5000);
@@ -1723,27 +1732,33 @@ describe("LanguageServerManager restart", () => {
     // every round.
     lumine.config.set("ide-client.restartLimit", 3);
     const session = failedSession();
-    manager.sessions.set("test:root", session);
+    registerFakeSession(manager, session);
 
     manager.scheduleRestart(session);
+    const controller = manager.controllerForSession(session);
+    const retryTimer = controller.retryTimer;
     manager.scheduleRestart(session);
 
-    expect(manager.restartTimers.size).toBe(1);
+    expect(controller.retryTimer).not.toBeNull();
+    expect(controller.retryTimer).toBe(retryTimer);
+    expect(controller.retrySource).toBe(session);
     expect(session.failureCount).toBe(1);
   });
 
   it("drops a pending retry when the session is forgotten", () => {
     lumine.config.set("ide-client.restartLimit", 3);
     const session = failedSession();
-    manager.sessions.set("test:root", session);
-    spyOn(manager, "restart");
+    registerFakeSession(manager, session);
+    const controller = manager.controllerForSession(session);
+    spyOn(controller, "restart");
 
     manager.scheduleRestart(session);
     manager.forget(session);
     advanceClock(30000);
 
-    expect(manager.restart).not.toHaveBeenCalled();
-    expect(manager.restartTimers.size).toBe(0);
+    expect(controller.restart).not.toHaveBeenCalled();
+    expect(controller.retryTimer).toBeNull();
+    expect(controller.retrySource).toBeNull();
   });
 
   it("declines to restart a server the adapter says is not installed", async () => {
@@ -1766,7 +1781,7 @@ describe("LanguageServerManager restart", () => {
       folders: new Set(),
       stop: jasmine.createSpy("stop").and.callFake(async () => {}),
     };
-    manager.sessions.set(manager.keyFor(adapter, session.rootPath), session);
+    registerFakeSession(manager, session);
 
     let result;
     let thrown = null;
@@ -1803,7 +1818,7 @@ describe("LanguageServerManager restart", () => {
         session.state = "stopped";
       }),
     });
-    manager.sessions.set(manager.keyFor(adapter, rootPath), session);
+    registerFakeSession(manager, session);
     spyOn(ServerSession.prototype, "start").and.callFake(async function () {
       this.state = "running";
     });
@@ -1849,8 +1864,7 @@ describe("LanguageServerManager restart", () => {
       folders: new Set([rootPath]),
       stop: jasmine.createSpy("old.stop").and.rejectWith(timeout),
     });
-    manager.sessions.set(manager.keyFor(adapter, rootPath), session);
-    manager.controllerForSession(session, true);
+    registerFakeSession(manager, session);
     spyOn(ServerSession.prototype, "start").and.callFake(async function () {
       this.state = "running";
     });
@@ -1889,7 +1903,7 @@ describe("LanguageServerManager restart", () => {
       folders: new Set([rootPath]),
       stop: jasmine.createSpy("stop"),
     });
-    manager.sessions.set(manager.keyFor(adapter, rootPath), session);
+    registerFakeSession(manager, session);
 
     await expectAsync(manager.restart(session)).toBeRejectedWithError(/bad configured path/);
     expect(session.stop).not.toHaveBeenCalled();
@@ -1914,7 +1928,7 @@ describe("LanguageServerManager restart", () => {
         session.state = "stopped";
       }),
     });
-    manager.sessions.set(manager.keyFor(adapter, rootPath), session);
+    registerFakeSession(manager, session);
     spyOn(ServerSession.prototype, "start").and.rejectWith(new Error("initialize failed"));
     const stop = spyOn(ServerSession.prototype, "stop").and.callFake(async function () {
       this.state = "stopped";
@@ -1955,7 +1969,7 @@ describe("LanguageServerManager restart", () => {
       folders: new Set([rootPath]),
       stop: jasmine.createSpy("stop").and.callFake(async () => order.push("stop")),
     });
-    manager.sessions.set(manager.keyFor(adapter, rootPath), session);
+    registerFakeSession(manager, session);
 
     await expectAsync(manager.restart(session)).toBeRejectedWithError(/invalid settings/);
 
@@ -1985,7 +1999,7 @@ describe("LanguageServerManager restart", () => {
         session.state = "stopped";
       }),
     });
-    manager.sessions.set(manager.keyFor(adapter, rootPath), session);
+    registerFakeSession(manager, session);
     spyOn(ServerSession.prototype, "start").and.callFake(function () {
       starts++;
       if (starts === 1) {
@@ -2006,7 +2020,7 @@ describe("LanguageServerManager restart", () => {
     await flushPromises();
     expect(starts).toBe(1);
     const controller = manager.controllerForSession(firstReplacement);
-    const joined = manager.requestControllerRestart(controller, { force: true });
+    const joined = controller.restart({ force: true });
 
     expect(joined).toBe(restarting);
     expect(stop).toHaveBeenCalledWith();
@@ -2039,8 +2053,7 @@ describe("LanguageServerManager restart", () => {
     });
     spyOn(manager, "reattachAll").and.callFake(async () => {});
     manager.registerAdapter(adapter);
-    manager.sessions.set(manager.keyFor(adapter, rootPath), session);
-    manager.controllerForSession(session, true);
+    registerFakeSession(manager, session);
     spyOn(ServerSession.prototype, "start").and.callFake(async function () {
       this.state = "running";
     });
@@ -2086,8 +2099,7 @@ describe("LanguageServerManager restart", () => {
       folders: new Set([rootPath]),
       stop: jasmine.createSpy("old.stop").and.returnValue(stopping.promise),
     });
-    manager.sessions.set(manager.keyFor(adapter, rootPath), session);
-    manager.controllerForSession(session, true);
+    registerFakeSession(manager, session);
     spyOn(ServerSession.prototype, "start").and.callFake(async function () {
       this.state = "running";
     });
@@ -2134,8 +2146,7 @@ describe("LanguageServerManager restart", () => {
       folders: new Set([rootPath]),
       stop: jasmine.createSpy("old.stop").and.returnValue(stopping.promise),
     });
-    manager.sessions.set(manager.keyFor(adapter, rootPath), session);
-    manager.controllerForSession(session, true);
+    registerFakeSession(manager, session);
     const start = spyOn(ServerSession.prototype, "start").and.callFake(async function () {
       this.state = "running";
     });
@@ -2201,8 +2212,7 @@ describe("LanguageServerManager restart", () => {
       folders: new Set([rootPath]),
       stop: jasmine.createSpy("stop"),
     });
-    manager.sessions.set(manager.keyFor(adapter, rootPath), session);
-    manager.controllerForSession(session, true);
+    registerFakeSession(manager, session);
     const reattach = spyOn(manager, "reattachAll").and.callFake(async () => {});
     const notification = spyOn(lumine.notifications, "addError");
 
@@ -2242,9 +2252,8 @@ describe("LanguageServerManager restart", () => {
         session.state = "stopped";
       }),
     });
-    manager.sessions.set(manager.keyFor(adapter, rootA), session);
-    manager.sessions.set(manager.keyFor(adapter, rootB), session);
-    const controller = manager.controllerForSession(session, true);
+    registerFakeSession(manager, session);
+    const controller = manager.controllerForSession(session);
     spyOn(ServerSession.prototype, "start").and.callFake(async function () {
       this.state = "running";
     });
@@ -2258,7 +2267,7 @@ describe("LanguageServerManager restart", () => {
     manager.unbindController(controller, rootA);
     controller.rootPath = rootB;
     session.rootPath = rootB;
-    manager.markControllerStructureChanged(controller);
+    controller.structureChanged();
     await flushPromises();
 
     const replacement = await restarting;
@@ -2290,7 +2299,7 @@ describe("LanguageServerManager restart", () => {
         session.state = "stopped";
       }),
     });
-    manager.sessions.set(manager.keyFor(adapter, rootPath), session);
+    registerFakeSession(manager, session);
     spyOn(ServerSession.prototype, "start").and.callFake(async function () {
       this.state = "running";
     });
@@ -2332,7 +2341,7 @@ describe("LanguageServerManager restart", () => {
         session.state = "stopped";
       }),
     });
-    manager.sessions.set(manager.keyFor(adapter, rootPath), session);
+    registerFakeSession(manager, session);
     const start = spyOn(ServerSession.prototype, "start").and.callFake(async function () {
       this.state = "running";
     });
@@ -2357,7 +2366,8 @@ describe("LanguageServerManager restart", () => {
     expect(adapter.resolveServer.calls.count()).toBe(1);
     expect(start.calls.count()).toBe(1);
     expect(stop).not.toHaveBeenCalled();
-    expect(manager.restartTimers.size).toBe(0);
+    expect(manager.controllerForSession(session).retryTimer).toBeNull();
+    expect(manager.controllerForSession(session).retrySource).toBeNull();
   });
 
   it("cancels a restart that is still resolving when the server is disconnected", async () => {
@@ -2379,7 +2389,7 @@ describe("LanguageServerManager restart", () => {
         session.state = "stopped";
       }),
     });
-    manager.sessions.set(manager.keyFor(adapter, rootPath), session);
+    registerFakeSession(manager, session);
     const start = spyOn(ServerSession.prototype, "start");
 
     const restarting = manager.restart(session);
@@ -2519,10 +2529,12 @@ describe("LanguageServerManager restart", () => {
 
 describe("LanguageServerManager teardown", () => {
   let manager;
-  const add = (key, session) => {
-    manager.sessions.set(key, session);
-    return session;
-  };
+  const add = (key, session) =>
+    registerFakeSession(
+      manager,
+      session,
+      session.rootPath || path.resolve(key.slice(key.indexOf(":") + 1)),
+    );
   const stubSession = (id) => ({
     adapter: { id, displayName: `${id} Server` },
     stop: jasmine.createSpy(`${id}.stop`),
@@ -2561,7 +2573,8 @@ describe("LanguageServerManager teardown", () => {
       adapter: { id: "a" },
       stop: jasmine.createSpy("a.stop").and.returnValue(Promise.reject(new Error("broken pipe"))),
     });
-    const foreign = add("b:/project", { adapter: { id: "b" } });
+    const foreign = { adapter: { id: "b" } };
+    manager.sessions.set("b:/project", foreign);
     const healthy = add("c:/project", stubSession("c"));
 
     await manager.deactivate();
@@ -2653,7 +2666,6 @@ describe("LanguageServerManager teardown", () => {
       kill: jasmine.createSpy("kill"),
     };
     add("live:/project", session);
-    manager.ownedSessions.add(session);
 
     await manager.deactivate();
 

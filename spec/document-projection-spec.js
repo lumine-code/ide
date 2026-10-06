@@ -6,6 +6,7 @@ const ServerSession = require("../lib/server-session");
 const Manager = require("../lib/language-server-manager");
 const Projections = require("../lib/document-projections");
 const CompletionProvider = require("../lib/completion-provider");
+const { publishSession } = require("./helpers/session-fixtures");
 
 describe("AST document projections", () => {
   let directory, manager, session, source, editor;
@@ -797,7 +798,7 @@ describe("AST document projections", () => {
         },
       },
     };
-    manager.sessions.set("projection-file-operation", session);
+    publishSession(manager, session);
     await session.openEditor(editor);
     const payload =
       operation === "Rename"

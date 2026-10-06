@@ -1,6 +1,7 @@
 const path = require("node:path"),
   { pathToFileURL } = require("node:url");
 const Manager = require("../lib/language-server-manager");
+const { publishSession } = require("./helpers/session-fixtures");
 describe("adapter-owned standard file watchers", () => {
   let manager, root, other, session, notifications;
   const adapter = {
@@ -24,7 +25,7 @@ describe("adapter-owned standard file watchers", () => {
         session.state = "stopped";
       },
     };
-    manager.sessions.set("watch", session);
+    publishSession(manager, session);
   });
   afterEach(async () => manager.deactivate());
   it("routes static-only create, change and delete events within project folders and validates descriptors", () => {

@@ -1,3 +1,5 @@
+const { publishSession } = require("./helpers/session-fixtures");
+
 describe("ide-client status-bar item", () => {
   let main, view, tiles;
 
@@ -30,8 +32,7 @@ describe("ide-client status-bar item", () => {
   const flush = () => lumine.views.performDocumentUpdate();
 
   const addSession = (session) => {
-    main.manager.sessions.set(`${session.adapter.id}:${session.rootPath}`, session);
-    main.manager.didChangeSession(session);
+    publishSession(main.manager, session);
     flush();
   };
 
@@ -69,7 +70,7 @@ describe("ide-client status-bar item", () => {
     addSession(session);
 
     // Only the state change is reported; the removal itself never is.
-    main.manager.sessions.delete("stub:/project");
+    main.manager.forget(session);
     session.state = "stopped";
     main.manager.didChangeSession(session);
     flush();

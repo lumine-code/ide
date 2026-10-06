@@ -3,6 +3,7 @@ const os = require("os");
 const path = require("path");
 const Manager = require("../lib/language-server-manager");
 const C = require("../lib/converters");
+const { publishSession } = require("./helpers/session-fixtures");
 
 const deferred = () => {
   let resolve;
@@ -22,7 +23,6 @@ describe("Staged file operation preparations", () => {
     editors = [];
   });
   afterEach(async () => {
-    manager.sessions.clear();
     await manager.deactivate();
     for (const editor of editors) editor.destroy();
     lumine.config.unset("ide-client.fileOperationPreparationTimeout");
@@ -74,7 +74,7 @@ describe("Staged file operation preparations", () => {
       },
       request: jasmine.createSpy("request").and.callFake(request),
     };
-    manager.sessions.set(session.adapter.id, session);
+    publishSession(manager, session, directory);
     return session;
   };
 
@@ -353,7 +353,6 @@ describe("Staged file operation preparations", () => {
     const reply = deferred();
     sessionFor(() => reply.promise, editor);
     const pending = manager.prepareRenameFiles(payload());
-    manager.sessions.clear();
     await manager.deactivate();
 
     expect(await pending).toBe(false);

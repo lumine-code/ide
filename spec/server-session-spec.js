@@ -5,6 +5,7 @@ const LanguageServerManager = require("../lib/language-server-manager");
 const ServerSession = require("../lib/server-session");
 const SymbolProvider = require("../lib/symbol-provider");
 const C = require("../lib/converters");
+const { publishSession } = require("./helpers/session-fixtures");
 
 const FIXTURE = path.join(__dirname, "fixtures", "fake-server.js");
 
@@ -569,7 +570,7 @@ describe("ServerSession against a fake server", () => {
     session.adapter.grammarScopes = [editor.getGrammar().scopeName];
     manager.adapters.set(session.adapter.id, session.adapter);
     const rootPath = manager.rootForPath(filePath, session.adapter);
-    manager.sessions.set(manager.keyFor(session.adapter, rootPath), session);
+    publishSession(manager, session, rootPath);
     const provider = new SymbolProvider(manager);
 
     const symbols = await provider.getDocumentSymbols(editor, {
@@ -2430,7 +2431,7 @@ describe("ServerSession against a fake server", () => {
     fs.writeFileSync(source, "before");
     const editor = await lumine.workspace.open(source);
     await session.openEditor(editor);
-    manager.sessions.set("workspace-edit-wire-order", session);
+    publishSession(manager, session);
     spyOn(manager, "attachEditor").and.callFake((candidate) => session.openEditor(candidate));
     manager.watchEditor(editor);
     installFileOperationsExecutor();
@@ -2500,9 +2501,9 @@ describe("ServerSession against a fake server", () => {
     fs.writeFileSync(source, "before");
     const editor = await lumine.workspace.open(source);
     await sourceSession.openEditor(editor);
-    manager.sessions.set("workspace-edit-root-a", sourceSession);
-    manager.sessions.set("workspace-edit-other-language", competingSession);
-    manager.sessions.set("workspace-edit-root-b", targetSession);
+    publishSession(manager, sourceSession, path.dirname(source));
+    publishSession(manager, competingSession, path.dirname(target));
+    publishSession(manager, targetSession, path.dirname(target));
     spyOn(manager, "attachEditor").and.callFake(async (candidate) => {
       await Promise.all([
         competingSession.openEditor(candidate),

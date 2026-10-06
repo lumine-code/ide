@@ -3,6 +3,7 @@ const SymbolProvider = require("../lib/symbol-provider");
 const LanguageServerManager = require("../lib/language-server-manager");
 const ServerSession = require("../lib/server-session");
 const C = require("../lib/converters");
+const { publishSession } = require("./helpers/session-fixtures");
 
 const root = path.resolve(__dirname, "workspace");
 const symbol = (name, file = "source.js", character = 0) => ({
@@ -23,7 +24,7 @@ describe("symbol services", () => {
     session.capabilities = { workspaceSymbolProvider: true, ...options.capabilities };
     session.request = jasmine.createSpy("request").and.callFake(async () => items);
     manager.adapters.set(id, adapter);
-    manager.sessions.set(manager.keyFor(adapter, options.root || root), session);
+    publishSession(manager, session);
     return session;
   };
   beforeEach(() => {
@@ -31,14 +32,14 @@ describe("symbol services", () => {
     spyOn(manager, "log");
     provider = new SymbolProvider(manager);
   });
-  afterEach(() => {
+  afterEach(async () => {
     provider.destroy();
-    manager.sessions.clear();
+    await manager.deactivate();
   });
   it("searches every relevant running backend once without touching an editor", async () => {
     const js = addSession("js", [symbol("jsSymbol")]);
     const py = addSession("py", [symbol("pySymbol", "source.py")]);
-    manager.sessions.set("duplicate-root", py);
+    publishSession(manager, py, path.join(root, "another-root"));
     const other = addSession("outside", [symbol("outside")], {
       root: path.join(root, "..", "elsewhere"),
     });
@@ -418,7 +419,7 @@ describe("symbol services", () => {
     };
     manager.registerExternalDocument(editor, { editor, uri, cellId: "a", record });
     expect(provider.getDocumentSymbolSources(editor)[0].state).toBe("unavailable");
-    session.documents.set(C.uriKey(uri), { editor, uri });
+    session.documents.set(C.uriKey(uri), { editor, uri, subscriptions: { dispose() {} } });
     expect(provider.getDocumentSymbolSources(editor)[0].state).toBe("ready");
     await provider.getDocumentSymbols(editor, { sourceId: "ide-client:cell" });
     expect(session.request.calls.first().args[1].textDocument.uri).toBe(uri);
