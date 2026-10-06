@@ -36,6 +36,7 @@ describe("ide-client status-bar item", () => {
   };
 
   beforeEach(async () => {
+    lumine.config.set("ide-client.statusBar.enabled", true);
     await lumine.packages.activatePackage("ide-client");
     main = lumine.packages.getActivePackage("ide-client").mainModule;
     tiles = [];

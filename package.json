@@ -90,7 +90,7 @@
           "title": "Enabled",
           "description": "Show the running language servers in the status bar. The item stays in place while none is running, reporting zero.",
           "type": "boolean",
-          "default": true
+          "default": false
         }
       }
     }
