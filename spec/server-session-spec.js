@@ -366,6 +366,7 @@ describe("ServerSession against a fake server", () => {
       rootUri: C.pathToUri(tempDir),
       launch: session.launch,
       session,
+      resolver: manager.serverResolver,
     });
   });
 
@@ -416,6 +417,62 @@ describe("ServerSession against a fake server", () => {
     expect(methods.indexOf("workspace/didChangeConfiguration")).toBeLessThan(
       methods.indexOf("css/customDataChanged"),
     );
+  });
+
+  it("resolves initialization tools through the actual controller startup context", async () => {
+    let resolutionContext, initializationContext;
+    const adapter = {
+      id: "initialization-resolver",
+      displayName: "Initialization Resolver",
+      grammarScopes: ["source.js"],
+      async resolveServer(context) {
+        resolutionContext = context;
+        return context.resolver.nodeEntry(FIXTURE, [JSON.stringify({})], {
+          cwd: tempDir,
+          signal: context.signal,
+        });
+      },
+      async getInitializationOptions(context) {
+        initializationContext = context;
+        const sdk = await context.resolver.select({ configuredPath: process.execPath });
+        return { sdk: sdk.path };
+      },
+    };
+    manager.registerAdapter(adapter);
+    const session = await manager.ensureSession(adapter, tempDir);
+    sessions.push(session);
+    await session.ready;
+    const initialize = (await receivedMessages(session)).find(
+      ({ method }) => method === "initialize",
+    );
+
+    expect(initializationContext.rootPath).toBe(tempDir);
+    expect(initializationContext.rootUri).toBe(C.pathToUri(tempDir));
+    expect(initializationContext.launch).toBe(session.launch);
+    expect(initializationContext.resolver).toBe(resolutionContext.resolver);
+    expect(initialize.params.initializationOptions).toEqual({ sdk: process.execPath });
+  });
+
+  it("resolves initialization tools when a session starts without a preflight snapshot", async () => {
+    let initializationContext;
+    const session = await startSession(
+      {},
+      {
+        async getInitializationOptions(context) {
+          initializationContext = context;
+          const sdk = await context.resolver.select({ configuredPath: process.execPath });
+          return { sdk: sdk.path };
+        },
+      },
+    );
+    const initialize = (await receivedMessages(session)).find(
+      ({ method }) => method === "initialize",
+    );
+
+    expect(initializationContext.resolver).toBe(manager.serverResolver);
+    expect(initializationContext.session).toBe(session);
+    expect(initializationContext.launch).toBe(session.launch);
+    expect(initialize.params.initializationOptions).toEqual({ sdk: process.execPath });
   });
 
   it("uses a preflight startup snapshot without repeating adapter hooks", async () => {

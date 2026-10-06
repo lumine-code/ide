@@ -141,19 +141,61 @@ Four fields are required:
 
 `env` overrides the child process environment; a value of `undefined` removes an inherited variable. This lets an adapter enforce its chosen transport without changing the editor's own environment.
 
+### Server resolution
+
+`ServerResolutionContext` supplies `{ rootPath, projectPaths, configDirPath, managedStoragePath, managedServer, resolver, signal? }`. Use `context.resolver` for path selection and launch construction. The same helpers are available through `client.getServerResolver()` outside startup, `api.resolver` in installation and version hooks, and `context.resolver` in configuration hooks. Adapter packages receive these helpers through the service contract.
+
+`resolver.select(options)` validates a candidate and returns `{ path, kind, source, version?, data? }`, or `null` when discovery finds none. `path` is a normalized absolute path. `source` is `"configured"`, `"managed"`, `"bundled"` or `"discovered"`; `version` is copied only from `managedVersion` for a managed selection. A server whose actual version is probed may supply that version when building its launch.
+
+| Selection option                     | Description                                                                                                                                                                                         |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `configuredPath`                     | Explicit user selection; takes priority over every other source.                                                                                                                                    |
+| `managedPath`, `managedVersion`      | The installed server path and its recorded version, usually read from `context.managedServer`.                                                                                                      |
+| `bundledPath`                        | Absolute bundled path or a lazy function returning one, synchronously or asynchronously. The lookup runs only after configured and managed paths are absent; an empty result proceeds to discovery. |
+| `kind`                               | `"executable"` by default, or `"node"`, `"file"`, `"directory"` for the corresponding payload.                                                                                                      |
+| `configuredKind`                     | Kind for the explicit path, defaulting to `kind`. `"auto"` treats `.js`, `.cjs` and `.mjs` as Node entries and other paths as executables.                                                          |
+| `candidates`                         | Array of absolute discovered paths, or a lazy function returning that array. They are tried in order before PATH names.                                                                             |
+| `names`                              | Command basenames to discover on PATH, in order.                                                                                                                                                    |
+| `validate(path, { source, signal })` | Adapter-owned SDK, version or distribution check. Its returned value becomes `selection.data`.                                                                                                      |
+| `label`                              | Label used in filesystem validation errors.                                                                                                                                                         |
+| `env`, `cwd`, `platform`             | Optional environment, base directory and platform for PATH scanning. Relative PATH entries resolve against `cwd`; selected candidate paths remain absolute.                                         |
+| `allowShellWrapper`                  | `false` by default. Opts into discovering and accepting Windows `.cmd` and `.bat` executable wrappers when the adapter owns their interpretation.                                                   |
+| `signal`                             | Optional cancellation signal, combined with the startup resolver's lifetime.                                                                                                                        |
+
+Selection follows configured → managed → bundled → discovered candidates → PATH. A configured, managed or bundled validation failure rejects immediately, preserving the selected installation's error. Only discovery skips rejected candidates and tries the next one. A lazy bundled lookup or discovery callback that itself throws also rejects. Filesystem failures include the validation label and retain the original `cause` and system `code`, such as `ENOENT`. This lets an adapter distinguish an absent server from a broken selected distribution.
+
+Filesystem validation requires readable files or directories, and executable access for native commands. The adapter still owns checks such as Java's required major version, a Ruby ABI match, a complete SDK or a server's companion modules. Put those checks in `validate` so unsupported discovered installations can yield to a usable candidate; return probe results as `data` to avoid repeating the work when constructing arguments or the environment.
+
+| Resolver method                                                                                         | Result                                                                                                                                                                  |
+| ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `select(options)`                                                                                       | Validated selection with provenance and optional adapter data, or `null`.                                                                                               |
+| `findExecutables(name, { env, cwd, platform, allowShellWrapper, signal })`                              | Every executable PATH candidate in order, without SDK probes. Windows PATH names are case-insensitive, quoted directories are accepted and duplicate paths are removed. |
+| `validateFile(path, { kind, label, allowShellWrapper, signal })`                                        | Normalized absolute path after file kind and access checks; rejects invalid paths. `kind: "auto"` uses the same JavaScript extension rule as `configuredKind`.          |
+| `launch(selection, { args, cwd, env, transport, host, port, version, fileCancellationFolder, signal })` | Validated `ServerLaunch` for executable or Node selections; `null` when the selection is `null`.                                                                        |
+| `nodeEntry(path, args, options)`                                                                        | Validated Node launch with the same launch options except `args`, which is the second argument.                                                                         |
+
+Node selections and `nodeEntry` use the editor's executable with `ELECTRON_RUN_AS_NODE=1`, preserving that setting even when caller environment overrides are supplied. For `transport: "ipc"`, the entry itself becomes `command` for the client's Node fork. A `"file"` or `"directory"` selection needs an adapter-owned launcher: for example, select a JAR and a validated Java executable separately, then call `launch` on the Java selection with `-jar` arguments. The selection's managed version is preserved by `launch` unless the adapter supplies a launch version explicitly.
+
+The startup signal aborts when the attempt is cancelled or superseded. Its resolver also checks ownership around asynchronous waits and before constructing a launch, so retained helpers reject after the attempt loses ownership. Forward the callback's `signal` to asynchronous SDK probes and subprocesses so their own work stops as well; cancellation settles helper waits even when a callback ignores the signal. Launch validation checks commands, arguments, environments, transports, socket ports and file-cancellation paths before a process is started.
+
+### Configuration and adapter hooks
+
 `getSettings(context)` is the canonical server settings tree. The client reads it during startup preflight and on configuration changes, then pushes it through `workspace/didChangeConfiguration`. Configuration pulls resolve dotted sections from that same tree, reading one snapshot per request and returning `null` for missing sections. Lookup visits own properties only and preserves `false`, zero and empty strings. It never falls back to the editor's configuration. Custom servers use their entry's `settings` tree through the same resolver.
 
-The configuration context is `{ rootPath, rootUri, launch, session? }`. `launch` is the exact object returned by this startup's `resolveServer`; `session` becomes available after preflight. Store launch-dependent settings against that object rather than in mutable module state, so concurrent roots and replacement sessions cannot overwrite each other's tool paths. `getWorkspaceConfiguration(section, resource, context)` is an optional authoritative override for server aliases or resource-specific settings. Its absent results become `null`; it is never called to synthesize pushed settings.
+The configuration context is `{ rootPath, rootUri, launch, resolver, session? }`. Both `getInitializationOptions` and `getSettings` receive it during startup preflight. `launch` is the exact object returned by this startup's `resolveServer`; `session` becomes available after preflight. Store launch-dependent settings against that object rather than in mutable module state, so concurrent roots and replacement sessions cannot overwrite each other's tool paths. `getWorkspaceConfiguration(section, resource, context)` is an optional authoritative override for server aliases or resource-specific settings. Its absent results become `null`; it is never called to synthesize pushed settings.
 
 `getDocumentationCodeBlockProjection` receives a block's original text, fence language and resolved grammar scope. Return `null` to use the normal renderer, or `{ scopeName, text, regions, validate }` to parse private source with the editor's grammar. Each region has UTF-16 `start` and `end` offsets in the original block, plus either `projectedStart` in the private source or explicit `scopes`. Text outside those regions stays neutral. `validate(root)` confirms the intended Tree-sitter structure after an error-free parse. Failed hooks, invalid parses and unavailable grammars fall back to the normal renderer, and the temporary editor is always destroyed.
 
 Completion blocks belong to the session that supplied the item, including after resolve. Merged hover blocks retain the adapter of each surviving section; deduplicated sections keep their first owner. Identical blocks embedded in different sections from different servers use the normal renderer when their ownership is ambiguous.
+
+### Client service
 
 The service you receive:
 
 | Member                                                            | Description                                                                              |
 | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
 | `registerAdapter(adapter)`                                        | Registers it and returns a `Disposable`.                                                 |
+| `getServerResolver()`                                             | Shared path selection and launch helpers for work outside a startup attempt.             |
 | `adaptersForEditor(editor)`                                       | Selected adapters for that editor, whether or not their servers are running.             |
 | `onDidChangeAdapters(fn)`                                         | `{ adapter, registered, selectionChanged? }` on registration or selection changes.       |
 | `sessionForEditor(editor)`                                        | The session serving that editor, or `null`. May still be starting.                       |
@@ -217,18 +259,26 @@ The unchecked request API is still a client-capability contract. Document links 
 ## Minimal example
 
 ```js
-const { Disposable } = require("lumine");
-
 module.exports = {
   consumeIdeClient(client) {
     return client.registerAdapter({
       id: "my-language-server",
       displayName: "My Language Server",
       grammarScopes: ["source.mylang"],
-      async resolveServer({ rootPath }) {
-        const command = await which("my-langserver");
-        if (!command) return null;
-        return { command, args: ["--stdio"], cwd: rootPath };
+      async resolveServer(context) {
+        const selected = await context.resolver.select({
+          configuredPath: lumine.config.get("my-package.serverPath"),
+          managedPath: context.managedServer?.binaryPath,
+          managedVersion: context.managedServer?.version,
+          kind: "executable",
+          names: ["my-langserver"],
+          signal: context.signal,
+        });
+        return context.resolver.launch(selected, {
+          args: ["--stdio"],
+          cwd: context.rootPath,
+          signal: context.signal,
+        });
       },
       getSettings: () => ({ mylang: lumine.config.get("my-package.serverSettings") }),
       settingsKeyPaths: ["my-package.serverSettings"],
@@ -365,15 +415,22 @@ Everything lands in `<configDir>/language-servers/<adapter.id>/`, one directory 
 
 ```js
 async resolveServer(context) {
-  const configured = lumine.config.get("my-package.serverPath");
-  if (configured) return { command: configured };
-  if (context.managedServer)
-    return { command: context.managedServer.binaryPath, version: context.managedServer.version };
-  return { command: await which("my-langserver") } ?? null;
+  const selected = await context.resolver.select({
+    configuredPath: lumine.config.get("my-package.serverPath"),
+    managedPath: context.managedServer?.binaryPath,
+    managedVersion: context.managedServer?.version,
+    kind: "executable",
+    names: ["my-langserver"],
+    signal: context.signal,
+  });
+  return context.resolver.launch(selected, {
+    cwd: context.rootPath,
+    signal: context.signal,
+  });
 }
 ```
 
-That order is the convention: an explicit setting wins, then the copy the user asked the editor to install, then whatever is on `PATH` — which is also where uninstalling lands.
+The resolver applies the selection order and validates the selected payload. Add `bundledPath` when the adapter also ships a server; uninstalling the managed copy then reveals that bundled floor before PATH discovery. An invalid managed installation rejects, so its broken payload remains visible to the user.
 
 Four things are worth knowing before writing a descriptor:
 
@@ -409,6 +466,7 @@ Fill `storagePath` and return `{ version, binary }` or `{ version, module }` nam
 
 | primitive                                          |                                                                                                                                                |
 | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `resolver`                                         | shared path validation, selection and launch helpers for SDK checks and custom installation logic                                              |
 | `latestGithubRelease(repository, { preRelease })`  | `{ version, tag, assets: [{ name, url, size, digest? }] }`; throws with the status rather than resolving empty                                 |
 | `githubReleaseByTag(repository, tag)`              | the same shape                                                                                                                                 |
 | `npmPackageLatestVersion(name)`                    |                                                                                                                                                |

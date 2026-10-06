@@ -295,7 +295,10 @@ describe("Language server progress adapter", () => {
     const pending = controller.prepareStartup(1, 2);
     advanceClock(400);
     expect(signal.entries()[0].title).toBe("Test Server: Preparing server");
-    expect(controller.prepareStartupSnapshot).toHaveBeenCalledWith(1, 2);
+    const args = controller.prepareStartupSnapshot.calls.mostRecent().args;
+    expect(args.slice(0, 2)).toEqual([1, 2]);
+    expect(args[2].aborted).toBe(false);
+    expect(typeof args[2].throwIfAborted).toBe("function");
     const prepared = { stale: true };
     finish(prepared);
     expect(await pending).toBe(prepared);

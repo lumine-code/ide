@@ -14,6 +14,74 @@ export interface ServerLaunch {
   /** Absolute directory for a file-based vscode-jsonrpc cancellation channel. */
   fileCancellationFolder?: string;
 }
+export type ServerCandidateKind = "executable" | "node" | "file" | "directory";
+export type ServerCandidateSource = "configured" | "managed" | "bundled" | "discovered";
+export interface ServerSelection<T = unknown> {
+  /** Normalized absolute path, validated before the adapter's callback runs. */
+  path: string;
+  kind: ServerCandidateKind;
+  source: ServerCandidateSource;
+  /** Present only for a managed selection with a supplied managedVersion. */
+  version?: string;
+  /** The result of the adapter's validate callback, when it returned a value. */
+  data?: T;
+}
+export interface ServerFindOptions {
+  env?: Record<string, string | undefined>;
+  cwd?: string;
+  /** Override the platform used to scan PATH. */
+  platform?: string;
+  /** Include Windows .cmd and .bat wrappers; false by default. */
+  allowShellWrapper?: boolean;
+  signal?: AbortSignal;
+}
+export interface ServerSelectOptions<T = unknown> extends ServerFindOptions {
+  configuredPath?: string | null;
+  managedPath?: string | null;
+  managedVersion?: string | null;
+  /** A lazy bundled lookup runs only when configured and managed paths are absent. */
+  bundledPath?: string | (() => string | null | undefined | Promise<string | null | undefined>);
+  /** The candidate kind for managed, bundled and discovered paths; defaults to executable. */
+  kind?: ServerCandidateKind;
+  /** Defaults to kind; auto selects node for .js, .cjs and .mjs, otherwise executable. */
+  configuredKind?: ServerCandidateKind | "auto";
+  /** Tried in order before PATH names, and evaluated only during discovery. */
+  candidates?: string[] | (() => string[] | Promise<string[]>);
+  names?: string[];
+  label?: string;
+  /** Explicit, managed and bundled failures propagate; discovered failures try the next path. */
+  validate?(
+    path: string,
+    context: { source: ServerCandidateSource; signal?: AbortSignal },
+  ): T | Promise<T>;
+}
+export interface ServerFileOptions {
+  kind?: ServerCandidateKind | "auto";
+  label?: string;
+  allowShellWrapper?: boolean;
+  signal?: AbortSignal;
+}
+export interface ServerLaunchOptions extends Omit<ServerLaunch, "command"> {
+  signal?: AbortSignal;
+}
+export interface ServerResolver {
+  select<T = unknown>(options?: ServerSelectOptions<T>): Promise<ServerSelection<T> | null>;
+  findExecutables(name: string, options?: ServerFindOptions): string[];
+  /** Validates an absolute readable file/directory or executable and returns its normalized path. */
+  validateFile(path: string, options?: ServerFileOptions): Promise<string>;
+  /** Executable and node selections can launch directly; files and directories need an adapter launcher. */
+  launch<T>(selection: ServerSelection<T>, options?: ServerLaunchOptions): Promise<ServerLaunch>;
+  launch<T>(
+    selection: ServerSelection<T> | null,
+    options?: ServerLaunchOptions,
+  ): Promise<ServerLaunch | null>;
+  /** Forces the editor executable to run a Node entry, or prepares its IPC fork launch. */
+  nodeEntry(
+    path: string,
+    args?: string[],
+    options?: Omit<ServerLaunchOptions, "args">,
+  ): Promise<ServerLaunch>;
+}
 export interface ServerResolutionContext {
   rootPath: string;
   projectPaths: string[];
@@ -21,12 +89,17 @@ export interface ServerResolutionContext {
   managedStoragePath: string;
   /** The copy the editor installed for this adapter, or null when there is none. */
   managedServer: ManagedServerInstall | null;
+  /** Shared path selection and launch helpers, guarded by this startup attempt. */
+  resolver: ServerResolver;
+  /** Aborted when startup is cancelled or superseded. */
+  signal?: AbortSignal;
 }
 /** The resolved launch belongs to this settings generation, including during preflight. */
 export interface ServerConfigurationContext {
   rootPath: string;
   rootUri: string;
   launch: ServerLaunch;
+  resolver: ServerResolver;
   /** Available after preflight, for configuration pulls and subsequent pushes. */
   session?: LanguageServerSession;
 }
@@ -45,6 +118,7 @@ export interface GithubRelease {
  * `verifyFileChecksum`, when a custom installer owns download verification.
  */
 export interface InstallApi {
+  resolver: ServerResolver;
   latestGithubRelease(
     repository: string,
     options?: { preRelease?: boolean },
@@ -233,10 +307,7 @@ export interface LanguageServerAdapter {
   installServer?(context: ServerInstallContext): Promise<AdapterInstallResult>;
   /** The version the list should compare against, when you fetch your own. */
   latestServerVersion?(api: InstallApi): Promise<string | null>;
-  getInitializationOptions?(context: {
-    rootPath: string;
-    rootUri: string;
-  }): unknown | Promise<unknown>;
+  getInitializationOptions?(context: ServerConfigurationContext): unknown | Promise<unknown>;
   /** Canonical settings tree, pushed after initialize and used for dotted configuration pulls. */
   getSettings?(context: ServerConfigurationContext): unknown | Promise<unknown>;
   /** Notifications sent after initialized and the initial settings push. */
@@ -503,6 +574,8 @@ export interface RenameFileOperationPayload {
 }
 export interface LanguageServerService {
   registerAdapter(adapter: LanguageServerAdapter): Disposable;
+  /** Shared resolution helpers for work outside a startup attempt. */
+  getServerResolver(): ServerResolver;
   adaptersForEditor(editor: TextEditor): LanguageServerAdapter[];
   onDidChangeAdapters(
     callback: (event: {
