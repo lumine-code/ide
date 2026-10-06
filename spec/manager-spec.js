@@ -34,6 +34,7 @@ describe("LanguageServerManager watcher recovery", () => {
     const manager = Object.create(LanguageServerManager.prototype);
     manager.allSessions = () => [first, second, workspace];
     manager.controllerForSession = (session) => controllers.get(session);
+    manager.invalidateDiagnosticScopes = jasmine.createSpy("invalidate diagnostic scopes");
     manager.restart = jasmine.createSpy("restart").and.resolveTo();
     spyOn(lumine.project, "getPaths").and.returnValue([firstRoot, secondRoot]);
     manager.recoverFileWatching({ rootPaths: [firstRoot], generation: 1 });

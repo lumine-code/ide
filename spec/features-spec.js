@@ -334,6 +334,7 @@ describe("diagnostics switch", () => {
     await lumine.packages.activatePackage("ide-client");
     main = lumine.packages.getActivePackage("ide-client").mainModule;
     manager = main.manager;
+    spyOn(lumine.grammars, "selectGrammarAsync").and.resolveTo({ scopeName: "source.js" });
     adapter = adapterFor("ide-a");
     manager.registerAdapter(adapter);
     session = { adapter, state: "running", documents: new Map() };
@@ -353,33 +354,39 @@ describe("diagnostics switch", () => {
     await lumine.packages.deactivatePackage("ide-client");
   });
 
-  it("publishes what a server reports", () => {
+  it("publishes what a server reports", async () => {
     push("broken");
+    await conditionPromise(() => messages.has(FILE));
     expect(messages.get(FILE).map(({ excerpt }) => excerpt)).toEqual(["broken"]);
   });
 
-  it("clears and restores without restarting the server", () => {
+  it("clears and restores without restarting the server", async () => {
     push("broken");
+    await conditionPromise(() => messages.has(FILE));
     lumine.config.set("ide-a.features.diagnostics", false);
+    await conditionPromise(() => messages.get(FILE)?.length === 0);
     expect(messages.get(FILE)).toEqual([]);
 
     // Still stored, so switching back on does not need the server to say it
     // again — nothing in LSP can ask it to.
     lumine.config.set("ide-a.features.diagnostics", true);
+    await conditionPromise(() => messages.get(FILE)?.length === 1);
     expect(messages.get(FILE).map(({ excerpt }) => excerpt)).toEqual(["broken"]);
   });
 
-  it("suppresses what arrives while it is off and restores it when enabled", () => {
+  it("suppresses what arrives while it is off and restores it when enabled", async () => {
     lumine.config.set("ide-a.features.diagnostics", false);
     push("broken");
+    await conditionPromise(() => messages.has(FILE));
     expect(messages.get(FILE)).toEqual([]);
     lumine.config.set("ide-a.features.diagnostics", true);
+    await conditionPromise(() => messages.get(FILE)?.length === 1);
     expect(messages.get(FILE).map(({ excerpt }) => excerpt)).toEqual(["broken"]);
   });
 
-  it("publishes workspace results only for grammar scopes with diagnostics enabled", () => {
+  it("publishes workspace results only for grammar scopes with diagnostics enabled", async () => {
     const pythonFile = path.join(__dirname, "example.py");
-    spyOn(lumine.grammars, "selectGrammar").and.callFake((filePath) => ({
+    lumine.grammars.selectGrammarAsync.and.callFake(async (filePath) => ({
       scopeName: filePath === FILE ? "source.js" : "source.python",
     }));
     lumine.config.set("ide-a.features.diagnostics", false);
@@ -387,6 +394,7 @@ describe("diagnostics switch", () => {
 
     pushFor(FILE, "visible");
     pushFor(pythonFile, "hidden");
+    await conditionPromise(() => messages.has(FILE) && messages.has(pythonFile));
 
     expect(messages.get(FILE).map(({ excerpt }) => excerpt)).toEqual(["visible"]);
     expect(messages.get(pythonFile)).toEqual([]);

@@ -201,4 +201,82 @@ describe("ide-client linter registry lifecycle", () => {
     edge.dispose();
     expect(service.delegates[0].dispose).toHaveBeenCalledTimes(1);
   });
+
+  it("coalesces pending presentation and does not convert disabled diagnostics", async () => {
+    const adapter = registerAdapter(adapterFor("async"));
+    const service = registry();
+    connect(service);
+    const completions = [];
+    spyOn(main.manager, "featureEnabledForPath").and.callFake(
+      () => new Promise((resolve) => completions.push(resolve)),
+    );
+    const convert = spyOn(require("../lib/linter-messages"), "toLinterMessages").and.callThrough();
+    publish(adapter, "superseded");
+    publish(adapter, "latest");
+    completions[0](true);
+    completions[1](false);
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(convert).not.toHaveBeenCalled();
+    expect(service.delegates[0].setMessages.calls.allArgs()).toEqual([
+      [path.resolve("main.sample"), []],
+    ]);
+    expect(main.manager.allDiagnostics()[0].diagnostics[0].message).toBe("latest");
+
+    main.manager.emitter.emit("did-change-features", { adapter });
+    completions[2](true);
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(service.delegates[0].setMessages.calls.mostRecent().args[1][0].excerpt).toBe("latest");
+  });
+
+  it("rejects late scope results after a clear or registry disposal", async () => {
+    const adapter = registerAdapter(adapterFor("stale"));
+    const service = registry();
+    const edge = connect(service);
+    let complete;
+    spyOn(main.manager, "featureEnabledForPath").and.callFake(
+      () =>
+        new Promise((resolve) => {
+          complete = resolve;
+        }),
+    );
+    publish(adapter, "old");
+    publish(adapter, null);
+    complete(true);
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(service.delegates[0].setMessages.calls.count()).toBe(1);
+    expect(service.delegates[0].setMessages.calls.mostRecent().args[1]).toEqual([]);
+    publish(adapter, "disposed");
+    edge.dispose();
+    complete(true);
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(service.delegates[0].setMessages.calls.count()).toBe(1);
+  });
+
+  it("cannot clear a replacement session's pending report from the previous process", async () => {
+    const adapter = registerAdapter(adapterFor("restart"));
+    const service = registry();
+    connect(service);
+    let complete;
+    spyOn(main.manager, "featureEnabledForPath").and.callFake(
+      () =>
+        new Promise((resolve) => {
+          complete = resolve;
+        }),
+    );
+    publish(adapter, "previous");
+    const previous = sessions.get(adapter);
+    sessions.set(adapter, { adapter });
+    publish(adapter, "replacement");
+    main.manager.clearDiagnosticsForSession(previous);
+    complete(true);
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(service.delegates[0].setMessages.calls.count()).toBe(1);
+    expect(service.delegates[0].setMessages.calls.mostRecent().args[1][0].excerpt).toBe(
+      "replacement",
+    );
+  });
 });

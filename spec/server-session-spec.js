@@ -914,7 +914,7 @@ describe("ServerSession against a fake server", () => {
     expect(session.workspaceDiagnosticResultIds.size).toBe(0);
   });
 
-  it("pulls workspace diagnostics when they are enabled in any grammar scope", () => {
+  it("pulls workspace diagnostics when they are enabled in any grammar scope", async () => {
     const adapter = {
       id: "ide-a",
       displayName: "Scoped",
@@ -928,21 +928,21 @@ describe("ServerSession against a fake server", () => {
     lumine.config.set("ide-a.features.diagnostics", true, { scopeSelector: ".source.js" });
 
     expect(session.supportsWorkspaceDiagnostics()).toBe(true);
-    spyOn(lumine.grammars, "selectGrammar").and.returnValue({ scopeName: "source.js" });
-    expect(manager.featureEnabledForPath(adapter, "diagnostics", "unopened.js")).toBe(true);
+    spyOn(lumine.grammars, "selectGrammarAsync").and.resolveTo({ scopeName: "source.js" });
+    expect(await manager.featureEnabledForPath(adapter, "diagnostics", "unopened.js")).toBe(true);
 
     lumine.config.unset("ide-a.features.diagnostics", { scopeSelector: ".source.js" });
     lumine.config.unset("ide-a.features.diagnostics");
   });
 
-  it("keeps document and workspace diagnostic result ids in separate streams", () => {
+  it("keeps document and workspace diagnostic result ids in separate streams", async () => {
     const uri = C.pathToUri(path.join(tempDir, "separate-result-ids.js"));
     const session = createSession();
     session.state = "running";
     session.publishDiagnosticReport(uri, { kind: "full", resultId: "document-1", items: [] });
     expect(session.previousWorkspaceDiagnosticResultIds()).toEqual([]);
 
-    session.processWorkspaceDiagnosticItems([
+    await session.processWorkspaceDiagnosticItems([
       { uri, version: null, kind: "full", resultId: "workspace-1", items: [] },
     ]);
 
@@ -950,10 +950,88 @@ describe("ServerSession against a fake server", () => {
 
     session.workspaceDiagnosticResultIds.clear();
     session.documents.set(C.uriKey(uri), { uri, version: 2, subscriptions: { dispose() {} } });
-    session.processWorkspaceDiagnosticItems([
+    await session.processWorkspaceDiagnosticItems([
       { uri, version: 1, kind: "full", resultId: "stale-workspace", items: [] },
     ]);
     expect(session.previousWorkspaceDiagnosticResultIds()).toEqual([]);
+  });
+
+  it("yields during workspace bursts while preserving ordered result IDs", async () => {
+    const session = createSession();
+    session.state = "running";
+    const reports = Array.from({ length: 10000 }, (_, index) => ({
+      uri: C.pathToUri(path.join(tempDir, `workspace-${index}.js`)),
+      version: null,
+      kind: "full",
+      resultId: `result-${index}`,
+      items: [],
+    }));
+    let observedCount;
+    const heartbeat = new Promise((resolve) =>
+      setImmediate(() => {
+        observedCount = session.diagnosticReports.size;
+        resolve();
+      }),
+    );
+    const first = session.processWorkspaceDiagnosticItems(reports);
+    const next = session.processWorkspaceDiagnosticItems([
+      { uri: reports[0].uri, version: null, kind: "unchanged", resultId: "latest" },
+    ]);
+    await heartbeat;
+    expect(observedCount).toBeLessThan(reports.length);
+    await Promise.all([first, next]);
+    expect(session.previousWorkspaceDiagnosticResultIds().length).toBe(reports.length);
+    expect(
+      session.workspaceDiagnosticStates.get("static").resultIds.get(C.uriKey(reports[0].uri)).value,
+    ).toBe("latest");
+  });
+
+  it("abandons remaining workspace slices after diagnostic teardown", async () => {
+    const session = createSession();
+    session.state = "running";
+    const reports = Array.from({ length: 10000 }, (_, index) => ({
+      uri: C.pathToUri(path.join(tempDir, `retired-${index}.js`)),
+      kind: "full",
+      resultId: `retired-${index}`,
+      items: [],
+    }));
+    const pending = session.processWorkspaceDiagnosticItems(reports);
+    session.disposeDiagnosticPullState();
+    manager.clearDiagnosticsForSession(session);
+    await pending;
+    expect(session.diagnosticReports.size).toBe(0);
+    expect(session.previousWorkspaceDiagnosticResultIds()).toEqual([]);
+    expect(manager.allDiagnostics()).toEqual([]);
+  });
+
+  it("stores accepted reports before a feature switch cancels a workspace slice", async () => {
+    const session = createSession();
+    session.state = "running";
+    const reports = Array.from({ length: 10000 }, (_, index) => ({
+      uri: C.pathToUri(path.join(tempDir, `cancel-switch-${index}.js`)),
+      kind: "full",
+      resultId: `switch-${index}`,
+      items: [{ message: `error-${index}` }],
+    }));
+    let enabled = true;
+    const pending = session.processWorkspaceDiagnosticItems(reports, "static", () => enabled);
+    enabled = false;
+    await pending;
+    const accepted = session.previousWorkspaceDiagnosticResultIds();
+    expect(accepted.length).toBeGreaterThan(0);
+    expect(accepted.length).toBeLessThan(reports.length);
+    for (const { uri } of accepted) expect(manager.diagnosticsFor(session, uri).length).toBe(1);
+    enabled = true;
+    await session.processWorkspaceDiagnosticItems(
+      accepted.map(({ uri, value }) => ({
+        uri,
+        kind: "unchanged",
+        resultId: value,
+      })),
+      "static",
+      () => enabled,
+    );
+    expect(manager.diagnosticsFor(session, reports[0].uri)).toEqual([{ message: "error-0" }]);
   });
 
   it("does not pull diagnostics while the adapter feature is disabled", async () => {

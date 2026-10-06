@@ -578,7 +578,7 @@ describe("ide-client package", () => {
     registration.dispose();
   });
 
-  it("publishes workspace diagnostics for unopened files and preserves unchanged reports", () => {
+  it("publishes workspace diagnostics for unopened files and preserves unchanged reports", async () => {
     const main = lumine.packages.getActivePackage("ide-client").mainModule;
     const batches = [];
     const registration = main.consumeLinterRegistry(() => ({
@@ -601,19 +601,20 @@ describe("ide-client package", () => {
       message: "workspace error",
     };
 
-    session.processWorkspaceDiagnosticItems([
+    await session.processWorkspaceDiagnosticItems([
       { uri, version: null, kind: "full", resultId: "w1", items: [diagnostic] },
     ]);
-    session.processWorkspaceDiagnosticItems([
+    await session.processWorkspaceDiagnosticItems([
       { uri, version: null, kind: "unchanged", resultId: "w2" },
     ]);
 
+    await conditionPromise(() => batches.length === 1);
     expect(batches.length).toBe(1);
     expect(batches[0].filePath).toBe(filePath);
     expect(batches[0].messages.map(({ excerpt }) => excerpt)).toEqual(["workspace error"]);
     expect(session.previousWorkspaceDiagnosticResultIds()).toEqual([{ uri, value: "w2" }]);
 
-    session.processWorkspaceDiagnosticItems([
+    await session.processWorkspaceDiagnosticItems([
       { uri, version: null, kind: "full", resultId: "w3", items: [] },
     ]);
     expect(batches.at(-1)).toEqual({ filePath, messages: [] });
