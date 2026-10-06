@@ -331,6 +331,65 @@ describe("ServerSession against a fake server", () => {
     expect(received[configured].params.settings).toEqual({ example: { size: 2 } });
   });
 
+  it("answers configuration pulls from one session-bound adapter settings snapshot", async () => {
+    const getSettings = jasmine.createSpy("getSettings").and.returnValue({
+      example: { enabled: false, size: 2 },
+    });
+    const session = await startSession({}, { getSettings });
+    getSettings.calls.reset();
+    await session.request("test/notify", {
+      jsonrpc: "2.0",
+      id: 708,
+      method: "workspace/configuration",
+      params: {
+        items: [
+          { section: "example" },
+          { section: "example.enabled" },
+          { section: "editor.tabLength" },
+          { section: "example.constructor" },
+        ],
+      },
+    });
+    await until(async () =>
+      (await receivedMessages(session)).some(
+        (message) => message.id === 708 && Object.hasOwn(message, "result"),
+      ),
+    );
+    const response = (await receivedMessages(session)).find((message) => message.id === 708);
+    expect(response.result).toEqual([{ enabled: false, size: 2 }, false, null, null]);
+    expect(getSettings).toHaveBeenCalledOnceWith({
+      rootPath: tempDir,
+      rootUri: C.pathToUri(tempDir),
+      launch: session.launch,
+      session,
+    });
+  });
+
+  it("normalizes async configuration override misses to null", async () => {
+    const getWorkspaceConfiguration = jasmine
+      .createSpy("getWorkspaceConfiguration")
+      .and.resolveTo(undefined);
+    const session = await startSession({}, { getWorkspaceConfiguration });
+    await session.request("test/notify", {
+      jsonrpc: "2.0",
+      id: 709,
+      method: "workspace/configuration",
+      params: { items: [{ section: "editor.tabLength", scopeUri: "file:///sample" }] },
+    });
+    await until(async () =>
+      (await receivedMessages(session)).some(
+        (message) => message.id === 709 && Object.hasOwn(message, "result"),
+      ),
+    );
+    const response = (await receivedMessages(session)).find((message) => message.id === 709);
+    expect(response.result).toEqual([null]);
+    expect(getWorkspaceConfiguration).toHaveBeenCalledOnceWith(
+      "editor.tabLength",
+      "file:///sample",
+      session.configurationContext(),
+    );
+  });
+
   it("sends adapter notifications after initialized and initial settings", async () => {
     let context;
     const session = await startSession(

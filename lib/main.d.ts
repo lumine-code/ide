@@ -22,6 +22,14 @@ export interface ServerResolutionContext {
   /** The copy the editor installed for this adapter, or null when there is none. */
   managedServer: ManagedServerInstall | null;
 }
+/** The resolved launch belongs to this settings generation, including during preflight. */
+export interface ServerConfigurationContext {
+  rootPath: string;
+  rootUri: string;
+  launch: ServerLaunch;
+  /** Available after preflight, for configuration pulls and subsequent pushes. */
+  session?: LanguageServerSession;
+}
 export type ServerInstallationStatus = "checking" | "downloading" | "installing" | "failed" | null;
 export type DownloadedFileType = "uncompressed" | "gzip" | "gzip-tar" | "xz-tar" | "zip";
 export interface GithubRelease {
@@ -229,8 +237,8 @@ export interface LanguageServerAdapter {
     rootPath: string;
     rootUri: string;
   }): unknown | Promise<unknown>;
-  /** Settings pushed via workspace/didChangeConfiguration after initialize. */
-  getSettings?(): unknown | Promise<unknown>;
+  /** Canonical settings tree, pushed after initialize and used for dotted configuration pulls. */
+  getSettings?(context: ServerConfigurationContext): unknown | Promise<unknown>;
   /** Notifications sent after initialized and the initial settings push. */
   getInitializedNotifications?(context: {
     session: LanguageServerSession;
@@ -243,7 +251,12 @@ export interface LanguageServerAdapter {
   settingsKeyPaths?: string[];
   /** Config key paths read while resolving or initializing; changes restart every server. */
   restartKeyPaths?: string[];
-  getWorkspaceConfiguration?(section?: string, resource?: string): unknown | Promise<unknown>;
+  /** Optional authoritative override for aliases or resource-specific settings; absent values become null. */
+  getWorkspaceConfiguration?(
+    section: string | undefined,
+    resource: string | undefined,
+    context: ServerConfigurationContext,
+  ): unknown | Promise<unknown>;
   /** Handle a server-specific JSON-RPC request not implemented by the LSP core. */
   handleServerRequest?(
     method: string,
@@ -265,7 +278,10 @@ export interface LanguageServerAdapter {
   /** Share feature settings between adapters owned by the same package. */
   featuresKeyPath?: string;
   /** Refuse a feature the adapter cannot safely provide for this document. */
-  isFeatureAvailable?(feature: LanguageServerFeature, editor?: TextEditor): boolean;
+  isFeatureAvailable?(
+    feature: LanguageServerFeature,
+    context?: TextEditor | { getRootScopeDescriptor(): { getScopesArray(): string[] } | string[] },
+  ): boolean;
   /** Project a code block from this server's hover or completion documentation. */
   getDocumentationCodeBlockProjection?(
     block: DocumentationCodeBlock,
@@ -643,9 +659,9 @@ export interface NotebookBridge {
   uriForCell(cellId: string): string;
   /** Resolves when the initial attach pass has finished. */
   attached: Promise<void>;
-  /** Reconcile to a new full ordered cell list; deltas are computed here. */
-  updateCells(cells: NotebookCellDescriptor[]): Promise<void> | void;
-  /** Forwarded only to servers whose sync options declared save support. */
-  didSave(): void;
+  /** Reconcile to a new full ordered cell list after earlier open/update work completes. */
+  updateCells(cells: NotebookCellDescriptor[]): Promise<void>;
+  /** Ordered after cell synchronization, and forwarded only when the server supports save. */
+  didSave(): Promise<void> | void;
   dispose(): void;
 }

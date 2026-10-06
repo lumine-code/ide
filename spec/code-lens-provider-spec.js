@@ -245,4 +245,57 @@ describe("CodeLensProvider", () => {
     expect(invalidated.calls.count()).toBe(3);
     await flush();
   });
+
+  it("does not reuse a failed answer from another server or file", async () => {
+    const initial = makeSession(() => [lspLens(0, "Old")]);
+    const failing = makeSession(() => {
+      throw new Error("ContentModified");
+    });
+    const manager = makeManager(initial);
+    provider = new CodeLensProvider(manager);
+    await provider.codeLenses(editor);
+    manager.activeSessionForFeature = async () => failing;
+    expect(await provider.codeLenses(editor)).toBeNull();
+    manager.activeSessionForFeature = async () => initial;
+    initial.request = failing.request;
+    editor.getBuffer().setPath(path.join(os.tmpdir(), "another-code-lens-file.js"));
+    expect(await provider.codeLenses(editor)).toBeNull();
+  });
+
+  it("refresh invalidates fallback results and outstanding requests", async () => {
+    let resolve;
+    const pending = new Promise((done) => {
+      resolve = done;
+    });
+    let answer = [lspLens(0, "Old")];
+    const session = makeSession(() => answer);
+    const manager = makeManager(session);
+    provider = new CodeLensProvider(manager);
+    const [oldLens] = await provider.codeLenses(editor);
+    answer = pending;
+    const result = provider.codeLenses(editor);
+    await flush();
+    manager.requestRefresh(session, "codeLens");
+    resolve([lspLens(0, "Stale")]);
+    expect(await result).toBeNull();
+    session.request = () => Promise.reject(new Error("ContentModified"));
+    expect(await provider.codeLenses(editor)).toBeNull();
+    expect(await oldLens.execute()).toBeNull();
+  });
+
+  it("keeps the newest answer when requests finish in reverse order", async () => {
+    const replies = [];
+    const session = makeSession(() => new Promise((resolve) => replies.push(resolve)));
+    provider = new CodeLensProvider(makeManager(session));
+    const first = provider.codeLenses(editor);
+    await flush();
+    const second = provider.codeLenses(editor);
+    await flush();
+    replies[1]([lspLens(0, "Fresh")]);
+    expect((await second)[0].title).toBe("Fresh");
+    replies[0]([lspLens(0, "Stale")]);
+    expect(await first).toBeNull();
+    session.request = () => Promise.reject(new Error("ContentModified"));
+    expect((await provider.codeLenses(editor))[0].title).toBe("Fresh");
+  });
 });

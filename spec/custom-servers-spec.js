@@ -3,6 +3,7 @@ const os = require("os");
 const path = require("path");
 const LanguageServerManager = require("../lib/language-server-manager");
 const CustomServers = require("../lib/custom-servers");
+const { workspaceConfiguration } = require("../lib/workspace-configuration");
 
 describe("CustomServers", () => {
   let manager, filePath, customServers;
@@ -34,7 +35,7 @@ describe("CustomServers", () => {
     expect(launch.cwd).toBe("root");
     expect(launch.transport).toBe("stdio");
     expect(adapter.getSettings()).toEqual({ a: 1 });
-    expect(adapter.getWorkspaceConfiguration("a")).toBe(1);
+    expect(await workspaceConfiguration(adapter, [{ section: "a" }], {})).toEqual([1]);
   });
 
   it("skips entries without command or scopes", () => {

@@ -7,10 +7,10 @@ Starts language servers lazily when matching editors open and exposes UI-indepen
 ## Features
 
 - **Sessions**: starts every matching adapter lazily, scoped to a project root or the workspace, and safely serializes restarts and shutdown.
-- **Protocol lifecycle**: negotiates document and notebook synchronization, dynamic capabilities, workspace folders, watched files, file-operation notifications, progress and three JSON-RPC transports.
+- **Protocol lifecycle**: negotiates document and notebook synchronization, dynamic capabilities, workspace folders, watched files, file-operation notifications, progress and three JSON-RPC transports; serializes notebook opening and structural updates.
 - **Language features**: supplies completions, symbols, hover, signatures, references, document links, folding, selection ranges, linked editing, colors, formatting, rename, code actions, inlay hints, code lens and semantic tokens.
 - **Diagnostics**: combines pushed, per-document pull and workspace pull reports and forwards their current state to the linter package.
-- **Feature routing**: merges answers where useful and lets adapter switches choose one of several servers where only one result can apply.
+- **Feature routing**: merges answers where useful and lets adapter switches choose one of several servers where only one result can apply; cancels superseded requests and discards results for changed documents.
 - **Managed servers**: downloads, verifies, updates, rolls back and removes server binaries, npm packages and companion toolchains.
 - **Inspection**: exposes server state, capabilities, documents, diagnostics, logs and lifecycle actions through the server list and status bar.
 - **Activity**: reports server startup, slow requests and server-reported background work through the shared busy indicator, keeping concurrent operations independent.

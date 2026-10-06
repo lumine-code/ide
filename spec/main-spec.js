@@ -44,6 +44,20 @@ describe("ide-client package", () => {
     expect(typeof hyperclick.getSuggestionForWord).toBe("function");
   });
 
+  it("publishes one service per activation and refuses retained calls after reactivation", async () => {
+    let main = lumine.packages.getActivePackage("ide-client").mainModule;
+    const previous = main.provideIdeClient();
+    expect(main.provideIdeClient()).toBe(previous);
+    await lumine.packages.deactivatePackage("ide-client");
+    expect(() => previous.getSessions()).toThrowError(/no longer active/);
+    await lumine.packages.activatePackage("ide-client");
+    main = lumine.packages.getActivePackage("ide-client").mainModule;
+    const current = main.provideIdeClient();
+    expect(current).not.toBe(previous);
+    expect(() => previous.registerAdapter({})).toThrowError(/no longer active/);
+    expect(current.getSessions()).toEqual([]);
+  });
+
   describe("reporting a missing server", () => {
     const adapterFor = (managedServer) => ({
       id: "ide-missing",

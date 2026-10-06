@@ -450,6 +450,255 @@ describe("NotebookDocuments against a fake server", () => {
     expect(manager.diagnosticsFor(all, uri)).toEqual([diagnostic]);
   });
 
+  it("serializes overlapping structure changes while a new cell projection is pending", async () => {
+    registerFakeAdapter({ capabilities: { notebookDocumentSync: RUFF_SYNC } });
+    const cellA = { id: "c1", kind: "code", editor: buildCellEditor("a\n") };
+    const cellB = { id: "c2", kind: "code", editor: buildCellEditor("b\n") };
+    const bridge = notebooks.open({ filePath: notebookPath, cells: [cellA] });
+    await bridge.attached;
+    const session = theSession();
+    const prepare = session.prepareDocumentProjection.bind(session);
+    let releaseProjection;
+    const projection = new Promise((resolve) => (releaseProjection = resolve));
+    let preparing = false;
+    spyOn(session, "prepareDocumentProjection").and.callFake(async (document) => {
+      if (document?.uri === bridge.uriForCell("c2")) {
+        preparing = true;
+        await projection;
+      }
+      return prepare(document);
+    });
+
+    const addition = bridge.updateCells([cellA, cellB]);
+    await until(() => preparing);
+    const removal = bridge.updateCells([cellA]);
+    releaseProjection();
+    await Promise.all([addition, removal]);
+
+    const changes = await ofMethod("notebookDocument/didChange");
+    expect(changes.map(({ params }) => params.change.cells.structure.array)).toEqual([
+      {
+        start: 1,
+        deleteCount: 0,
+        cells: [{ kind: 2, document: bridge.uriForCell("c2") }],
+      },
+      { start: 1, deleteCount: 1, cells: [] },
+    ]);
+    expect(session.documents.has(C.uriKey(bridge.uriForCell("c2")))).toBe(false);
+    expect(manager.externalUris.has(C.uriKey(bridge.uriForCell("c2")))).toBe(false);
+    expect([...notebooks.records][0].version).toBe(3);
+  });
+
+  it("keeps simultaneous structure changes when a retained cell changes language", async () => {
+    registerFakeAdapter(
+      {
+        capabilities: {
+          notebookDocumentSync: { notebookSelector: [{ cells: [{ language: "*" }] }] },
+        },
+      },
+      {
+        grammarScopes: ["text.plain", "source.js"],
+        languageIdForScope: (scope) => (scope === "source.js" ? "javascript" : "python"),
+      },
+    );
+    const cellA = { id: "c1", kind: "code", editor: buildCellEditor("a\n") };
+    const cellB = { id: "c2", kind: "code", editor: buildCellEditor("b\n") };
+    const cellC = { id: "c3", kind: "code", editor: buildCellEditor("c\n") };
+    const bridge = notebooks.open({ filePath: notebookPath, cells: [cellA, cellB] });
+    await bridge.attached;
+
+    spyOn(cellA.editor, "getGrammar").and.returnValue({ scopeName: "source.js" });
+    await bridge.updateCells([cellC, cellA]);
+
+    const structure = (await ofMethod("notebookDocument/didChange"))[0].params.change.cells
+      .structure;
+    expect(structure.array).toEqual({
+      start: 0,
+      deleteCount: 2,
+      cells: [
+        { kind: 2, document: bridge.uriForCell("c3") },
+        { kind: 2, document: bridge.uriForCell("c1") },
+      ],
+    });
+    expect(structure.didOpen.map(({ uri, languageId }) => ({ uri, languageId }))).toEqual([
+      { uri: bridge.uriForCell("c3"), languageId: "python" },
+      { uri: bridge.uriForCell("c1"), languageId: "javascript" },
+    ]);
+    expect(structure.didClose).toEqual([
+      { uri: bridge.uriForCell("c2") },
+      { uri: bridge.uriForCell("c1") },
+    ]);
+  });
+
+  it("orders structure, typing and save after a pending initial notebook open", async () => {
+    registerFakeAdapter({ capabilities: { notebookDocumentSync: BASEDPYRIGHT_SYNC } });
+    let releaseProjection;
+    const projection = new Promise((resolve) => (releaseProjection = resolve));
+    const prepare = ServerSession.prototype.prepareDocumentProjection;
+    let preparing = false;
+    spyOn(ServerSession.prototype, "prepareDocumentProjection").and.callFake(
+      async function (document) {
+        preparing = true;
+        await projection;
+        return prepare.call(this, document);
+      },
+    );
+    const cellA = { id: "c1", kind: "code", editor: buildCellEditor("a\n") };
+    const cellB = { id: "c2", kind: "code", editor: buildCellEditor("b\n") };
+    const bridge = notebooks.open({ filePath: notebookPath, cells: [cellA] });
+    await until(() => preparing);
+
+    cellA.editor.getBuffer().append("changed\n");
+    const update = bridge.updateCells([cellA, cellB]);
+    const save = bridge.didSave();
+    expect(await ofMethod("notebookDocument/didChange")).toEqual([]);
+    expect(await ofMethod("notebookDocument/didSave")).toEqual([]);
+    releaseProjection();
+    await Promise.all([bridge.attached, update, save]);
+
+    const messages = (await received()).filter(({ method }) =>
+      method.startsWith("notebookDocument/"),
+    );
+    expect(messages.map(({ method }) => method)).toEqual([
+      "notebookDocument/didOpen",
+      "notebookDocument/didChange",
+      "notebookDocument/didSave",
+    ]);
+    expect(messages[0].params.cellTextDocuments[0].text).toBe("a\nchanged\n");
+    expect(messages[0].params.cellTextDocuments[0].version).toBe(2);
+    expect(messages[1].params.change.cells.structure.didOpen[0].uri).toBe(bridge.uriForCell("c2"));
+  });
+
+  for (const projected of [false, true]) {
+    it(`orders ${projected ? "projected" : "incremental"} typing after a pending structure change`, async () => {
+      registerFakeAdapter(
+        { capabilities: { notebookDocumentSync: RUFF_SYNC } },
+        projected ? { transformDocumentText: (text) => text.replaceAll("secret", "hidden") } : {},
+      );
+      const cellA = { id: "c1", kind: "code", editor: buildCellEditor("secret\n") };
+      const cellB = { id: "c2", kind: "code", editor: buildCellEditor("b\n") };
+      const bridge = notebooks.open({ filePath: notebookPath, cells: [cellA] });
+      await bridge.attached;
+      const session = theSession();
+      const prepare = session.prepareDocumentProjection.bind(session);
+      let releaseProjection;
+      const projection = new Promise((resolve) => (releaseProjection = resolve));
+      let preparing = false;
+      spyOn(session, "prepareDocumentProjection").and.callFake(async (document) => {
+        if (document?.uri === bridge.uriForCell("c2")) {
+          preparing = true;
+          await projection;
+        }
+        return prepare(document);
+      });
+      const update = bridge.updateCells([cellA, cellB]);
+      await until(() => preparing);
+
+      cellA.editor.getBuffer().append("changed\n");
+      expect(await ofMethod("notebookDocument/didChange")).toEqual([]);
+      releaseProjection();
+      await update;
+      await until(async () => (await ofMethod("notebookDocument/didChange")).length === 2);
+
+      const changes = await ofMethod("notebookDocument/didChange");
+      expect(changes.map(({ params }) => params.notebookDocument.version)).toEqual([2, 3]);
+      expect(changes[0].params.change.cells.structure).toBeDefined();
+      const content = changes[1].params.change.cells.textContent[0];
+      expect(content.document).toEqual({ uri: bridge.uriForCell("c1"), version: 2 });
+      expect(content.changes[0].text).toBe(projected ? "hidden\nchanged\n" : "changed\n");
+    });
+  }
+
+  it("releases pending adopted cells when disposed during a structure change", async () => {
+    registerFakeAdapter({ capabilities: { notebookDocumentSync: RUFF_SYNC } });
+    const cellA = { id: "c1", kind: "code", editor: buildCellEditor("a\n") };
+    const cellB = { id: "c2", kind: "code", editor: buildCellEditor("b\n") };
+    const bridge = notebooks.open({ filePath: notebookPath, cells: [cellA] });
+    await bridge.attached;
+    const session = theSession();
+    const prepare = session.prepareDocumentProjection.bind(session);
+    let releaseProjection;
+    const projection = new Promise((resolve) => (releaseProjection = resolve));
+    let preparing = false;
+    spyOn(session, "prepareDocumentProjection").and.callFake(async (document) => {
+      if (document?.uri === bridge.uriForCell("c2")) {
+        preparing = true;
+        await projection;
+      }
+      return prepare(document);
+    });
+    const update = bridge.updateCells([cellA, cellB]);
+    await until(() => preparing);
+
+    bridge.dispose();
+    expect(session.documents.size).toBe(0);
+    releaseProjection();
+    await update;
+
+    expect(await ofMethod("notebookDocument/didChange")).toEqual([]);
+    const close = (await ofMethod("notebookDocument/didClose"))[0].params;
+    expect(close.cellTextDocuments).toEqual([{ uri: bridge.uriForCell("c1") }]);
+    expect(session.documents.size).toBe(0);
+  });
+
+  it("does not close an unopened notebook or release a replacement bridge's cells", async () => {
+    registerFakeAdapter({ capabilities: { notebookDocumentSync: RUFF_SYNC } });
+    const prepare = ServerSession.prototype.prepareDocumentProjection;
+    let releaseProjection;
+    const projection = new Promise((resolve) => (releaseProjection = resolve));
+    let preparing = false;
+    const delayed = spyOn(ServerSession.prototype, "prepareDocumentProjection").and.callFake(
+      async function (document) {
+        preparing = true;
+        await projection;
+        return prepare.call(this, document);
+      },
+    );
+    const cell = { id: "c1", kind: "code", editor: buildCellEditor("a\n") };
+    const bridge = notebooks.open({ filePath: notebookPath, cells: [cell] });
+    await until(() => preparing);
+    const session = theSession();
+
+    bridge.dispose();
+    expect(session.documents.size).toBe(0);
+    delayed.and.callFake(prepare);
+    const replacement = notebooks.open({ filePath: notebookPath, cells: [cell] });
+    await replacement.attached;
+    releaseProjection();
+    await bridge.attached;
+
+    expect(await ofMethod("notebookDocument/didClose")).toEqual([]);
+    expect((await ofMethod("notebookDocument/didOpen")).length).toBe(1);
+    expect(session.documents.size).toBe(1);
+    expect(session.documents.get(C.uriKey(replacement.uriForCell("c1"))).notebook).toBe(
+      [...notebooks.records][0],
+    );
+  });
+
+  it("drops a failed initial projection and retries attachment cleanly", async () => {
+    const adapter = registerFakeAdapter({ capabilities: { notebookDocumentSync: RUFF_SYNC } });
+    const prepare = ServerSession.prototype.prepareDocumentProjection;
+    const failing = spyOn(ServerSession.prototype, "prepareDocumentProjection").and.rejectWith(
+      new Error("projection failed"),
+    );
+    const bridge = notebooks.open({
+      filePath: notebookPath,
+      cells: [{ id: "c1", kind: "code", editor: buildCellEditor("a\n") }],
+    });
+
+    await expectAsync(bridge.attached).toBeRejectedWithError("projection failed");
+    const session = theSession();
+    expect(session.documents.size).toBe(0);
+    expect(notebooks.adaptersForNotebook(notebookPath)).toEqual([]);
+    expect(await ofMethod("notebookDocument/didOpen")).toEqual([]);
+
+    failing.and.callFake(prepare);
+    await notebooks.reattachAll();
+    expect(notebooks.adaptersForNotebook(notebookPath)).toEqual([adapter]);
+    expect(session.documents.size).toBe(1);
+    expect((await ofMethod("notebookDocument/didOpen")).length).toBe(1);
+  });
+
   it("sends didSave only to servers whose sync options ask for it", async () => {
     registerFakeAdapter({
       capabilities: { notebookDocumentSync: { ...RUFF_SYNC, save: false } },

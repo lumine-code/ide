@@ -29,7 +29,10 @@ describe("References request lifecycle", () => {
       onDidDestroy: (callback) => emitter.on("destroy", callback),
     };
   });
-  afterEach(() => emitter.dispose());
+  afterEach(() => {
+    provider?.dispose();
+    emitter.dispose();
+  });
   const createProvider = (activeSessionsForEditor) =>
     new ReferencesProvider({
       addCapabilityFragment() {},
@@ -73,6 +76,23 @@ describe("References request lifecycle", () => {
     ]);
     expect((await request).symbolName).toBe("value");
     expect(asked).toEqual([2]);
+  });
+
+  it("cancels startup and releases request subscriptions when disposed", async () => {
+    const readiness = deferred();
+    const request = jasmine.createSpy("request").and.resolveTo([location]);
+    provider = createProvider(() => readiness.promise);
+    const result = provider.findReferences(editor, new Point(0, 2));
+    const subscriptions = provider.requestSubscriptions;
+    spyOn(subscriptions, "dispose").and.callThrough();
+    const signal = provider.abortController.signal;
+    provider.dispose();
+    expect(signal.aborted).toBe(true);
+    expect(subscriptions.dispose).toHaveBeenCalled();
+    readiness.resolve([session(request)]);
+    expect(await result).toBeNull();
+    expect(request).not.toHaveBeenCalled();
+    expect(await provider.findReferences(editor, new Point(0, 2))).toBeNull();
   });
 
   for (const event of ["text", "path", "grammar", "cursor", "destroy"]) {

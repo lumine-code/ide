@@ -1,5 +1,6 @@
 const DocumentFeatures = require("../lib/document-features");
 const C = require("../lib/converters");
+const { Emitter } = require("lumine");
 
 const lspRange = (row, start, end) => ({
   start: { line: row, character: start },
@@ -89,6 +90,83 @@ describe("DocumentFeatures", () => {
       uri: "file:///C:/project/target.js",
       takeFocus: true,
     });
+  });
+
+  for (const event of ["text", "path", "grammar", "destroy", "features"]) {
+    it(`does not cache document links invalidated by ${event} while waiting for RPC`, async () => {
+      const emitter = new Emitter();
+      let resolve;
+      let calls = 0;
+      const pending = new Promise((done) => {
+        resolve = done;
+      });
+      const source = { range: lspRange(0, 0, 4), target: "https://example.com" };
+      const session = makeSession(() => (++calls === 1 ? pending : [source]));
+      const manager = makeManager(session);
+      editor.getBuffer = () => ({ onDidChangeText: (callback) => emitter.on("text", callback) });
+      editor.onDidChangePath = (callback) => emitter.on("path", callback);
+      editor.onDidChangeGrammar = (callback) => emitter.on("grammar", callback);
+      editor.onDidDestroy = (callback) => emitter.on("destroy", callback);
+      manager.onDidChangeFeatures = (callback) => emitter.on("features", callback);
+      features = new DocumentFeatures(manager);
+      try {
+        const request = features.documentLinks(editor);
+        await flushMicrotasks();
+        emitter.emit(event);
+        resolve([source]);
+        expect(await request).toBeNull();
+        expect(features.linkCaches.get(editor)).toBeUndefined();
+        expect((await features.documentLinks(editor)).links).toEqual([source]);
+        expect(calls).toBe(2);
+      } finally {
+        emitter.dispose();
+      }
+    });
+  }
+
+  it("does not follow a link after its source changes during lazy resolution", async () => {
+    const emitter = new Emitter();
+    let resolve;
+    const pending = new Promise((done) => {
+      resolve = done;
+    });
+    const source = { range: lspRange(0, 0, 4), data: 7 };
+    const session = makeSession(
+      (method) => (method === "textDocument/documentLink" ? [source] : pending),
+      { "textDocument/documentLink": { resolveProvider: true } },
+    );
+    const manager = makeManager(session);
+    editor.getBuffer = () => ({ onDidChangeText: (callback) => emitter.on("text", callback) });
+    features = new DocumentFeatures(manager);
+    try {
+      const suggestion = await features.documentLink(editor, [
+        [0, 0],
+        [0, 4],
+      ]);
+      const click = suggestion.callback();
+      emitter.emit("text");
+      resolve({ ...source, target: "file:///C:/project/target.js" });
+      expect(await click).toBe(false);
+      expect(manager.showDocument).not.toHaveBeenCalled();
+      expect(await suggestion.callback()).toBe(false);
+    } finally {
+      emitter.dispose();
+    }
+  });
+
+  it("declines links after destruction even if the server ignores disposal", async () => {
+    let resolve;
+    const pending = new Promise((done) => {
+      resolve = done;
+    });
+    const session = makeSession(() => pending);
+    features = new DocumentFeatures(makeManager(session));
+    const request = features.documentLinks(editor);
+    await flushMicrotasks();
+    features.destroy();
+    resolve([{ range: lspRange(0, 0, 4), target: "https://example.com" }]);
+    expect(await request).toBeNull();
+    expect(await features.documentLinks(editor)).toBeNull();
   });
 
   it("does not hand an arbitrary server URI to an operating-system protocol handler", async () => {

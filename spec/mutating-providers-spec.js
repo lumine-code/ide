@@ -562,6 +562,38 @@ describe("RefactorProvider", () => {
       expect(result).toEqual(expected);
     }
   });
+
+  it("prepares only through the server selected for the actual rename", async () => {
+    const asked = [];
+    const first = sessionWith(
+      (method) => {
+        asked.push(`first:${method}`);
+        return { changes: {} };
+      },
+      { renameProvider: true },
+    );
+    const second = sessionWith(
+      (method) => {
+        asked.push(`second:${method}`);
+        return lspRange(0, 6, 11);
+      },
+      { renameProvider: { prepareProvider: true } },
+    );
+    const provider = new RefactorProvider(managerWith(first, second));
+    const editor = stubEditor();
+    expect(await provider.prepareRename(editor, { row: 0, column: 8 })).toBeNull();
+    await provider.rename(editor, { row: 0, column: 8 }, "next");
+    expect(asked).toEqual(["first:textDocument/rename"]);
+
+    first.supports = () => false;
+    expect(await provider.prepareRename(editor, { row: 0, column: 8 })).toEqual({
+      range: [
+        [0, 6],
+        [0, 11],
+      ],
+    });
+    expect(asked[1]).toBe("second:textDocument/prepareRename");
+  });
   it("does not prepare a rename while the rename feature is disabled", async () => {
     const session = sessionWith(() => lspRange(0, 6, 11), {
       renameProvider: { prepareProvider: true },

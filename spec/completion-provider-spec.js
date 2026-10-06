@@ -1,4 +1,5 @@
 const path = require("path");
+const { Emitter } = require("lumine");
 const CompletionProvider = require("../lib/completion-provider");
 
 const filePath = path.join(__dirname, "example.ts");
@@ -51,6 +52,121 @@ const itemWithEdit = (label, endColumn) => ({
     range: { start: { line: 0, character: 0 }, end: { line: 0, character: endColumn } },
     newText: label,
   },
+});
+
+describe("CompletionProvider request ownership", () => {
+  let provider, emitter;
+  const deferred = () => {
+    let resolve;
+    const promise = new Promise((done) => (resolve = done));
+    return { promise, resolve };
+  };
+  const requestFor = (editor, column = 2) => ({
+    editor,
+    bufferPosition: { row: 0, column },
+    prefix: "co",
+    activatedManually: true,
+  });
+  afterEach(() => {
+    provider?.dispose();
+    emitter?.dispose();
+  });
+
+  it("owns the lookup before waiting for server startup", async () => {
+    const older = deferred(),
+      newer = deferred();
+    const session = sessionWith(() => ({ items: [{ label: "console" }] }));
+    const manager = managerWith(session);
+    let invocation = 0;
+    manager.activeSessionsForEditor = () => (++invocation === 1 ? older.promise : newer.promise);
+    provider = new CompletionProvider(manager);
+    const editor = stubEditor();
+    const first = provider.getSuggestions(requestFor(editor, 1));
+    const second = provider.getSuggestions(requestFor(editor, 2));
+    newer.resolve([session]);
+    expect((await second)[0].displayText).toBe("console");
+    older.resolve([session]);
+    expect(await first).toEqual([]);
+    expect(session.requests.map(({ params }) => params.position.character)).toEqual([2]);
+    expect(provider.cache.items[0].displayText).toBe("console");
+  });
+
+  it("copies the invocation point and tolerates an omitted prefix", async () => {
+    const startup = deferred();
+    const session = sessionWith(() => ({ items: [{ label: "console" }] }));
+    const manager = managerWith(session);
+    manager.activeSessionsForEditor = () => startup.promise;
+    provider = new CompletionProvider(manager);
+    const request = requestFor(stubEditor());
+    delete request.prefix;
+    const result = provider.getSuggestions(request);
+    request.bufferPosition.column = 9;
+    startup.resolve([session]);
+    expect((await result).length).toBe(1);
+    expect(session.requests[0].params.position.character).toBe(2);
+  });
+
+  it("abandons edited source even when the server ignores cancellation", async () => {
+    emitter = new Emitter();
+    const started = deferred(),
+      reply = deferred();
+    const session = sessionWith((_method, _params, { signal }) => {
+      started.resolve(signal);
+      return reply.promise;
+    });
+    provider = new CompletionProvider(managerWith(session));
+    const editor = stubEditor();
+    editor.getBuffer = () => ({ onDidChange: (callback) => emitter.on("change", callback) });
+    const result = provider.getSuggestions(requestFor(editor));
+    const signal = await started.promise;
+    emitter.emit("change");
+    expect(signal.aborted).toBe(true);
+    reply.resolve({ items: [{ label: "stale" }] });
+    expect(await result).toEqual([]);
+    expect(provider.cache).toBeNull();
+  });
+
+  it("cancels startup and releases a cached editor when disposed", async () => {
+    const startup = deferred();
+    const session = sessionWith(() => ({ items: [{ label: "console" }] }));
+    const manager = managerWith(session);
+    provider = new CompletionProvider(manager);
+    const editor = stubEditor();
+    const subscription = { dispose: jasmine.createSpy("dispose") };
+    editor.onDidDestroy = () => subscription;
+    await provider.getSuggestions(requestFor(editor));
+    manager.activeSessionsForEditor = () => startup.promise;
+    const result = provider.getSuggestions(requestFor(editor));
+    const signal = provider.abortController.signal;
+    provider.dispose();
+    expect(signal.aborted).toBe(true);
+    expect(subscription.dispose).toHaveBeenCalled();
+    expect(provider.cache).toBeNull();
+    startup.resolve([session]);
+    expect(await result).toEqual([]);
+    expect(session.requests.length).toBe(1);
+  });
+
+  it("rejects a superseded resolve reply even when the server ignores its signal", async () => {
+    const replies = [deferred(), deferred()];
+    let next = 0;
+    const session = sessionWith(
+      (method) =>
+        method === "completionItem/resolve"
+          ? replies[next++].promise
+          : { items: [{ label: "console" }] },
+      { completionProvider: { resolveProvider: true } },
+    );
+    provider = new CompletionProvider(managerWith(session));
+    const [suggestion] = await provider.getSuggestions(requestFor(stubEditor()));
+    const first = provider.getSuggestionDetailsOnSelect(suggestion);
+    const second = provider.getSuggestionDetailsOnSelect({ ...suggestion });
+    replies[1].resolve({ label: "console", documentation: "fresh" });
+    expect((await second).description).toBe("fresh");
+    replies[0].resolve({ label: "console", documentation: "stale" });
+    expect(await first).toBe(suggestion);
+    expect(provider.cache.items[0].description).toBeUndefined();
+  });
 });
 
 describe("CompletionProvider item mapping", () => {
@@ -543,13 +659,17 @@ describe("CompletionProvider caching", () => {
   });
 
   it("does not cache the empty result of a superseded request", async () => {
-    let release;
+    let release, markStarted;
+    const started = new Promise((resolve) => {
+      markStarted = resolve;
+    });
     const gate = new Promise((resolve) => {
       release = resolve;
     });
     const session = sessionWith(async (_method, _params, options) => {
       // The first request hangs until the second one has aborted it.
       if (session.requests.length === 1) {
+        markStarted();
         await gate;
         if (options.signal.aborted) throw new Error("cancelled");
       }
@@ -563,6 +683,7 @@ describe("CompletionProvider caching", () => {
       bufferPosition: { row: 0, column: 2 },
       prefix: "co",
     });
+    await started;
     const fresh = await provider.getSuggestions({
       editor,
       bufferPosition: { row: 0, column: 3 },

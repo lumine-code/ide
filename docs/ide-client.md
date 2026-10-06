@@ -61,7 +61,7 @@ interface LanguageServerAdapter {
     kind?: number;
   }>;
   getInitializationOptions?(context: { rootPath: string; rootUri: string }): unknown;
-  getSettings?(): unknown;
+  getSettings?(context: ServerConfigurationContext): unknown | Promise<unknown>;
   getInitializedNotifications?(context: {
     session: LanguageServerSession;
     rootPath: string;
@@ -69,7 +69,11 @@ interface LanguageServerAdapter {
   }): Array<{ method: string; params?: unknown }>;
   settingsKeyPaths?: string[];
   restartKeyPaths?: string[];
-  getWorkspaceConfiguration?(section?: string, resource?: string): unknown;
+  getWorkspaceConfiguration?(
+    section: string | undefined,
+    resource: string | undefined,
+    context: ServerConfigurationContext,
+  ): unknown | Promise<unknown>;
   handleServerRequest?(
     method: string,
     params: unknown,
@@ -136,6 +140,10 @@ Four fields are required:
 `ServerLaunch` is `{ command, args?, cwd?, env?, transport?, host?, port?, version?, fileCancellationFolder? }` with `transport` one of `"stdio"` (default), `"ipc"`, or `"socket"`. `fileCancellationFolder` is an absolute, session-unique directory for a server that uses marker files instead of `$/cancelRequest`; `ide-client` creates it and removes it with the connection.
 
 `env` overrides the child process environment; a value of `undefined` removes an inherited variable. This lets an adapter enforce its chosen transport without changing the editor's own environment.
+
+`getSettings(context)` is the canonical server settings tree. The client reads it during startup preflight and on configuration changes, then pushes it through `workspace/didChangeConfiguration`. Configuration pulls resolve dotted sections from that same tree, reading one snapshot per request and returning `null` for missing sections. Lookup visits own properties only and preserves `false`, zero and empty strings. It never falls back to the editor's configuration. Custom servers use their entry's `settings` tree through the same resolver.
+
+The configuration context is `{ rootPath, rootUri, launch, session? }`. `launch` is the exact object returned by this startup's `resolveServer`; `session` becomes available after preflight. Store launch-dependent settings against that object rather than in mutable module state, so concurrent roots and replacement sessions cannot overwrite each other's tool paths. `getWorkspaceConfiguration(section, resource, context)` is an optional authoritative override for server aliases or resource-specific settings. Its absent results become `null`; it is never called to synthesize pushed settings.
 
 `getDocumentationCodeBlockProjection` receives a block's original text, fence language and resolved grammar scope. Return `null` to use the normal renderer, or `{ scopeName, text, regions, validate }` to parse private source with the editor's grammar. Each region has UTF-16 `start` and `end` offsets in the original block, plus either `projectedStart` in the private source or explicit `scopes`. Text outside those regions stays neutral. `validate(root)` confirms the intended Tree-sitter structure after an error-free parse. Failed hooks, invalid parses and unavailable grammars fall back to the normal renderer, and the temporary editor is always destroyed.
 
@@ -308,6 +316,8 @@ When an operation can be cancelled, clicking its active entry in the busy indica
 
 `openNotebookDocument(descriptor)` teaches the hub a notebook: LSP 3.17 notebook sync, per capable session. The descriptor carries the notebook's `filePath`, its `notebookType` (defaults to `"jupyter-notebook"`), and the **full ordered cell list** — markup cells included, because the 1-based cell numbers diagnostics carry count every cell — each cell with a stable `id`, its `kind`, and its live `editors`. The returned bridge has `updateCells(cells)` for structural changes (the hub computes the LSP deltas), `didSave()`, and `dispose()`; content sync follows each code cell's buffer on its own. The caller of record is `jupyter-view`, whose own bridge adapts its document model to this shape — another notebook UI would drive the same bridge.
 
+Structural updates and saves wait for the initial open, earlier mutations and pending cell projections. Typing during structural preparation follows that structure with its own notebook version. Disposal immediately releases locally adopted cells and sends `didClose` only for a notebook actually opened on the server. A failed open rolls back session ownership so attachment can be retried. `updateCells` returns a promise for its queued reconciliation, and `didSave` returns one for the queued save while the bridge remains open.
+
 What follows from an open bridge, with no further wiring:
 
 - Each cell is its own text document under a `vscode-notebook-cell:` URI whose path component is the notebook's, so client and server positions are both cell-relative — identity, no mapping.
@@ -476,6 +486,8 @@ The `features` field on the adapter object is the fallback for an adapter with n
 `diagnostics` is the odd one: servers may push them or expose the LSP 3.17 pull model. Switching diagnostics off hides stored results; pull-capable servers are also not queried until the switch is enabled again.
 
 ## Teardown
+
+The provided service object belongs to one activation and remains stable during it. Deactivation invalidates all retained methods with `AbortError`; reactivation publishes a new object. Consumers must return their edge's disposable and reacquire the service after replacement. A late callback from an earlier edge cannot register adapters or mutate the new manager.
 
 `registerAdapter` returns a `Disposable` that unregisters that exact adapter object and stops every current or in-flight session it owns — return it directly from `consumeIdeClient`, as in the example. `stop(session)` first removes its whole logical server from routing, cancels restart and retry work, and then waits for all of its process generations to stop. Sessions are also stopped when `ide-client` deactivates, so an adapter needs no shutdown logic of its own.
 
