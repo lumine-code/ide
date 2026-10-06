@@ -58,6 +58,28 @@ describe("ide-client package", () => {
     expect(current.getSessions()).toEqual([]);
   });
 
+  it("cancels lazy server bootstrap instead of resuming a command in a later activation", async () => {
+    const main = lumine.packages.getActivePackage("ide-client").mainModule;
+    let finish;
+    const CustomServers = require("../lib/custom-servers");
+    spyOn(CustomServers.prototype, "activate").and.callFake(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const resumed = jasmine.createSpy("resumed");
+    const pending = main.ensureCustomServers().then(resumed, (error) => error);
+    const command = main.withCustomServers(resumed);
+    await lumine.packages.deactivatePackage("ide-client");
+    await lumine.packages.activatePackage("ide-client");
+    finish();
+    const result = await pending;
+    expect(result?.name).toBe("AbortError");
+    expect(await command).toBeUndefined();
+    expect(resumed).not.toHaveBeenCalled();
+  });
+
   describe("reporting a missing server", () => {
     const adapterFor = (managedServer) => ({
       id: "ide-missing",
