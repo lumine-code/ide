@@ -9,9 +9,7 @@ describe("canonical language-server rename targets", () => {
   let root, manager, session, editor, uri;
   beforeEach(async () => {
     jasmine.useRealClock();
-    root = fs.mkdtempSync(
-      path.join(fs.realpathSync.native(os.tmpdir()), "ide-client-rename-target-"),
-    );
+    root = fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), "ide-rename-target-"));
     const file = path.join(root, "main.js");
     fs.writeFileSync(file, "const value = 1;\n");
     uri = pathToFileURL(file).href;
@@ -44,7 +42,7 @@ describe("canonical language-server rename targets", () => {
     await session?.stop();
     await manager?.deactivate();
     editor?.destroy();
-    const prefix = path.join(fs.realpathSync.native(os.tmpdir()), "ide-client-rename-target-");
+    const prefix = path.join(fs.realpathSync.native(os.tmpdir()), "ide-rename-target-");
     if (root?.startsWith(prefix))
       await fs.promises.rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });

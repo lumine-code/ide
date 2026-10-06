@@ -1,19 +1,19 @@
-# ide-client
+# ide
 
-Registers a language server with the editor. The adapter says how to launch it and which grammars it serves; `ide-client` does the rest of LSP.
+Registers a language server with the editor. The adapter says how to launch it and which grammars it serves; `ide` does the rest of LSP.
 
-|             |                                                   |
-| ----------- | ------------------------------------------------- |
-| Version     | `1.0.0`                                           |
-| Provided by | `provideIdeClient()` returning the client service |
-| Consumed by | `consumeIdeClient(client)`                        |
-| Owner       | `ide-client`                                      |
+|             |                                             |
+| ----------- | ------------------------------------------- |
+| Version     | `1.0.0`                                     |
+| Provided by | `provideIde()` returning the client service |
+| Consumed by | `consumeIde(client)`                        |
+| Owner       | `ide`                                       |
 
-An adapter package is small — a manifest entry, a `resolveServer`, and a grammar list. Everything a language server can do then arrives in the editor at once, because `ide-client` implements the UI-facing services (`autocomplete.provider`, `symbol.document-provider`, `symbol.workspace-provider`, `symbol.definition-provider`, `context-help.provider`, `hyperclick.provider`, `refactor.provider`, `find-references.provider`, `intentions.list`, `code-lens.provider`, `inlay-hints.provider`, `semantic-tokens.provider`, and the four `code-format.*`) on every adapter's behalf. You do not implement any of them.
+An adapter package is small — a manifest entry, a `resolveServer`, and a grammar list. Everything a language server can do then arrives in the editor at once, because `ide` implements the UI-facing services (`autocomplete.provider`, `symbol.document-provider`, `symbol.workspace-provider`, `symbol.definition-provider`, `context-help.provider`, `hyperclick.provider`, `refactor.provider`, `find-references.provider`, `intentions.list`, `code-lens.provider`, `inlay-hints.provider`, `semantic-tokens.provider`, and the four `code-format.*`) on every adapter's behalf. You do not implement any of them.
 
 Workspace symbol search asks every supporting session already running for the requested project roots, once per process, and preserves other servers' results when one fails. It does not discover languages, launch servers or open files. An adapter may implement `searchWorkspaceSymbols(query, { session, signal })` to use its server's own project search protocol; return LSP `SymbolInformation` records with URI and range. The default sends `workspace/symbol`. The `symbols` feature switch governs both document and workspace symbols, including per-language overrides.
 
-Document symbol sources are enumerated from adapters applicable to the current editor and their existing session state, including notebook cell routing. Enumeration does not launch a server or scan the project. Each source identifies one adapter as `ide-client:<adapter.id>`, uses the adapter's display name and the short label `LS`, and reports `ready`, `starting` or `unavailable` with an optional reason. A document request carries the exact `sourceId`; an unavailable or unsupported source returns `null`, and the client never substitutes another backend. The hub owns automatic selection and a user's explicit choice.
+Document symbol sources are enumerated from adapters applicable to the current editor and their existing session state, including notebook cell routing. Enumeration does not launch a server or scan the project. Each source identifies one adapter as `ide:<adapter.id>`, uses the adapter's display name and the short label `LS`, and reports `ready`, `starting` or `unavailable` with an optional reason. A document request carries the exact `sourceId`; an unavailable or unsupported source returns `null`, and the client never substitutes another backend. The hub owns automatic selection and a user's explicit choice.
 
 `documentSymbolScopes` declares whole-document ownership as a subset of `grammarScopes`. It defaults to `grammarScopes`; `[]` disables document symbol sources for the adapter. Each entry must be a nonempty scope already in `grammarScopes`. A server that handles foreign embedded fragments keeps their scopes in `grammarScopes` for completion, hover and navigation, but excludes them from `documentSymbolScopes`. Sources for those host buffers are omitted, and an exact request for such a source returns `null` before waiting for a session or opening a document. Eligibility uses the editor's root grammar, including a notebook cell's own grammar. This declaration does not change protocol capabilities, feature switches or workspace symbols.
 
@@ -28,8 +28,8 @@ In your `package.json`:
 ```json
 {
   "consumedServices": {
-    "ide-client": {
-      "versions": { "^1.0.0": "consumeIdeClient" }
+    "ide": {
+      "versions": { "^1.0.0": "consumeIde" }
     }
   }
 }
@@ -137,20 +137,20 @@ Four fields are required:
 | `grammarScopes`          | Which editors this server serves.                                                                                              |
 | `resolveServer(context)` | Returns a `ServerLaunch`, or `null` when the server is not installed — which disables the adapter quietly rather than failing. |
 
-`ServerLaunch` is `{ command, args?, cwd?, env?, transport?, host?, port?, version?, fileCancellationFolder? }` with `transport` one of `"stdio"` (default), `"ipc"`, or `"socket"`. `fileCancellationFolder` is an absolute, session-unique directory for a server that uses marker files instead of `$/cancelRequest`; `ide-client` creates it and removes it with the connection.
+`ServerLaunch` is `{ command, args?, cwd?, env?, transport?, host?, port?, version?, fileCancellationFolder? }` with `transport` one of `"stdio"` (default), `"ipc"`, or `"socket"`. `fileCancellationFolder` is an absolute, session-unique directory for a server that uses marker files instead of `$/cancelRequest`; `ide` creates it and removes it with the connection.
 
 `env` overrides the child process environment; a value of `undefined` removes an inherited variable. This lets an adapter enforce its chosen transport without changing the editor's own environment.
 
 ### Server resolution
 
-`ServerResolutionContext` supplies `{ rootPath, projectPaths, configDirPath, managedStoragePath, managedServer, resolver, signal? }`. Use `context.resolver` for path selection and launch construction. The same helpers are available through `client.getServerResolver()` outside startup, `api.resolver` in installation and version hooks, and `context.resolver` in configuration hooks. Adapter packages receive these helpers through the service contract.
+`ServerResolutionContext` supplies `{ rootPath, projectPaths, configDirPath, managedStoragePath, getManagedServer, resolver, signal? }`. Use `context.resolver` for path selection and launch construction. `getManagedServer()` lazily reads the installed copy, returns `null` when none exists, and caches its result or corruption error for this startup attempt. Call it inside the resolver's `managed` callback so a configured server never reads an unrelated managed record. The same helpers are available through `client.getServerResolver()` outside startup, `api.resolver` in installation and version hooks, and `context.resolver` in configuration hooks. Adapter packages receive these helpers through the service contract.
 
-`resolver.select(options)` validates a candidate and returns `{ path, kind, source, version?, data? }`, or `null` when discovery finds none. `path` is a normalized absolute path. `source` is `"configured"`, `"managed"`, `"bundled"` or `"discovered"`; `version` is copied only from `managedVersion` for a managed selection. A server whose actual version is probed may supply that version when building its launch.
+`resolver.select(options)` validates a candidate and returns `{ path, kind, source, version?, data? }`, or `null` when discovery finds none. `path` is a normalized absolute path. `source` is `"configured"`, `"managed"`, `"bundled"` or `"discovered"`; `version` is copied only from the `managed` callback's result for a managed selection. A server whose actual version is probed may supply that version when building its launch.
 
 | Selection option                     | Description                                                                                                                                                                                         |
 | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `configuredPath`                     | Explicit user selection; takes priority over every other source.                                                                                                                                    |
-| `managedPath`, `managedVersion`      | The installed server path and its recorded version, usually read from `context.managedServer`.                                                                                                      |
+| `managed`                            | Lazy callback returning `{ path, version? }`, or `null`/`undefined` when absent, synchronously or asynchronously. It runs only when `configuredPath` is absent.                                     |
 | `bundledPath`                        | Absolute bundled path or a lazy function returning one, synchronously or asynchronously. The lookup runs only after configured and managed paths are absent; an empty result proceeds to discovery. |
 | `kind`                               | `"executable"` by default, or `"node"`, `"file"`, `"directory"` for the corresponding payload.                                                                                                      |
 | `configuredKind`                     | Kind for the explicit path, defaulting to `kind`. `"auto"` treats `.js`, `.cjs` and `.mjs` as Node entries and other paths as executables.                                                          |
@@ -162,9 +162,9 @@ Four fields are required:
 | `allowShellWrapper`                  | `false` by default. Opts into discovering and accepting Windows `.cmd` and `.bat` executable wrappers when the adapter owns their interpretation.                                                   |
 | `signal`                             | Optional cancellation signal, combined with the startup resolver's lifetime.                                                                                                                        |
 
-Selection follows configured → managed → bundled → discovered candidates → PATH. A configured, managed or bundled validation failure rejects immediately, preserving the selected installation's error. Only discovery skips rejected candidates and tries the next one. A lazy bundled lookup or discovery callback that itself throws also rejects. Filesystem failures include the validation label and retain the original `cause` and system `code`, such as `ENOENT`. This lets an adapter distinguish an absent server from a broken selected distribution.
+Selection follows configured → managed → bundled → discovered candidates → PATH. A configured path bypasses the managed callback completely, including any corrupt installation record behind it. Without a configured payload, managed lookup and validation failures reject immediately, preserving the selected installation's error. Bundled validation failures also reject. Only discovery skips rejected candidates and tries the next one. A lazy lookup or discovery callback that itself throws also rejects. Filesystem failures include the validation label and retain the original `cause` and system `code`, such as `ENOENT`. This lets an adapter distinguish an absent server from a broken selected distribution.
 
-Filesystem validation requires readable files or directories, and executable access for native commands. The adapter still owns checks such as Java's required major version, a Ruby ABI match, a complete SDK or a server's companion modules. Put those checks in `validate` so unsupported discovered installations can yield to a usable candidate; return probe results as `data` to avoid repeating the work when constructing arguments or the environment.
+Filesystem validation requires readable files or directories, and executable access for native commands. The adapter still owns checks such as Java's required major version, a Ruby ABI match, a complete SDK or a server's companion modules. Put those checks in `validate` so unsupported discovered installations can yield to a usable candidate; return probe results as `data` to avoid repeating the work when constructing arguments or the environment. Runtime and server payloads are separate selections when the server needs an external runtime: choosing Java, Ruby, PowerShell or Rscript does not override a managed server payload. An explicit server directory, JAR, script or R Library Path selects the payload instead.
 
 | Resolver method                                                                                         | Result                                                                                                                                                                  |
 | ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -254,13 +254,13 @@ Two reasons to hold the session rather than re-pick per request. A reply's `data
 
 Some capabilities the hub advertises on a consumer's behalf, because fragments are merged once at initialize and an external package cannot contribute one: `textDocument.callHierarchy` and `textDocument.typeHierarchy` are both declared for `hierarchy-view`.
 
-The unchecked request API is still a client-capability contract. Document links back the `hyperclick.provider`; the `ide-client:fold-server-ranges`, `ide-client:expand-selection-range`, `ide-client:select-linked-ranges`, and `ide-client:color-presentation` commands expose folding ranges, selection ranges, linked-editing ranges, document colours and color presentations without another package. These routes remain available through the raw request API as well. Keep their capability objects truthful and complete: servers in the wild sometimes read an optional child such as `textDocument.foldingRange.lineFoldingOnly` without first checking its parent, so an omitted shape can break a valid request inside the server.
+The unchecked request API is still a client-capability contract. Document links back the `hyperclick.provider`; the `ide:fold-server-ranges`, `ide:expand-selection-range`, `ide:select-linked-ranges`, and `ide:color-presentation` commands expose folding ranges, selection ranges, linked-editing ranges, document colours and color presentations without another package. These routes remain available through the raw request API as well. Keep their capability objects truthful and complete: servers in the wild sometimes read an optional child such as `textDocument.foldingRange.lineFoldingOnly` without first checking its parent, so an omitted shape can break a valid request inside the server.
 
 ## Minimal example
 
 ```js
 module.exports = {
-  consumeIdeClient(client) {
+  consumeIde(client) {
     return client.registerAdapter({
       id: "my-language-server",
       displayName: "My Language Server",
@@ -268,8 +268,10 @@ module.exports = {
       async resolveServer(context) {
         const selected = await context.resolver.select({
           configuredPath: lumine.config.get("my-package.serverPath"),
-          managedPath: context.managedServer?.binaryPath,
-          managedVersion: context.managedServer?.version,
+          managed: () => {
+            const installed = context.getManagedServer();
+            return installed ? { path: installed.binaryPath, version: installed.version } : null;
+          },
           kind: "executable",
           names: ["my-langserver"],
           signal: context.signal,
@@ -294,7 +296,7 @@ module.exports = {
 
 `prepareRequest` is an optional compatibility hook for a server's request and response conventions. It runs after document synchronization and source-to-wire projection; returning `params` replaces the outgoing request, and `mapResult` restores the response to UTF-16 wire coordinates before the client's source projection and normal result handling. Returning nothing preserves the request. The hook must preserve opaque server data and must not modify the caller's parameters. `getDocument` returns immutable snapshots of open and temporary documents as the server received them; closed-file reads belong to the adapter. The client rejects cancelled preparation, stopped sessions and results whose consulted snapshots changed during preparation or response mapping. An adapter can use `isCurrent()` for its own intermediate checks.
 
-Adapters normally coexist. An optional `exclusiveGroup` selects one of that group's applicable adapters per editor: the first ID named in `ide-client.preferredServers`, then the highest `selectionPriority` (default `0`), then lexicographic ID. Preferences affect only these groups; unrelated servers and disjoint document selectors remain available. The choice does not depend on asynchronous executable discovery. Registering, unregistering or changing a preference withdraws obsolete controllers and waits for their physical process exit before a replacement starts on an overlapping route; a child that survives shutdown remains quarantined. Unregistering the winner restores the next applicable adapter. `adaptersForEditor` reports the selected coverage immediately, and `onDidChangeAdapters` also emits `{ adapter, registered: true, selectionChanged: true }` when a preference changes that coverage.
+Adapters normally coexist. An optional `exclusiveGroup` selects one of that group's applicable adapters per editor: the first ID named in `ide.preferredServers`, then the highest `selectionPriority` (default `0`), then lexicographic ID. Preferences affect only these groups; unrelated servers and disjoint document selectors remain available. The choice does not depend on asynchronous executable discovery. Registering, unregistering or changing a preference withdraws obsolete controllers and waits for their physical process exit before a replacement starts on an overlapping route; a child that survives shutdown remains quarantined. Unregistering the winner restores the next applicable adapter. `adaptersForEditor` reports the selected coverage immediately, and `onDidChangeAdapters` also emits `{ adapter, registered: true, selectionChanged: true }` when a preference changes that coverage.
 
 `resolveServer` returning `null` is the supported way to be a no-op: an adapter whose server is not installed should return `null` rather than throw, and nothing appears in the UI.
 
@@ -326,7 +328,7 @@ The core handlers include server-initiated `workspace/workspaceFolders`. Its res
 
 `formatProjectedDocument(editor, projection, { uri, method, range, options, signal, session, isInvocationCurrent })` may format projected Python and return already restored source-coordinate edits. For file/save formatting it may instead return a complete `{ text, edits, isCurrent }` source plan: the client preserves the plan's guard, adds caller and document cancellation guards, and `code-format` independently verifies or derives its target ranges and applies it once. The client captures the original text, selections and pathname before its first asynchronous wait and refuses results after they change. A queued adapter should also consult `isInvocationCurrent()` before starting work and after each wait; its signal combines the formatting request and document synchronization lifetimes. The adapter must preserve protected text through the snapshot's formatting restoration contract and return its entire result before anything is applied. `session.withTemporaryDocument({ uri, languageId, text }, callback, { signal })` serializes non-file-backed analysis documents in that same server session, opens each before the callback and closes it in `finally`. Use a unique Python URI in the original project directory; no physical file is created. Temporary diagnostics are suppressed, and workspace edits against temporary documents are refused.
 
-Each `code-format.*` provider exposes `canFormat(editor, request)` and receives the hub's immutable `{ text, path, reason, kind, signal, isCurrent }` request as the final formatting argument. Eligibility checks the actual server capability and scoped feature switch for that service; save formatting also accepts a server that implements only `willSaveWaitUntil`. A missing capability or stale request returns `null` so the hub can decline safely, while `[]` is a successful no-op. Server failures propagate for the hub to report. The client forwards cancellation to protocol requests and refuses replies that arrive after the caller's request expires. `ide-client:format` consumes `code-format.executor` and explicitly chooses the `ide-client` provider; it requires the hub to be enabled and never applies edits through a separate command path.
+Each `code-format.*` provider exposes `canFormat(editor, request)` and receives the hub's immutable `{ text, path, reason, kind, signal, isCurrent }` request as the final formatting argument. Eligibility checks the actual server capability and scoped feature switch for that service; save formatting also accepts a server that implements only `willSaveWaitUntil`. A missing capability or stale request returns `null` so the hub can decline safely, while `[]` is a successful no-op. Server failures propagate for the hub to report. The client forwards cancellation to protocol requests and refuses replies that arrive after the caller's request expires. `ide:format` consumes `code-format.executor` and explicitly chooses the `ide` provider; it requires the hub to be enabled and never applies edits through a separate command path.
 
 `session.supports(method, editor)` honours dynamic registrations, so ask it rather than reading `capabilities` yourself when a server registers capabilities after initialize. A dynamic registration adds support for its matching document selector; a registration for another language does not withdraw a static capability for the current editor. It also honours the feature switches below, which is why it is the only correct way to ask.
 
@@ -352,11 +354,11 @@ The `tree-view.file-operations` service supplies the user-operation boundary tha
 
 A tree-view service declaring `supportsStagedPreparations()` as `true` receives `{ commit({ isCurrent } = {}), dispose() }` from preparation callbacks that returned edits. The client collects the raw edits and captures open-document state before requesting them; it opens targets and preflights the combined edits only when tree-view commits after every listener, path and dialog guard passes. Cancellation and later vetoes dispose the stage without changing text. A changed relevant buffer, document generation or projection refuses the stage, while unrelated edits do not. Services without staging support accept empty preparations but must upgrade before applying real edits. The public `willCreateFiles`, `willRenameFiles` and `willDeleteFiles` methods retain their boolean results and explicitly commit preparation immediately; `willRenameFiles` needs no `updateReferences` flag when called directly.
 
-File-operation payloads may carry an `AbortSignal`. Aborting stops the wait locally, sends cancellation to the server and discards late replies even when the server ignores cancellation. `ide-client.fileOperationPreparationTimeout` bounds the whole collection across matching servers, defaults to 30 seconds and accepts 1–3600 seconds. Manual cancellation stays quiet; a timeout or stale preparation reports its reason. Real text-edit targets remain open with unsaved changes for review, and empty edit entries require no editor or projection snapshot.
+File-operation payloads may carry an `AbortSignal`. Aborting stops the wait locally, sends cancellation to the server and discards late replies even when the server ignores cancellation. `ide.fileOperationPreparationTimeout` bounds the whole collection across matching servers, defaults to 30 seconds and accepts 1–3600 seconds. Manual cancellation stays quiet; a timeout or stale preparation reports its reason. Real text-edit targets remain open with unsaved changes for review, and empty edit entries require no editor or projection snapshot.
 
 ## Progress
 
-`ide-client` owns the optional `busy-signal` integration for every adapter and custom server. Adapters do not consume that service themselves. The client tracks server startup and common finite language requests, adding a fallback description when either remains pending after 400 ms; an operation that settles sooner adds no fallback message. Persistent `workspace/diagnostic` subscriptions have no fallback indicator and appear only while the server reports work. Responses, errors and cancellation clear request activity, while stopping or losing a session clears every operation it owns.
+`ide` owns the optional `busy-signal` integration for every adapter and custom server. Adapters do not consume that service themselves. The client tracks server startup and common finite language requests, adding a fallback description when either remains pending after 400 ms; an operation that settles sooner adds no fallback message. Persistent `workspace/diagnostic` subscriptions have no fallback indicator and appear only while the server reports work. Responses, errors and cancellation clear request activity, while stopping or losing a session clears every operation it owns.
 
 The client supplies `workDoneToken` during `initialize` and for supported language requests whose server capability declares `workDoneProgress: true`. The server can describe those operations with standard `$/progress` begin, report and end notifications. Partial results also use `$/progress`, but remain routed to their result consumer rather than appearing as work-done activity.
 
@@ -411,14 +413,16 @@ type ManagedServerDescriptor =
     };
 ```
 
-Everything lands in `<configDir>/language-servers/<adapter.id>/`, one directory per adapter whatever the source. The installed copy is handed back on `context.managedServer`, so `resolveServer` reads one field rather than knowing that layout:
+Everything lands in `<configDir>/language-servers/<adapter.id>/`, one directory per adapter whatever the source. The installed copy is available lazily through `context.getManagedServer()`, so `resolveServer` delegates the lookup until the resolver needs the managed source:
 
 ```js
 async resolveServer(context) {
   const selected = await context.resolver.select({
     configuredPath: lumine.config.get("my-package.serverPath"),
-    managedPath: context.managedServer?.binaryPath,
-    managedVersion: context.managedServer?.version,
+    managed: () => {
+      const installed = context.getManagedServer();
+      return installed ? { path: installed.binaryPath, version: installed.version } : null;
+    },
     kind: "executable",
     names: ["my-langserver"],
     signal: context.signal,
@@ -565,7 +569,7 @@ The `features` field on the adapter object is the fallback for an adapter with n
 
 The provided service object belongs to one activation and remains stable during it. Deactivation invalidates all retained methods with `AbortError`; reactivation publishes a new object. Consumers must return their edge's disposable and reacquire the service after replacement. A late callback from an earlier edge cannot register adapters or mutate the new manager.
 
-`registerAdapter` returns a `Disposable` that unregisters that exact adapter object and stops every current or in-flight session it owns — return it directly from `consumeIdeClient`, as in the example. `stop(session)` first removes its whole logical server from routing, cancels restart and retry work, and then waits for all of its process generations to stop. Sessions are also stopped when `ide-client` deactivates, so an adapter needs no shutdown logic of its own.
+`registerAdapter` returns a `Disposable` that unregisters that exact adapter object and stops every current or in-flight session it owns — return it directly from `consumeIde`, as in the example. `stop(session)` first removes its whole logical server from routing, cancels restart and retry work, and then waits for all of its process generations to stop. Sessions are also stopped when `ide` deactivates, so an adapter needs no shutdown logic of its own.
 
 That holds for a window reload too, which never deactivates a package: the servers are killed as the window goes away rather than asked to shut down, since no LSP round trip can finish at that point. Do not add an unload handler of your own — a language server is a child process, and one left running is orphaned for the life of the machine.
 

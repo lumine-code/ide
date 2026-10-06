@@ -25,7 +25,7 @@ describe("Staged file operation preparations", () => {
   afterEach(async () => {
     await manager.deactivate();
     for (const editor of editors) editor.destroy();
-    lumine.config.unset("ide-client.fileOperationPreparationTimeout");
+    lumine.config.unset("ide.fileOperationPreparationTimeout");
     fs.rmSync(directory, { recursive: true, force: true });
   });
 
@@ -179,7 +179,7 @@ describe("Staged file operation preparations", () => {
   });
 
   it("keeps an oversized timeout inside the timer's supported range", async () => {
-    lumine.config.set("ide-client.fileOperationPreparationTimeout", 1000000000);
+    lumine.config.set("ide.fileOperationPreparationTimeout", 1000000000);
     sessionFor(() => new Promise(() => {}));
     const pending = manager.prepareRenameFiles(payload());
     const delay = window.setTimeout.calls.mostRecent().args[1];
@@ -320,7 +320,7 @@ describe("Staged file operation preparations", () => {
   for (const kind of ["Create", "Rename", "Delete"]) {
     for (const stalled of ["first", "second"]) {
       it(`bounds the whole ${kind.toLowerCase()} preparation while the ${stalled} server stalls`, async () => {
-        lumine.config.set("ide-client.fileOperationPreparationTimeout", 1);
+        lumine.config.set("ide.fileOperationPreparationTimeout", 1);
         const editor = await open(`timeout-${kind}-${stalled}.test`);
         const firstReply = deferred();
         const secondReply = deferred();

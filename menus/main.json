@@ -4,57 +4,57 @@
       "label": "Packages",
       "submenu": [
         {
-          "label": "IDE Client",
+          "label": "IDE",
           "submenu": [
             {
               "label": "Servers",
-              "command": "ide-client:servers"
+              "command": "ide:servers"
             },
             {
               "label": "Manage Servers",
-              "command": "ide-client:manage-servers"
+              "command": "ide:manage-servers"
             },
             {
               "label": "Restart",
-              "command": "ide-client:restart"
+              "command": "ide:restart"
             },
             {
               "label": "Show Log",
-              "command": "ide-client:show-log"
+              "command": "ide:show-log"
             },
             {
               "label": "Open Custom Servers File",
-              "command": "ide-client:open-custom-servers-file"
+              "command": "ide:open-custom-servers-file"
             },
             {
               "type": "separator"
             },
             {
               "label": "Toggle Problems",
-              "command": "ide-client:toggle-problems"
+              "command": "ide:toggle-problems"
             },
             {
               "label": "Format",
-              "command": "ide-client:format"
+              "command": "ide:format"
             },
             {
               "type": "separator"
             },
             {
               "label": "Fold Server Ranges",
-              "command": "ide-client:fold-server-ranges"
+              "command": "ide:fold-server-ranges"
             },
             {
               "label": "Expand Selection Range",
-              "command": "ide-client:expand-selection-range"
+              "command": "ide:expand-selection-range"
             },
             {
               "label": "Select Linked Ranges",
-              "command": "ide-client:select-linked-ranges"
+              "command": "ide:select-linked-ranges"
             },
             {
               "label": "Color Presentation…",
-              "command": "ide-client:color-presentation"
+              "command": "ide:color-presentation"
             }
           ]
         }

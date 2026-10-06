@@ -70,7 +70,7 @@ describe("exclusive adapter controller lifecycle", () => {
       manager.didExitProcess(session);
     }
     await manager.deactivate();
-    lumine.config.unset("ide-client.preferredServers");
+    lumine.config.unset("ide.preferredServers");
   });
   it("validates group and finite priority fields", () => {
     expect(() =>
@@ -96,7 +96,7 @@ describe("exclusive adapter controller lifecycle", () => {
     expect(first.state).toBe("stopped");
     expect(manager.adaptersForEditor(editor)).toEqual([b]);
     expect(await manager.ensureSession(a, root, { editor })).toBeNull();
-    lumine.config.set("ide-client.preferredServers", ["a"]);
+    lumine.config.set("ide.preferredServers", ["a"]);
     manager.adapterSelectionChanged();
     const third = await manager.ensureSession(a, root, { editor });
     expect(second.state).toBe("stopped");

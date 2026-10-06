@@ -273,7 +273,7 @@ describe("InstallApi", () => {
         return { version: "1.0.0", binary: "custom" };
       });
       await managed.install("ide-custom");
-      expect(manager.adapterContext(hooked, scratch).managedServer.version).toBe("1.0.0");
+      expect(manager.adapterContext(hooked, scratch).getManagedServer().version).toBe("1.0.0");
     });
 
     it("refuses a hook that does not say what to launch", async () => {

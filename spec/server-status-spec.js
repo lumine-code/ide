@@ -1,6 +1,6 @@
 const { publishSession } = require("./helpers/session-fixtures");
 
-describe("ide-client status-bar item", () => {
+describe("ide status-bar item", () => {
   let main, view, tiles;
 
   const fakeStatusBar = () => ({
@@ -37,9 +37,9 @@ describe("ide-client status-bar item", () => {
   };
 
   beforeEach(async () => {
-    lumine.config.set("ide-client.statusBar.enabled", true);
-    await lumine.packages.activatePackage("ide-client");
-    main = lumine.packages.getActivePackage("ide-client").mainModule;
+    lumine.config.set("ide.statusBar.enabled", true);
+    await lumine.packages.activatePackage("ide");
+    main = lumine.packages.getActivePackage("ide").mainModule;
     tiles = [];
     main.consumeStatusBar(fakeStatusBar());
     view = main.serverStatus;
@@ -47,7 +47,7 @@ describe("ide-client status-bar item", () => {
   });
 
   afterEach(async () => {
-    await lumine.packages.deactivatePackage("ide-client");
+    await lumine.packages.deactivatePackage("ide");
   });
 
   it("stays in place while no server is running", () => {
@@ -130,11 +130,11 @@ describe("ide-client status-bar item", () => {
 
   it("stays hidden while the setting is off", () => {
     addSession(stubSession("running"));
-    lumine.config.set("ide-client.statusBar.enabled", false);
+    lumine.config.set("ide.statusBar.enabled", false);
     flush();
     expect(view.element.style.display).toBe("none");
 
-    lumine.config.set("ide-client.statusBar.enabled", true);
+    lumine.config.set("ide.statusBar.enabled", true);
     flush();
     expect(view.element.style.display).toBe("");
   });

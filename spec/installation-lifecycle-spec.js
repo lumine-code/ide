@@ -585,7 +585,8 @@ describe("managed installation ownership", () => {
     await managed.install(adapter.id, { version: "1.0.0" });
     fs.rmSync(payloadPath());
     expect(() => managed.installFor(adapter)).toThrowError(/installation-test.*server\.js/i);
-    expect(() => manager.adapterContext(adapter, scratch)).toThrowError(/reinstall|install again/i);
+    const context = manager.adapterContext(adapter, scratch);
+    expect(context.getManagedServer).toThrowError(/reinstall|install again/i);
   });
 
   it("reports a corrupt install record and preserves it for recovery", async () => {

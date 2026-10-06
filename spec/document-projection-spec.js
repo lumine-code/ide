@@ -1003,7 +1003,7 @@ describe("AST document projections", () => {
       path.join(lumine.packages.resolvePackagePath("ide-basedpyright"), "lib", "server"),
     );
     const launch = await resolveServer(
-      { rootPath: directory, resolver: manager.serverResolver },
+      { rootPath: directory, resolver: manager.serverResolver, getManagedServer: () => null },
       "",
     );
     session = new ServerSession(
@@ -1072,7 +1072,10 @@ describe("AST document projections", () => {
             : { analysis: { typeCheckingMode: "basic", diagnosticMode: "openFilesOnly" } },
       },
       directory,
-      await resolveServer({ rootPath: directory, resolver: manager.serverResolver }, ""),
+      await resolveServer(
+        { rootPath: directory, resolver: manager.serverResolver, getManagedServer: () => null },
+        "",
+      ),
     );
     await session.start();
     await session.openEditor(editor);

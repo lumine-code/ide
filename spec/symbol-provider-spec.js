@@ -185,7 +185,7 @@ describe("symbol services", () => {
       getPath: () => path.join(root, "source.js"),
     };
     await expectAsync(
-      provider.getDocumentSymbols(editor, { sourceId: "ide-client:js", timeoutMs: 5 }),
+      provider.getDocumentSymbols(editor, { sourceId: "ide:js", timeoutMs: 5 }),
     ).toBeRejectedWithError("Symbol request timed out");
     finish([]);
   });
@@ -198,7 +198,7 @@ describe("symbol services", () => {
     };
     spyOn(manager, "activeSessionsForEditor").and.resolveTo([]);
     expect(provider.getDocumentSymbolSources(editor)[0].state).toBe("ready");
-    expect(await provider.getDocumentSymbols(editor, { sourceId: "ide-client:js" })).toBeNull();
+    expect(await provider.getDocumentSymbols(editor, { sourceId: "ide:js" })).toBeNull();
     expect(session.request).not.toHaveBeenCalled();
   });
 
@@ -256,12 +256,12 @@ describe("symbol services", () => {
     spyOn(manager, "activeSessionsForEditor").and.throwError("must not wait for servers");
     const sources = provider.getDocumentSymbolSources(editor);
     expect(sources.map(({ id, state }) => [id, state])).toEqual([
-      ["ide-client:ready", "ready"],
-      ["ide-client:starting", "starting"],
-      ["ide-client:unsupported", "unavailable"],
+      ["ide:ready", "ready"],
+      ["ide:starting", "starting"],
+      ["ide:unsupported", "unavailable"],
     ]);
     expect(sources[0]).toEqual({
-      id: "ide-client:ready",
+      id: "ide:ready",
       name: "ready",
       shortLabel: "LS",
       score: 1,
@@ -282,19 +282,17 @@ describe("symbol services", () => {
       getPath: () => path.join(root, "source.js"),
     };
     spyOn(manager, "activeSessionsForEditor").and.resolveTo([first, second]);
-    expect(
-      (await provider.getDocumentSymbols(editor, { sourceId: "ide-client:second" }))[0].name,
-    ).toBe("second");
+    expect((await provider.getDocumentSymbols(editor, { sourceId: "ide:second" }))[0].name).toBe(
+      "second",
+    );
     expect(first.request).not.toHaveBeenCalled();
-    expect(
-      await provider.getDocumentSymbols(editor, { sourceId: "ide-client:missing" }),
-    ).toBeNull();
+    expect(await provider.getDocumentSymbols(editor, { sourceId: "ide:missing" })).toBeNull();
     expect(
       await provider.getDocumentSymbols(editor, { sourceId: "symbol-tree-sitter" }),
     ).toBeNull();
     expect(await provider.getDocumentSymbols(editor)).toBeNull();
     second.capabilities.documentSymbolProvider = false;
-    expect(await provider.getDocumentSymbols(editor, { sourceId: "ide-client:second" })).toBeNull();
+    expect(await provider.getDocumentSymbols(editor, { sourceId: "ide:second" })).toBeNull();
     expect(second.request.calls.count()).toBe(1);
   });
 
@@ -311,13 +309,12 @@ describe("symbol services", () => {
       getPath: () => path.join(root, "source.js"),
     };
     expect(
-      provider
-        .getDocumentSymbolSources(editor)
-        .find(({ id }) => id === "ide-client:custom:disabled").state,
+      provider.getDocumentSymbolSources(editor).find(({ id }) => id === "ide:custom:disabled")
+        .state,
     ).toBe("unavailable");
     spyOn(manager, "activeSessionsForEditor").and.resolveTo([disabled, enabled]);
     expect(
-      await provider.getDocumentSymbols(editor, { sourceId: "ide-client:custom:disabled" }),
+      await provider.getDocumentSymbols(editor, { sourceId: "ide:custom:disabled" }),
     ).toBeNull();
     expect(enabled.request).not.toHaveBeenCalled();
   });
@@ -338,7 +335,7 @@ describe("symbol services", () => {
     spyOn(session, "openEditor").and.throwError("must not open a foreign document");
     expect(manager.adaptersForEditor(host)).toEqual([session.adapter]);
     expect(provider.getDocumentSymbolSources(host)).toEqual([]);
-    expect(await provider.getDocumentSymbols(host, { sourceId: "ide-client:html" })).toBeNull();
+    expect(await provider.getDocumentSymbols(host, { sourceId: "ide:html" })).toBeNull();
     expect(manager.activeSessionsForEditor).not.toHaveBeenCalled();
     expect(session.openEditor).not.toHaveBeenCalled();
     expect(session.request).not.toHaveBeenCalled();
@@ -360,18 +357,18 @@ describe("symbol services", () => {
       getGrammar: () => ({ scopeName }),
       getPath: () => path.join(root, "source.js"),
     };
-    expect(provider.getDocumentSymbolSources(editor)[0].id).toBe("ide-client:js");
-    expect((await provider.getDocumentSymbols(editor, { sourceId: "ide-client:js" }))[0].name).toBe(
+    expect(provider.getDocumentSymbolSources(editor)[0].id).toBe("ide:js");
+    expect((await provider.getDocumentSymbols(editor, { sourceId: "ide:js" }))[0].name).toBe(
       "native",
     );
     scopeName = "source.gfm";
     expect(provider.getDocumentSymbolSources(editor)).toEqual([]);
-    expect(await provider.getDocumentSymbols(editor, { sourceId: "ide-client:js" })).toBeNull();
+    expect(await provider.getDocumentSymbols(editor, { sourceId: "ide:js" })).toBeNull();
     expect(session.request.calls.count()).toBe(1);
     scopeName = "source.js";
     session.adapter.documentSymbolScopes = [];
     expect(provider.getDocumentSymbolSources(editor)).toEqual([]);
-    expect(await provider.getDocumentSymbols(editor, { sourceId: "ide-client:js" })).toBeNull();
+    expect(await provider.getDocumentSymbols(editor, { sourceId: "ide:js" })).toBeNull();
     expect(session.request.calls.count()).toBe(1);
   });
 
@@ -395,7 +392,7 @@ describe("symbol services", () => {
       getGrammar: () => ({ scopeName }),
       getPath: () => path.join(root, "source.html"),
     };
-    const pending = provider.getDocumentSymbols(editor, { sourceId: "ide-client:html" });
+    const pending = provider.getDocumentSymbols(editor, { sourceId: "ide:html" });
     scopeName = "source.gfm";
     ready([session]);
     expect(await pending).toBeNull();
@@ -421,7 +418,7 @@ describe("symbol services", () => {
     expect(provider.getDocumentSymbolSources(editor)[0].state).toBe("unavailable");
     session.documents.set(C.uriKey(uri), { editor, uri, subscriptions: { dispose() {} } });
     expect(provider.getDocumentSymbolSources(editor)[0].state).toBe("ready");
-    await provider.getDocumentSymbols(editor, { sourceId: "ide-client:cell" });
+    await provider.getDocumentSymbols(editor, { sourceId: "ide:cell" });
     expect(session.request.calls.first().args[1].textDocument.uri).toBe(uri);
     const changed = jasmine.createSpy("changed");
     provider.onDidInvalidateDocumentSymbols(changed);
@@ -430,7 +427,7 @@ describe("symbol services", () => {
     expect(changed).toHaveBeenCalledWith({ editor });
     const host = { ...editor, getGrammar: () => ({ scopeName: "source.gfm" }) };
     expect(provider.getDocumentSymbolSources(host)).toEqual([]);
-    expect(await provider.getDocumentSymbols(host, { sourceId: "ide-client:cell" })).toBeNull();
+    expect(await provider.getDocumentSymbols(host, { sourceId: "ide:cell" })).toBeNull();
     expect(session.request.calls.count()).toBe(1);
   });
 

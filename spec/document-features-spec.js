@@ -335,7 +335,7 @@ describe("DocumentFeatures", () => {
     const item = model.update.calls.mostRecent().args[0].items[0];
     expect(item.presentation).toBe(presentation);
     expect(host.show).toHaveBeenCalled();
-    await listOptions.commands["ide-client:apply-color-presentation"].didDispatch({
+    await listOptions.commands["ide:apply-color-presentation"].didDispatch({
       detail: { item },
     });
     expect(manager.applyWorkspaceEdit).toHaveBeenCalledWith(

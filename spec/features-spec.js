@@ -246,7 +246,7 @@ describe("feature switches", () => {
       const session = sessionFor(adapterFor("ide-a"), { documentSymbolProvider: true }, symbols);
       const found = await new SymbolProvider(managerWith(session)).getDocumentSymbols(
         stubEditor(),
-        { sourceId: "ide-client:ide-a" },
+        { sourceId: "ide:ide-a" },
       );
       expect(found.map(({ name }) => name)).toEqual(["thing"]);
       expect(found[0].position).toEqual([0, 0]);
@@ -300,10 +300,10 @@ describe("feature switches", () => {
       const provider = new SymbolProvider(managerWith(referencesOnly, symbolsOnly));
       const editor = stubEditor();
       expect(
-        provider.getDocumentSymbolSources(editor).find(({ id }) => id === "ide-client:ide-b").state,
+        provider.getDocumentSymbolSources(editor).find(({ id }) => id === "ide:ide-b").state,
       ).toBe("ready");
       expect(
-        provider.getDocumentSymbolSources(editor).find(({ id }) => id === "ide-client:ide-a").state,
+        provider.getDocumentSymbolSources(editor).find(({ id }) => id === "ide:ide-a").state,
       ).toBe("unavailable");
       expect(await provider.canProvideDefinitions(editor)).toBe(false);
     });
@@ -332,8 +332,8 @@ describe("diagnostics switch", () => {
   const push = (excerpt) => pushFor(FILE, excerpt);
 
   beforeEach(async () => {
-    await lumine.packages.activatePackage("ide-client");
-    main = lumine.packages.getActivePackage("ide-client").mainModule;
+    await lumine.packages.activatePackage("ide");
+    main = lumine.packages.getActivePackage("ide").mainModule;
     manager = main.manager;
     spyOn(lumine.grammars, "selectGrammarAsync").and.resolveTo({ scopeName: "source.js" });
     adapter = adapterFor("ide-a");
@@ -352,7 +352,7 @@ describe("diagnostics switch", () => {
     registration.dispose();
     lumine.config.unset("ide-a.features.diagnostics");
     lumine.config.unset("ide-a.features.diagnostics", { scopeSelector: ".source.js" });
-    await lumine.packages.deactivatePackage("ide-client");
+    await lumine.packages.deactivatePackage("ide");
   });
 
   it("publishes what a server reports", async () => {

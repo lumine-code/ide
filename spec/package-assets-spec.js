@@ -1,7 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 
-describe("ide-client package assets", () => {
+describe("ide package assets", () => {
   const manifest = require("../package.json");
 
   it("ships one grouped Packages submenu for every workspace command", () => {
@@ -10,7 +10,7 @@ describe("ide-client package assets", () => {
     expect(Object.keys(menu)).toEqual(["menu"]);
     expect(menu.menu[0].label).toBe("Packages");
     const packageMenu = menu.menu[0].submenu[0];
-    expect(packageMenu.label).toBe("IDE Client");
+    expect(packageMenu.label).toBe("IDE");
     const groups = [[]];
     for (const item of packageMenu.submenu) {
       if (item.type === "separator") groups.push([]);
@@ -18,18 +18,18 @@ describe("ide-client package assets", () => {
     }
     expect(groups).toEqual([
       [
-        "ide-client:servers",
-        "ide-client:manage-servers",
-        "ide-client:restart",
-        "ide-client:show-log",
-        "ide-client:open-custom-servers-file",
+        "ide:servers",
+        "ide:manage-servers",
+        "ide:restart",
+        "ide:show-log",
+        "ide:open-custom-servers-file",
       ],
-      ["ide-client:toggle-problems", "ide-client:format"],
+      ["ide:toggle-problems", "ide:format"],
       [
-        "ide-client:fold-server-ranges",
-        "ide-client:expand-selection-range",
-        "ide-client:select-linked-ranges",
-        "ide-client:color-presentation",
+        "ide:fold-server-ranges",
+        "ide:expand-selection-range",
+        "ide:select-linked-ranges",
+        "ide:color-presentation",
       ],
     ]);
     expect(packageMenu.submenu.at(-1).label).toBe("Color Presentation…");

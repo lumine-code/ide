@@ -253,10 +253,8 @@ describe("CompletionProvider item mapping", () => {
   it("strikes through a deprecated item", async () => {
     // The 3.15 tag and the boolean it replaced both mean the same thing, and
     // servers in the field still send either.
-    expect((await suggestionFor({ label: "old", tags: [1] })).className).toBe("ide-client-strike");
-    expect((await suggestionFor({ label: "old", deprecated: true })).className).toBe(
-      "ide-client-strike",
-    );
+    expect((await suggestionFor({ label: "old", tags: [1] })).className).toBe("ide-strike");
+    expect((await suggestionFor({ label: "old", deprecated: true })).className).toBe("ide-strike");
     expect((await suggestionFor({ label: "current" })).className).toBeUndefined();
     // Tag 1 is the only deprecation tag; anything else must not strike.
     expect((await suggestionFor({ label: "current", tags: [2] })).className).toBeUndefined();

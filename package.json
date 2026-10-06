@@ -1,8 +1,8 @@
 {
-  "name": "ide-client",
+  "name": "ide",
   "author": "lumine-code",
   "version": "1.0.0",
-  "description": "Language Server Protocol client infrastructure.",
+  "description": "Language Server Protocol hub infrastructure.",
   "keywords": [
     "lsp",
     "language-server",
@@ -10,9 +10,9 @@
     "diagnostics",
     "completion"
   ],
-  "repository": "https://github.com/lumine-code/ide-client",
+  "repository": "https://github.com/lumine-code/ide",
   "bugs": {
-    "url": "https://github.com/lumine-code/ide-client/issues"
+    "url": "https://github.com/lumine-code/ide/issues"
   },
   "license": "MIT",
   "main": "./lib/main",
@@ -96,9 +96,9 @@
     }
   },
   "providedServices": {
-    "ide-client": {
+    "ide": {
       "versions": {
-        "1.0.0": "provideIdeClient"
+        "1.0.0": "provideIde"
       }
     },
     "autocomplete.provider": {

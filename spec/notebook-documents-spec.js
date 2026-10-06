@@ -170,7 +170,7 @@ describe("NotebookDocuments against a fake server", () => {
     notebooks = new NotebookDocuments(manager);
     manager.setNotebookDocuments(notebooks);
     editors = [];
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "ide-client-nb-"));
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "ide-nb-"));
     notebookPath = path.join(tempDir, "nb.ipynb");
   });
 

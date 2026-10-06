@@ -1,8 +1,8 @@
-# ide-client
+# ide
 
-Language Server Protocol client infrastructure.
+Language Server Protocol hub infrastructure.
 
-Starts language servers lazily when matching editors open and exposes UI-independent sessions to other packages through the `ide-client` service.
+Coordinates language-server adapters, starts sessions lazily when matching editors open, and exposes shared language features through the `ide` service.
 
 ## Features
 
@@ -17,7 +17,7 @@ Starts language servers lazily when matching editors open and exposes UI-indepen
 
 ## Installation
 
-To install `ide-client` search for it in the Install pane of the Lumine settings, or run the command `lumine --install lumine-code/ide-client`.
+To install `ide` search for it in the Install pane of the Lumine settings, or run the command `lumine --install lumine-code/ide`.
 
 Install the separate `file-operations` package if language servers should be allowed to create, rename or delete files through `WorkspaceEdit`. Without it, text edits and all other language features continue to work, while resource operations are not advertised.
 
@@ -25,44 +25,44 @@ Install the separate `file-operations` package if language servers should be all
 
 Commands available in `lumine-workspace`:
 
-- `ide-client:servers`: list the running language servers and act on one of them,
-- `ide-client:manage-servers`: list the language servers the editor can install and act on one of them,
-- `ide-client:restart`: restart the language servers for the active editor,
-- `ide-client:toggle-problems`: open the linter panel with the server diagnostics,
-- `ide-client:format`: format the active document through `code-format`, choosing its language-server provider,
-- `ide-client:show-log`: open the active server's log in a new editor,
-- `ide-client:open-custom-servers-file`: open the custom servers configuration file,
-- `ide-client:fold-server-ranges`: fold every range the active file's language server reports,
-- `ide-client:expand-selection-range`: expand each selection to the next parent range from the language server,
-- `ide-client:select-linked-ranges`: select every range linked to the symbol under the cursor,
-- `ide-client:color-presentation`: choose and apply a language-server spelling for the color under the cursor.
+- `ide:servers`: list the running language servers and act on one of them,
+- `ide:manage-servers`: list the language servers the editor can install and act on one of them,
+- `ide:restart`: restart the language servers for the active editor,
+- `ide:toggle-problems`: open the linter panel with the server diagnostics,
+- `ide:format`: format the active document through `code-format`, choosing its language-server provider,
+- `ide:show-log`: open the active server's log in a new editor,
+- `ide:open-custom-servers-file`: open the custom servers configuration file,
+- `ide:fold-server-ranges`: fold every range the active file's language server reports,
+- `ide:expand-selection-range`: expand each selection to the next parent range from the language server,
+- `ide:select-linked-ranges`: select every range linked to the symbol under the cursor,
+- `ide:color-presentation`: choose and apply a language-server spelling for the color under the cursor.
 
-Commands available in `.ide-client-session-menu`:
+Commands available in `.ide-session-menu`:
 
-- `ide-client:show-details`: show what the selected server reports about itself,
-- `ide-client:restart-server`: restart the selected server without leaving the list,
-- `ide-client:stop-server`: stop the selected server until a matching editor opens again,
-- `ide-client:show-server-log`: open the selected server's log in a new editor,
-- `ide-client:show-problems`: open the linter panel with the diagnostics of every server.
+- `ide:show-details`: show what the selected server reports about itself,
+- `ide:restart-server`: restart the selected server without leaving the list,
+- `ide:stop-server`: stop the selected server until a matching editor opens again,
+- `ide:show-server-log`: open the selected server's log in a new editor,
+- `ide:show-problems`: open the linter panel with the diagnostics of every server.
 
-Commands available in `.ide-client-managed-servers`:
+Commands available in `.ide-managed-servers`:
 
-- `ide-client:install-server`: download and install the selected server,
-- `ide-client:update-server`: install the newest release of the selected server,
-- `ide-client:uninstall-server`: remove the copy the editor installed,
-- `ide-client:check-server-updates`: look up the newest release of every installable server.
+- `ide:install-server`: download and install the selected server,
+- `ide:update-server`: install the newest release of the selected server,
+- `ide:uninstall-server`: remove the copy the editor installed,
+- `ide:check-server-updates`: look up the newest release of every installable server.
 
-Commands available in `.ide-client-color-presentations`:
+Commands available in `.ide-color-presentations`:
 
-- `ide-client:apply-color-presentation`: apply the selected color spelling.
+- `ide:apply-color-presentation`: apply the selected color spelling.
 
 ## Usage
 
-Language servers are registered by adapter packages that consume the `ide-client` service:
+Language servers are registered by adapter packages that consume the `ide` service:
 
 ```js
-consumeIdeClient(ideClient) {
-  return ideClient.registerAdapter({
+consumeIde(ide) {
+  return ide.registerAdapter({
     id: "example",
     displayName: "Example Language Server",
     grammarScopes: ["source.example"],
@@ -77,9 +77,9 @@ Commands are spawned directly with `shell: false`; arguments belong in `args`. T
 
 An adapter that serves embedded fragments declares `documentSymbolScopes` as the subset of `grammarScopes` whose whole document it owns. For example, an HTML server can complete markup in Markdown while offering document symbols only in HTML and its templates. Omitted metadata defaults to `grammarScopes`; an empty array exposes no document symbol source. Source enumeration and exact document requests enforce this ownership without changing workspace symbols, definitions or other language features.
 
-Text edits from `WorkspaceEdit` are applied to versioned editor buffers by this package. Filesystem inspection and resource operations are delegated to the optional `file-operations` infrastructure instead; `ide-client` never falls back to reading or mutating paths itself. The executor's lifecycle lets the hub retarget buffers and replace private staging noise with durable LSP file events, and a session advertises create, rename and delete support only when that executor was available during initialize.
+Text edits from `WorkspaceEdit` are applied to versioned editor buffers by this package. Filesystem inspection and resource operations are delegated to the optional `file-operations` infrastructure instead; `ide` never falls back to reading or mutating paths itself. The executor's lifecycle lets the hub retarget buffers and replace private staging noise with durable LSP file events, and a session advertises create, rename and delete support only when that executor was available during initialize.
 
-Tree-view reference updates are staged until every operation guard accepts the move. Cancelling the prompt, changing its path or rejecting a later guard discards them. Language-server preparation for creation, reference updates and deletion has a shared 30-second deadline; adjust `ide-client.fileOperationPreparationTimeout` from 1 to 3600 seconds. A timeout cancels the operation and reports its reason. Reference edits stay unsaved in editor buffers, and files with real edits stay open for review; empty edit entries never open files.
+Tree-view reference updates are staged until every operation guard accepts the move. Cancelling the prompt, changing its path or rejecting a later guard discards them. Language-server preparation for creation, reference updates and deletion has a shared 30-second deadline; adjust `ide.fileOperationPreparationTimeout` from 1 to 3600 seconds. A timeout cancels the operation and reports its reason. Reference edits stay unsaved in editor buffers, and files with real edits stay open for review; empty edit entries never open files.
 
 With `busy-signal` installed, the client reports server startup and common finite language requests when they take longer than 400 ms, even when the server does not report progress. Standard LSP progress supplies the server's own description of its work, including background indexing when the server reports it. Persistent workspace diagnostic subscriptions appear only while the server reports work. Several operations can run at once without clearing each other's indicators; each clears when it finishes or its session ends. Running servers themselves remain listed in the separate IDE status-bar item.
 
@@ -87,7 +87,7 @@ Every registered language-server adapter appears in `linter:toggle-linter`, even
 
 ## Configuration
 
-Any language server can be wired without an adapter package through `language-servers.json` in the configuration directory (open it with `ide-client:open-custom-servers-file`). Each entry needs a `command` and grammar `scopes`; `args`, `languageId`, `sessionScope`, `transport`, `env`, `initializationOptions`, `settings`, and `features` are optional. `settings` feeds both `workspace/configuration` lookups and the configuration push after startup, and `features` switches individual capabilities off — an adapter package holds the same switches in its own settings, but a custom server has no settings page to put them on:
+Any language server can be wired without an adapter package through `language-servers.json` in the configuration directory (open it with `ide:open-custom-servers-file`). Each entry needs a `command` and grammar `scopes`; `args`, `languageId`, `sessionScope`, `transport`, `env`, `initializationOptions`, `settings`, and `features` are optional. `settings` feeds both `workspace/configuration` lookups and the configuration push after startup, and `features` switches individual capabilities off — an adapter package holds the same switches in its own settings, but a custom server has no settings page to put them on:
 
 ```json
 {
@@ -108,25 +108,25 @@ Saving the file restarts exactly the servers whose entries changed.
 Tweak the server list, its details step, and the status-bar item from your stylesheet. The item stays the color of the status bar whatever the servers are doing, but it carries `has-starting` and `has-failed` so you can say otherwise:
 
 ```css
-.ide-client-session-state {
+.ide-session-state {
   font-weight: bold;
 }
-.ide-client-session-detail .ide-client-session-value {
+.ide-session-detail .ide-session-value {
   color: var(--text-color-subtle);
 }
-.ide-client-server-status .ide-client-server-label {
+.ide-server-status .ide-server-label {
   color: var(--text-color-info);
 }
-.ide-client-server-status.has-failed .ide-client-server-label {
+.ide-server-status.has-failed .ide-server-label {
   color: var(--text-color-error);
 }
 ```
 
 ## Services
 
-- [`ide-client`](docs/ide-client.md): provided to adapter packages to register language servers and reach sessions.
+- [`ide`](docs/ide.md): provided to adapter packages to register language servers and reach sessions.
 - `autocomplete.provider`: provided to autocomplete to serve language-server completions.
-- `symbol.document-provider`: list applicable language-server sources through `getDocumentSymbolSources(editor, { signal })` and retrieve the exact `sourceId` through `getDocumentSymbols(editor, { sourceId, signal, timeoutMs })`. Each adapter has a stable `ide-client:<adapter.id>` source ID, its full display name, the `LS` label and score `1`; sources report ready, starting or unavailable state. Session, adapter, notebook, capability and feature changes invalidate affected document results.
+- `symbol.document-provider`: list applicable language-server sources through `getDocumentSymbolSources(editor, { signal })` and retrieve the exact `sourceId` through `getDocumentSymbols(editor, { sourceId, signal, timeoutMs })`. Each adapter has a stable `ide:<adapter.id>` source ID, its full display name, the `LS` label and score `1`; sources report ready, starting or unavailable state. Session, adapter, notebook, capability and feature changes invalidate affected document results.
 - `symbol.workspace-provider`: merge workspace symbols from supporting servers already running for the requested project roots. Searching never starts a server or opens a document; unavailable, starting, partial and failed sources are reported separately from an empty successful search.
 - `symbol.definition-provider`: resolve the symbol at the requested position through the first supporting language server.
 - `context-help.provider`: provided to serve documentation at a buffer position in tooltips and the documentation panel.
@@ -142,7 +142,7 @@ Tweak the server list, its details step, and the status-bar item from your style
 - `inlay-hints.provider`: provided to the inlay hints UI to serve the labels a server computes for the visible rows.
 - `semantic-tokens.provider`: provided to the semantic tokens UI to serve the server's classification of the identifiers.
 - `hyperclick.provider`: provided to hyperclick to follow language-server document links, resolving lazy targets only when clicked.
-- `code-format.executor`: consumed to run `ide-client:format` through the same guarded editor formatting path as the hub's commands and save hook. Install and enable `code-format` to use this command.
+- `code-format.executor`: consumed to run `ide:format` through the same guarded editor formatting path as the hub's commands and save hook. Install and enable `code-format` to use this command.
 - `file-operations.executor`: consumed to preflight and execute the create, rename and delete steps in a server `WorkspaceEdit`.
 - `linter.registry`: consumed to push server diagnostics into the linter UI, one delegate per server.
 - `busy-signal`: consumed to surface server startup, slow requests and server work-done progress on the busy indicator.

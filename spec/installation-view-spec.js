@@ -66,9 +66,9 @@ describe("managed installation view", () => {
       expect(row.state).toBe("failed");
       expect(row.detail).toMatch(/Reinstall or remove/);
       const commands = view.list.getAvailableActions().map((action) => action.command);
-      expect(commands).toContain("ide-client:install-server");
-      expect(commands).toContain("ide-client:uninstall-server");
-      await view.list.runAction("ide-client:uninstall-server");
+      expect(commands).toContain("ide:install-server");
+      expect(commands).toContain("ide:uninstall-server");
+      await view.list.runAction("ide:uninstall-server");
       expect(fs.existsSync(target)).toBe(false);
       expect(managed.installFor(adapter)).toBe(null);
       expect(view.list.getItems()[0].entry.broken).toBeUndefined();
@@ -79,7 +79,7 @@ describe("managed installation view", () => {
     const target = path.join(storageRoot, adapter.id);
     fs.writeFileSync(path.join(target, "install.json"), "{broken");
     await show();
-    await view.list.runAction("ide-client:install-server");
+    await view.list.runAction("ide:install-server");
     expect(managed.installFor(adapter).version).toBe("1.0.0");
     expect(fs.readFileSync(path.join(target, "server.js"), "utf8")).toBe("healthy server");
     expect(view.list.getItems()[0].entry.broken).toBeUndefined();
@@ -105,10 +105,10 @@ describe("managed installation view", () => {
     expect(row.state).toBe(null);
     expect(row.detail).toMatch(/installed.*version unknown/);
     const commands = view.list.getAvailableActions().map((action) => action.command);
-    expect(commands).toContain("ide-client:update-server");
-    expect(commands).toContain("ide-client:uninstall-server");
-    expect(commands).not.toContain("ide-client:install-server");
-    await view.list.runAction("ide-client:uninstall-server");
+    expect(commands).toContain("ide:update-server");
+    expect(commands).toContain("ide:uninstall-server");
+    expect(commands).not.toContain("ide:install-server");
+    await view.list.runAction("ide:uninstall-server");
     expect(managed.installFor(adapter)).toBe(null);
     expect(fs.existsSync(path.join(storageRoot, adapter.id))).toBe(false);
   });
@@ -175,8 +175,8 @@ describe("installation notifications across package lifetimes", () => {
   let main, managed, scratch;
   beforeEach(async () => {
     jasmine.useRealClock();
-    await lumine.packages.activatePackage("ide-client");
-    main = lumine.packages.getActivePackage("ide-client").mainModule;
+    await lumine.packages.activatePackage("ide");
+    main = lumine.packages.getActivePackage("ide").mainModule;
     const CurrentManagedServers = require("../lib/managed-servers");
     scratch = fs.mkdtempSync(path.join(os.tmpdir(), "ide-installation-notifications-"));
     managed = new CurrentManagedServers(main.manager, {
@@ -186,14 +186,14 @@ describe("installation notifications across package lifetimes", () => {
     main.manager.setManagedServers(managed);
   });
   afterEach(async () => {
-    await lumine.packages.deactivatePackage("ide-client");
+    await lumine.packages.deactivatePackage("ide");
     fs.rmSync(scratch, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
   const installWithGate = () => {
     const entered = deferred();
     const release = deferred();
     let stage;
-    main.provideIdeClient().registerAdapter({
+    main.provideIde().registerAdapter({
       id: "notification-lifetime-test",
       displayName: "Notification Test Server",
       grammarScopes: ["source.notification-lifetime-test"],
@@ -215,7 +215,7 @@ describe("installation notifications across package lifetimes", () => {
     const failure = spyOn(lumine.notifications, "addError");
     const caller = new AbortController();
     const install = main
-      .provideIdeClient()
+      .provideIde()
       .installServer("notification-lifetime-test", { signal: caller.signal })
       .catch((error) => error);
     await gate.entered.promise;
@@ -232,14 +232,14 @@ describe("installation notifications across package lifetimes", () => {
     const success = spyOn(lumine.notifications, "addSuccess");
     const failure = spyOn(lumine.notifications, "addError");
     const install = main
-      .provideIdeClient()
+      .provideIde()
       .installServer("notification-lifetime-test")
       .catch((error) => error);
     await gate.entered.promise;
-    await lumine.packages.deactivatePackage("ide-client");
+    await lumine.packages.deactivatePackage("ide");
     expect((await install).name).toBe("AbortError");
-    await lumine.packages.activatePackage("ide-client");
-    main = lumine.packages.getActivePackage("ide-client").mainModule;
+    await lumine.packages.activatePackage("ide");
+    main = lumine.packages.getActivePackage("ide").mainModule;
     gate.release.resolve();
     await conditionPromise(gate.cleaned);
     expect(success).not.toHaveBeenCalled();

@@ -208,7 +208,7 @@ describe("ServerSession against a fake server", () => {
     jasmine.useRealClock();
     manager = new LanguageServerManager();
     sessions = [];
-    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "ide-client-"));
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "ide-"));
   });
 
   afterEach(async () => {
@@ -220,7 +220,7 @@ describe("ServerSession against a fake server", () => {
     const session = await startSession();
     const received = await receivedMessages(session);
     const initialize = received.find((message) => message.method === "initialize");
-    expect(initialize.params.workDoneToken).toMatch(/^ide-client-start-/);
+    expect(initialize.params.workDoneToken).toMatch(/^ide-start-/);
     expect(initialize.params.capabilities.general.positionEncodings).toEqual(["utf-16"]);
     expect(initialize.params.capabilities.textDocument.inlayHint).toBeUndefined();
     expect(initialize.params.capabilities.textDocument.semanticTokens).toBeUndefined();
@@ -634,7 +634,7 @@ describe("ServerSession against a fake server", () => {
     const provider = new SymbolProvider(manager);
 
     const symbols = await provider.getDocumentSymbols(editor, {
-      sourceId: `ide-client:${session.adapter.id}`,
+      sourceId: `ide:${session.adapter.id}`,
       signal: new AbortController().signal,
     });
     const received = await receivedMessages(session);
@@ -2939,7 +2939,7 @@ describe("ServerSession against a fake server", () => {
       ({ method }) => method === "textDocument/hover",
     );
     expect(requests.length).toBe(2);
-    expect(requests[0].params.workDoneToken).toMatch(/^ide-client-request-/);
+    expect(requests[0].params.workDoneToken).toMatch(/^ide-request-/);
     expect(requests[1].params.workDoneToken).not.toBe(requests[0].params.workDoneToken);
     expect(params.workDoneToken).toBeUndefined();
     expect(session.clientProgressTokens.size).toBe(0);
@@ -3022,7 +3022,7 @@ describe("ServerSession against a fake server", () => {
     const received = await receivedMessages(session);
     expect(
       received.find(({ method }) => method === "workspace/executeCommand").params.workDoneToken,
-    ).toMatch(/^ide-client-request-/);
+    ).toMatch(/^ide-request-/);
     expect(
       received.find(({ method }) => method === "textDocument/onTypeFormatting").params
         .workDoneToken,

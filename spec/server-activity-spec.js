@@ -253,7 +253,7 @@ describe("Language server progress adapter", () => {
   });
 
   it("ignores generated client tokens even after their retirement tombstone is evicted", () => {
-    for (const token of ["ide-client-request-evicted", "ide-client-start-evicted"]) {
+    for (const token of ["ide-request-evicted", "ide-start-evicted"]) {
       send(manager, progress(session, token, { kind: "begin", title: "Too late" }));
     }
     advanceClock(400);

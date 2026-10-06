@@ -21,7 +21,7 @@ export interface ServerSelection<T = unknown> {
   path: string;
   kind: ServerCandidateKind;
   source: ServerCandidateSource;
-  /** Present only for a managed selection with a supplied managedVersion. */
+  /** Present only for a managed selection with a supplied version. */
   version?: string;
   /** The result of the adapter's validate callback, when it returned a value. */
   data?: T;
@@ -37,8 +37,14 @@ export interface ServerFindOptions {
 }
 export interface ServerSelectOptions<T = unknown> extends ServerFindOptions {
   configuredPath?: string | null;
-  managedPath?: string | null;
-  managedVersion?: string | null;
+  /** Read only after configuredPath is absent; corruption errors propagate. */
+  managed?: (context: {
+    signal?: AbortSignal;
+  }) =>
+    | { path: string; version?: string | null }
+    | null
+    | undefined
+    | Promise<{ path: string; version?: string | null } | null | undefined>;
   /** A lazy bundled lookup runs only when configured and managed paths are absent. */
   bundledPath?: string | (() => string | null | undefined | Promise<string | null | undefined>);
   /** The candidate kind for managed, bundled and discovered paths; defaults to executable. */
@@ -87,8 +93,8 @@ export interface ServerResolutionContext {
   projectPaths: string[];
   configDirPath: string;
   managedStoragePath: string;
-  /** The copy the editor installed for this adapter, or null when there is none. */
-  managedServer: ManagedServerInstall | null;
+  /** Lazy installed-copy lookup; caches the result or error for this startup attempt. */
+  getManagedServer(): ManagedServerInstall | null;
   /** Shared path selection and launch helpers, guarded by this startup attempt. */
   resolver: ServerResolver;
   /** Aborted when startup is cancelled or superseded. */

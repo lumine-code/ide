@@ -1,7 +1,7 @@
 const path = require("path");
 const { CompositeDisposable, Disposable } = require("lumine");
 
-describe("ide-client linter registry lifecycle", () => {
+describe("ide linter registry lifecycle", () => {
   let main, registrations, converters, sessions;
   const adapterFor = (id, options = {}) => ({
     id: `test:${id}`,
@@ -46,8 +46,8 @@ describe("ide-client linter registry lifecycle", () => {
   };
 
   beforeEach(async () => {
-    await lumine.packages.activatePackage("ide-client");
-    main = lumine.packages.getActivePackage("ide-client").mainModule;
+    await lumine.packages.activatePackage("ide");
+    main = lumine.packages.getActivePackage("ide").mainModule;
     converters = require("../lib/converters");
     registrations = new CompositeDisposable();
     sessions = new Map();
@@ -55,7 +55,7 @@ describe("ide-client linter registry lifecycle", () => {
 
   afterEach(async () => {
     registrations.dispose();
-    await lumine.packages.deactivatePackage("ide-client");
+    await lumine.packages.deactivatePackage("ide");
   });
 
   it("registers existing adapters before their first report, including disabled diagnostics", () => {
@@ -195,7 +195,7 @@ describe("ide-client linter registry lifecycle", () => {
     const service = registry();
     const edge = connect(service);
 
-    await lumine.packages.deactivatePackage("ide-client");
+    await lumine.packages.deactivatePackage("ide");
 
     expect(service.delegates[0].dispose).toHaveBeenCalledTimes(1);
     edge.dispose();

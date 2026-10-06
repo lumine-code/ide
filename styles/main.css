@@ -1,6 +1,6 @@
 /* The session-state chip carries no rule of its own: it is a `.badge`, sized
    and colored by the UI theme, inside a select-list trailing block that brings
-   its own spacing. `.ide-client-session-state` stays on it as the hook a user
+   its own spacing. `.ide-session-state` stays on it as the hook a user
    stylesheet can target. */
 
 /* A detail row puts its value in the same trailing block, so the values line up
@@ -10,10 +10,10 @@
    Cap the block and let the value end in its own ellipsis. `min-width` is what
    makes the cap bite — a flex item will not shrink below its content without
    it. */
-.ide-client-session-detail .trailing-block {
+.ide-session-detail .trailing-block {
   max-width: 75%;
 }
-.ide-client-session-value {
+.ide-session-value {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -25,20 +25,20 @@
    and `has-failed` stay on the element as hooks for a user stylesheet. The bar
    supplies the tile's box and the theme its look, so only the failed-count
    layout is left here. */
-.ide-client-server-status .ide-client-server-failed {
+.ide-server-status .ide-server-failed {
   margin-left: 0.4em;
 }
-.ide-client-server-status .ide-client-server-failed[hidden] {
+.ide-server-status .ide-server-failed[hidden] {
   display: none;
 }
 
 /* The tooltip body is appended into `.tooltip-inner`, which centers its text. */
-.ide-client-server-tooltip {
+.ide-server-tooltip {
   text-align: left;
 }
 
 /* A deprecated completion item, in the autocomplete list. Nothing else shares
    that span, so text-decoration is exactly right here. */
-.ide-client-strike {
+.ide-strike {
   text-decoration: line-through;
 }

@@ -190,19 +190,19 @@ describe("LanguageServerManager adapters", () => {
       displayName: "Test",
       grammarScopes: ["source.test"],
       resolveServer: async () => null,
-      settingsKeyPaths: ["ide-client"],
-      restartKeyPaths: ["ide-client.trace"],
+      settingsKeyPaths: ["ide"],
+      restartKeyPaths: ["ide.trace"],
     };
     spyOn(manager, "restartAdapter").and.returnValue(Promise.resolve([]));
     spyOn(manager, "pushSettingsForAdapter");
     const registration = manager.registerAdapter(adapter);
 
-    lumine.config.set("ide-client.trace", "messages");
+    lumine.config.set("ide.trace", "messages");
 
     expect(manager.restartAdapter).toHaveBeenCalledWith(adapter, { reportErrors: true });
     expect(manager.pushSettingsForAdapter).not.toHaveBeenCalled();
     registration.dispose();
-    lumine.config.unset("ide-client.trace");
+    lumine.config.unset("ide.trace");
   });
   it("pushes the newest dynamic settings once after a slow start reaches running", async () => {
     const rootPath = path.join(path.sep, "tmp", "project");
@@ -1594,12 +1594,12 @@ describe("LanguageServerManager restart", () => {
     ...fields,
   });
 
-  afterEach(() => lumine.config.unset("ide-client.restartLimit"));
+  afterEach(() => lumine.config.unset("ide.restartLimit"));
 
   it("says so once when a server has exited more often than it may be restarted", () => {
     // Giving up was silent: the retries stopped, the status item read "failed",
     // and the reason sat unread in the log.
-    lumine.config.set("ide-client.restartLimit", 2);
+    lumine.config.set("ide.restartLimit", 2);
     const session = failedSession({ failureCount: 2 });
     registerFakeSession(manager, session);
     const exhausted = [];
@@ -1614,7 +1614,7 @@ describe("LanguageServerManager restart", () => {
   });
 
   it("keeps quiet while it still has restarts left", () => {
-    lumine.config.set("ide-client.restartLimit", 3);
+    lumine.config.set("ide.restartLimit", 3);
     const session = failedSession();
     registerFakeSession(manager, session);
     const exhausted = [];
@@ -1630,7 +1630,7 @@ describe("LanguageServerManager restart", () => {
     // "failed", the details read "restarted 1×", and the limit was never
     // reached however often the server died. Driven through the real restart,
     // since carrying the run across the replacements is the whole fix.
-    lumine.config.set("ide-client.restartLimit", 3);
+    lumine.config.set("ide.restartLimit", 3);
     spyOn(ServerSession.prototype, "start").and.callFake(async function () {
       // What a server that dies during the handshake leaves behind: a failed
       // session, and a rejection for whoever asked for the start.
@@ -1701,7 +1701,7 @@ describe("LanguageServerManager restart", () => {
     // A crash after hours of work is not the same incident as the one before
     // it, and counting them together would retire a server over an afternoon
     // weeks earlier.
-    lumine.config.set("ide-client.restartLimit", 3);
+    lumine.config.set("ide.restartLimit", 3);
     const session = failedSession({ failureCount: 3, runningSince: Date.now() });
     registerFakeSession(manager, session);
     const exhausted = [];
@@ -1715,7 +1715,7 @@ describe("LanguageServerManager restart", () => {
   });
 
   it("holds a server that only just started to its remaining retries", () => {
-    lumine.config.set("ide-client.restartLimit", 3);
+    lumine.config.set("ide.restartLimit", 3);
     const session = failedSession({ failureCount: 3, runningSince: Date.now() });
     registerFakeSession(manager, session);
     const exhausted = [];
@@ -1731,7 +1731,7 @@ describe("LanguageServerManager restart", () => {
     // A start that fails is reported by the exit handler and by the caller that
     // awaited it. Two timers for one session would double the servers with
     // every round.
-    lumine.config.set("ide-client.restartLimit", 3);
+    lumine.config.set("ide.restartLimit", 3);
     const session = failedSession();
     registerFakeSession(manager, session);
 
@@ -1747,7 +1747,7 @@ describe("LanguageServerManager restart", () => {
   });
 
   it("drops a pending retry when the session is forgotten", () => {
-    lumine.config.set("ide-client.restartLimit", 3);
+    lumine.config.set("ide.restartLimit", 3);
     const session = failedSession();
     registerFakeSession(manager, session);
     const controller = manager.controllerForSession(session);

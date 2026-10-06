@@ -427,8 +427,10 @@ describe("ManagedServers", () => {
     it("hands the install to resolveServer through the adapter context", async () => {
       const adapter = await install();
       const context = manager.adapterContext(adapter, scratch);
-      expect(context.managedServer.version).toBe("1.2.3");
-      expect(context.managedServer.binaryPath).toBe(path.join(storageRoot, "ide-test", "testlang"));
+      expect(context.getManagedServer().version).toBe("1.2.3");
+      expect(context.getManagedServer().binaryPath).toBe(
+        path.join(storageRoot, "ide-test", "testlang"),
+      );
       // The pre-existing field keeps its meaning: where this adapter's files go.
       expect(context.managedStoragePath.endsWith(path.join("language-servers", "ide-test"))).toBe(
         true,
@@ -440,7 +442,7 @@ describe("ManagedServers", () => {
       await managed.uninstall("ide-test");
       expect(managed.installFor(adapter)).toBe(null);
       expect(fs.existsSync(path.join(storageRoot, "ide-test"))).toBe(false);
-      expect(manager.adapterContext(adapter, scratch).managedServer).toBe(null);
+      expect(manager.adapterContext(adapter, scratch).getManagedServer()).toBe(null);
     });
 
     it("reports a record whose payload has gone missing", async () => {

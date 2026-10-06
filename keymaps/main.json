@@ -1,25 +1,25 @@
 {
   "lumine-workspace": {
-    "alt-i": "ide-client:servers"
+    "alt-i": "ide:servers"
   },
 
   // Actions of the server list. Their explicit action descriptors reuse these
-  // command bindings as presentation metadata. `ide-client:show-details` is
+  // command bindings as presentation metadata. `ide:show-details` is
   // deliberately absent: it is the list's primary Enter action.
-  ".ide-client-session-menu lumine-text-editor[mini]": {
-    "alt-r": "ide-client:restart-server",
-    "alt-delete": "ide-client:stop-server",
-    "alt-l": "ide-client:show-server-log",
-    "alt-p": "ide-client:show-problems"
+  ".ide-session-menu lumine-text-editor[mini]": {
+    "alt-r": "ide:restart-server",
+    "alt-delete": "ide:stop-server",
+    "alt-l": "ide:show-server-log",
+    "alt-p": "ide:show-problems"
   },
 
   // Actions of the Manage Servers list, on the same terms. Enter runs whichever
   // of install and update the selected row declares primary; both stay directly
   // bound as well.
-  ".ide-client-managed-servers lumine-text-editor[mini]": {
-    "alt-i": "ide-client:install-server",
-    "alt-u": "ide-client:update-server",
-    "alt-delete": "ide-client:uninstall-server",
-    "alt-c": "ide-client:check-server-updates"
+  ".ide-managed-servers lumine-text-editor[mini]": {
+    "alt-i": "ide:install-server",
+    "alt-u": "ide:update-server",
+    "alt-delete": "ide:uninstall-server",
+    "alt-c": "ide:check-server-updates"
   }
 }

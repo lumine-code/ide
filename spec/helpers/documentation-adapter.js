@@ -3,7 +3,7 @@ module.exports = () => {
   const pack = lumine.packages.loadPackage("ide-basedpyright");
   pack.requireMainModule();
   let adapter;
-  const registration = pack.mainModule.consumeIdeClient({
+  const registration = pack.mainModule.consumeIde({
     registerAdapter(value) {
       adapter = value;
       return { dispose() {} };

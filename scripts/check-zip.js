@@ -8,7 +8,7 @@ const extract = require("../lib/extract-zip");
 
 (async () => {
   const base = fs.realpathSync.native(os.tmpdir());
-  const scratch = fs.mkdtempSync(path.join(base, "ide-client-zip-check-"));
+  const scratch = fs.mkdtempSync(path.join(base, "ide-zip-check-"));
   try {
     const archive = path.join(scratch, "server.nupkg.zip");
     const zip = new ZipFile();
@@ -33,10 +33,7 @@ const extract = require("../lib/extract-zip");
       `ZIP extraction, Unicode paths, component stripping and file permissions passed on ${process.platform}.`,
     );
   } finally {
-    if (
-      path.dirname(scratch) === base &&
-      path.basename(scratch).startsWith("ide-client-zip-check-")
-    )
+    if (path.dirname(scratch) === base && path.basename(scratch).startsWith("ide-zip-check-"))
       await fs.promises.rm(scratch, {
         recursive: true,
         force: true,

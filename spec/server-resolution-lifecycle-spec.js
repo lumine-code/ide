@@ -56,6 +56,7 @@ describe("server resolution ownership", () => {
     const restart = manager.restartAdapter(adapter);
     await flush();
     expect(firstContext.signal.aborted).toBe(true);
+    expect(firstContext.getManagedServer).toThrowMatching((error) => error.name === "AbortError");
     expect(() => firstContext.resolver.findExecutables("anything")).toThrowMatching(
       (error) => error.name === "AbortError",
     );

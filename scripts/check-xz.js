@@ -43,8 +43,8 @@ const compressRaw = async (archive, raw) => {
 
 (async () => {
   const base = fs.realpathSync.native(os.tmpdir());
-  const scratch = fs.mkdtempSync(path.join(base, "ide-client-xz-check-"));
-  if (path.dirname(scratch) !== base || !path.basename(scratch).startsWith("ide-client-xz-check-"))
+  const scratch = fs.mkdtempSync(path.join(base, "ide-xz-check-"));
+  if (path.dirname(scratch) !== base || !path.basename(scratch).startsWith("ide-xz-check-"))
     throw new Error("Refusing an unexpected XZ scratch cleanup.");
   try {
     const source = path.join(scratch, "source");

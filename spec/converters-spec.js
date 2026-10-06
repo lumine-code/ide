@@ -1,7 +1,7 @@
 const path = require("path");
 const C = require("../lib/converters");
 
-describe("ide-client converters", () => {
+describe("ide converters", () => {
   it("round trips file paths through encoded file URIs", () => {
     const filePath = path.resolve("a folder", "file #1.ts");
     expect(C.uriToPath(C.pathToUri(filePath))).toBe(filePath);

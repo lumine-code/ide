@@ -1,6 +1,6 @@
 const { publishSession } = require("./helpers/session-fixtures");
 
-describe("ide-client item actions", () => {
+describe("ide item actions", () => {
   let main, list;
 
   function nextAction(owner) {
@@ -16,12 +16,12 @@ describe("ide-client item actions", () => {
     jasmine.attachToDOM(lumine.views.getView(lumine.workspace));
     // No activation commands here, so a plain activation resolves; it also
     // loads the package keymap the actions list reads.
-    main = (await lumine.packages.activatePackage("ide-client")).mainModule;
+    main = (await lumine.packages.activatePackage("ide")).mainModule;
     list = main.sessionMenu.serverList;
   });
 
   afterEach(async () => {
-    await lumine.packages.deactivatePackage("ide-client");
+    await lumine.packages.deactivatePackage("ide");
   });
 
   it("derives its session actions from the command registrations and the keymap", async () => {
@@ -39,17 +39,17 @@ describe("ide-client item actions", () => {
     const actions = list.getAvailableActions();
     const byCommand = new Map(actions.map((action) => [action.command, action]));
 
-    const restart = byCommand.get("ide-client:restart-server");
+    const restart = byCommand.get("ide:restart-server");
     expect(restart.name).toBe("Restart Server");
     expect(restart.description).toBe("Restart the selected server without leaving the list.");
     expect(restart.keystrokes).toEqual(["alt-r"]);
 
-    expect(byCommand.get("ide-client:stop-server").keystrokes).toEqual(["alt-delete"]);
-    expect(byCommand.get("ide-client:show-server-log").keystrokes).toEqual(["alt-l"]);
-    expect(byCommand.get("ide-client:show-problems").keystrokes).toEqual(["alt-p"]);
-    expect(byCommand.get("ide-client:show-problems").context).toBe("dialog");
-    expect(byCommand.get("ide-client:show-details").keystrokes).toEqual(["enter"]);
-    expect(byCommand.get("ide-client:show-details").primary).toBe(true);
+    expect(byCommand.get("ide:stop-server").keystrokes).toEqual(["alt-delete"]);
+    expect(byCommand.get("ide:show-server-log").keystrokes).toEqual(["alt-l"]);
+    expect(byCommand.get("ide:show-problems").keystrokes).toEqual(["alt-p"]);
+    expect(byCommand.get("ide:show-problems").context).toBe("dialog");
+    expect(byCommand.get("ide:show-details").keystrokes).toEqual(["enter"]);
+    expect(byCommand.get("ide:show-details").primary).toBe(true);
 
     // Every action explains itself with more than a restated title.
     for (const action of actions) {
@@ -60,17 +60,17 @@ describe("ide-client item actions", () => {
     // in-list names are not `restart`, `show-log` and `toggle-problems`.
     expect(byCommand.has("core:confirm")).toBe(false);
     expect(byCommand.has("select-list:actions")).toBe(false);
-    expect(byCommand.has("ide-client:servers")).toBe(false);
-    expect(byCommand.has("ide-client:restart")).toBe(false);
-    expect(byCommand.has("ide-client:show-log")).toBe(false);
-    expect(byCommand.has("ide-client:toggle-problems")).toBe(false);
+    expect(byCommand.has("ide:servers")).toBe(false);
+    expect(byCommand.has("ide:restart")).toBe(false);
+    expect(byCommand.has("ide:show-log")).toBe(false);
+    expect(byCommand.has("ide:toggle-problems")).toBe(false);
   });
 
   it("keeps only the session-wide action when no server is selected", async () => {
     await list.setItems([]);
 
     expect(list.getAvailableActions().map((action) => action.command)).toEqual([
-      "ide-client:show-problems",
+      "ide:show-problems",
     ]);
   });
 
@@ -94,26 +94,23 @@ describe("ide-client item actions", () => {
     };
 
     let actions = await selectEntry(null);
-    expect([...actions.keys()]).toEqual([
-      "ide-client:install-server",
-      "ide-client:check-server-updates",
-    ]);
-    expect(actions.get("ide-client:install-server").keystrokes).toEqual(["enter", "alt-i"]);
-    expect(actions.get("ide-client:install-server").primary).toBe(true);
-    expect(actions.get("ide-client:check-server-updates").context).toBe("dialog");
+    expect([...actions.keys()]).toEqual(["ide:install-server", "ide:check-server-updates"]);
+    expect(actions.get("ide:install-server").keystrokes).toEqual(["enter", "alt-i"]);
+    expect(actions.get("ide:install-server").primary).toBe(true);
+    expect(actions.get("ide:check-server-updates").context).toBe("dialog");
 
     actions = await selectEntry("1.0.0");
     expect([...actions.keys()]).toEqual([
-      "ide-client:update-server",
-      "ide-client:uninstall-server",
-      "ide-client:check-server-updates",
+      "ide:update-server",
+      "ide:uninstall-server",
+      "ide:check-server-updates",
     ]);
-    expect(actions.get("ide-client:update-server").keystrokes).toEqual(["enter", "alt-u"]);
-    expect(actions.get("ide-client:update-server").primary).toBe(true);
+    expect(actions.get("ide:update-server").keystrokes).toEqual(["enter", "alt-u"]);
+    expect(actions.get("ide:update-server").primary).toBe(true);
 
     managedList.selectNone();
     expect(managedList.getAvailableActions().map((action) => action.command)).toEqual([
-      "ide-client:check-server-updates",
+      "ide:check-server-updates",
     ]);
   });
 
@@ -142,13 +139,11 @@ describe("ide-client item actions", () => {
     const actionElement = actionList.getElement();
     expect(actionPanel.isVisible()).toBe(true);
     expect(lumine.workspace.getModalTrail()).toEqual(["Servers", "Actions"]);
-    expect(actionElement.classList.contains("ide-client-session-menu")).toBe(false);
-    expect(actionList.getItems().map(({ command }) => command)).toContain(
-      "ide-client:restart-server",
-    );
+    expect(actionElement.classList.contains("ide-session-menu")).toBe(false);
+    expect(actionList.getItems().map(({ command }) => command)).toContain("ide:restart-server");
 
     const finished = nextAction(list);
-    lumine.commands.dispatch(actionElement, "ide-client:restart-server");
+    lumine.commands.dispatch(actionElement, "ide:restart-server");
     expect((await finished).status).toBe("success");
 
     // Running an action returns to the server list first, so the handler finds

@@ -162,7 +162,7 @@ describe("RpcConnection", () => {
       fileWriter.on("data", (chunk) => fileWriter.chunks.push(chunk));
       const folder = path.join(
         os.tmpdir(),
-        "ide-client-cancellation-spec",
+        "ide-cancellation-spec",
         `${process.pid}-${Date.now()}`,
       );
       const fileConnection = new RpcConnection(fileReader, fileWriter, {
@@ -191,11 +191,7 @@ describe("RpcConnection", () => {
     });
 
     it("leaves foreign files in a pre-existing cancellation directory alone", async () => {
-      const folder = path.join(
-        os.tmpdir(),
-        "ide-client-cancellation-spec",
-        `foreign-${Date.now()}`,
-      );
+      const folder = path.join(os.tmpdir(), "ide-cancellation-spec", `foreign-${Date.now()}`);
       fs.mkdirSync(folder, { recursive: true });
       const foreign = path.join(folder, "settings.json");
       fs.writeFileSync(foreign, "keep");

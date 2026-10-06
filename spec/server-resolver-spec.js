@@ -17,13 +17,13 @@ describe("shared language server resolution", () => {
     return filename;
   };
   beforeEach(() => {
-    directory = fs.mkdtempSync(path.join(os.tmpdir(), "ide-client-resolver-"));
+    directory = fs.mkdtempSync(path.join(os.tmpdir(), "ide-resolver-"));
     resolver = createServerResolver();
   });
   afterEach(() => {
     if (
       path.dirname(directory) !== path.resolve(os.tmpdir()) ||
-      !path.basename(directory).startsWith("ide-client-resolver-")
+      !path.basename(directory).startsWith("ide-resolver-")
     )
       throw new Error("Refusing to remove an unexpected resolver test path");
     fs.rmSync(directory, { recursive: true, force: true });
@@ -31,23 +31,25 @@ describe("shared language server resolution", () => {
 
   it("selects an explicit server before evaluating other candidate sources", async () => {
     const configuredPath = file("configured");
+    const managed = jasmine.createSpy("managed").and.throwError("corrupt install record");
     const bundledPath = jasmine.createSpy("bundled");
     const candidates = jasmine.createSpy("discovered");
     const selected = await resolver.select({
       configuredPath,
-      managedPath: path.join(directory, "missing"),
+      managed,
       bundledPath,
       candidates,
     });
     expect(selected).toEqual({ path: configuredPath, kind: "executable", source: "configured" });
     expect(bundledPath).not.toHaveBeenCalled();
+    expect(managed).not.toHaveBeenCalled();
     expect(candidates).not.toHaveBeenCalled();
   });
   it("keeps broken explicit and managed selections authoritative", async () => {
     const bundledPath = jasmine.createSpy("bundled").and.returnValue(file("bundled.js"));
     for (const chosen of [
       { configuredPath: path.join(directory, "missing") },
-      { managedPath: path.join(directory, "missing") },
+      { managed: () => ({ path: path.join(directory, "missing") }) },
     ])
       await expectAsync(
         resolver.select({ ...chosen, kind: "node", bundledPath }),
@@ -59,15 +61,74 @@ describe("shared language server resolution", () => {
       bundledPath = file("bundled.js");
     const managed = await resolver.select({
       kind: "node",
-      managedPath,
-      managedVersion: "2.0",
+      managed: () => ({ path: managedPath, version: "2.0" }),
       bundledPath,
     });
     expect(managed.source).toBe("managed");
     expect((await resolver.launch(managed)).version).toBe("2.0");
-    const bundled = await resolver.select({ kind: "node", managedVersion: "2.0", bundledPath });
+    const bundled = await resolver.select({ kind: "node", managed: () => null, bundledPath });
     expect(bundled.source).toBe("bundled");
     expect((await resolver.launch(bundled)).version).toBeUndefined();
+  });
+  it("rejects an invalid explicit path before reading a corrupt managed installation", async () => {
+    const managed = jasmine.createSpy("managed").and.throwError("damaged install.json");
+    await expectAsync(
+      resolver.select({ configuredPath: path.join(directory, "missing"), managed }),
+    ).toBeRejectedWithError(/configured server path:.*ENOENT/);
+    expect(managed).not.toHaveBeenCalled();
+  });
+  it("preserves the selected managed failure without evaluating bundled or discovered sources", async () => {
+    const failure = new Error("damaged managed installation");
+    const bundledPath = jasmine.createSpy("bundled"),
+      candidates = jasmine.createSpy("discovered");
+    await expectAsync(
+      resolver.select({
+        managed: () => {
+          throw failure;
+        },
+        bundledPath,
+        candidates,
+      }),
+    ).toBeRejectedWith(failure);
+    expect(bundledPath).not.toHaveBeenCalled();
+    expect(candidates).not.toHaveBeenCalled();
+  });
+  it("accepts an asynchronous managed lookup with its path and version from one result", async () => {
+    const controller = new AbortController();
+    const managed = jasmine.createSpy("managed").and.callFake(async ({ signal }) => {
+      expect(signal).toBe(controller.signal);
+      return { path: file("managed-async.js"), version: "3.2.1" };
+    });
+    const selected = await resolver.select({ kind: "node", signal: controller.signal, managed });
+    expect(selected.version).toBe("3.2.1");
+    expect(selected.source).toBe("managed");
+    expect(managed).toHaveBeenCalledTimes(1);
+  });
+  it("refuses malformed managed candidates instead of falling back to the bundled server", async () => {
+    const bundledPath = jasmine.createSpy("bundled");
+    for (const candidate of [false, [], {}, { path: "" }, { path: file("managed"), version: 123 }])
+      await expectAsync(
+        resolver.select({ managed: () => candidate, bundledPath }),
+      ).toBeRejectedWithError(TypeError);
+    expect(bundledPath).not.toHaveBeenCalled();
+  });
+  it("cancels a stalled managed lookup and consumes its late rejection", async () => {
+    const controller = new AbortController();
+    let reject, entered;
+    const started = new Promise((resolve) => (entered = resolve));
+    const pending = resolver.select({
+      signal: controller.signal,
+      managed: ({ signal }) => {
+        expect(signal).toBe(controller.signal);
+        entered();
+        return new Promise((_resolve, fail) => (reject = fail));
+      },
+    });
+    await started;
+    controller.abort(new DOMException("cancelled managed lookup", "AbortError"));
+    await expectAsync(pending).toBeRejectedWithError(/cancelled managed lookup/);
+    reject(new Error("late lookup failure"));
+    await flushMicrotasks();
   });
   it("rejects directories and relative configured files", async () => {
     await expectAsync(resolver.select({ configuredPath: directory })).toBeRejectedWithError(
@@ -265,7 +326,7 @@ describe("shared language server resolution", () => {
   });
   it("preserves cancellation when a synchronous selection hook aborts and throws", async () => {
     const configuredPath = file("probe");
-    for (const hook of ["validate", "bundledPath", "candidates"]) {
+    for (const hook of ["validate", "managed", "bundledPath", "candidates"]) {
       const controller = new AbortController();
       const options = {
         signal: controller.signal,

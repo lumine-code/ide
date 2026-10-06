@@ -9,9 +9,7 @@ describe("adapter request and response normalization", () => {
   let root, manager, session, editor, uri;
   beforeEach(async () => {
     jasmine.useRealClock();
-    root = fs.mkdtempSync(
-      path.join(fs.realpathSync.native(os.tmpdir()), "ide-client-request-adapter-"),
-    );
+    root = fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), "ide-request-adapter-"));
     const file = path.join(root, "main.js");
     fs.writeFileSync(file, 'const text = "😀"; const value = 1;\n');
     uri = pathToFileURL(file).href;
@@ -51,10 +49,7 @@ describe("adapter request and response normalization", () => {
     await manager?.deactivate();
     editor?.destroy();
     const base = fs.realpathSync.native(os.tmpdir());
-    if (
-      path.dirname(root) !== base ||
-      !path.basename(root).startsWith("ide-client-request-adapter-")
-    )
+    if (path.dirname(root) !== base || !path.basename(root).startsWith("ide-request-adapter-"))
       throw new Error("Unsafe fixture cleanup");
     await fs.promises.rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });

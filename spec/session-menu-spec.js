@@ -1,6 +1,6 @@
 const { publishSession } = require("./helpers/session-fixtures");
 
-describe("ide-client session menu", () => {
+describe("ide session menu", () => {
   let main, menu;
 
   const stubSession = (state, id = "stub", rootPath = "/project", folders = [rootPath]) => ({
@@ -24,13 +24,13 @@ describe("ide-client session menu", () => {
   };
 
   beforeEach(async () => {
-    await lumine.packages.activatePackage("ide-client");
-    main = lumine.packages.getActivePackage("ide-client").mainModule;
+    await lumine.packages.activatePackage("ide");
+    main = lumine.packages.getActivePackage("ide").mainModule;
     menu = main.sessionMenu;
   });
 
   afterEach(async () => {
-    await lumine.packages.deactivatePackage("ide-client");
+    await lumine.packages.deactivatePackage("ide");
   });
 
   it("puts the state in the trailing block of the primary line", async () => {
@@ -42,7 +42,7 @@ describe("ide-client session menu", () => {
     const trailing = element.querySelector(".primary-line > .trailing-block");
     expect(trailing).not.toBe(null);
 
-    const badge = trailing.querySelector(".ide-client-session-state");
+    const badge = trailing.querySelector(".ide-session-state");
     expect(badge.textContent).toBe("running");
     // The name stays in the primary text, so the ellipsis truncates it and not
     // the state.
@@ -51,10 +51,10 @@ describe("ide-client session menu", () => {
 
   it("renders the state as a themed badge, one variant per state", async () => {
     const badgeFor = async (state) =>
-      (await render({ label: "stub Server", state })).querySelector(".ide-client-session-state");
+      (await render({ label: "stub Server", state })).querySelector(".ide-session-state");
 
     expect([...(await badgeFor("running")).classList]).toEqual([
-      "ide-client-session-state",
+      "ide-session-state",
       "badge",
       "badge-success",
     ]);
@@ -62,10 +62,7 @@ describe("ide-client session menu", () => {
     expect((await badgeFor("stopping")).classList.contains("badge-warning")).toBe(true);
     expect((await badgeFor("failed")).classList.contains("badge-error")).toBe(true);
     // An idle server gets the plain neutral pill, not a variant.
-    expect([...(await badgeFor("stopped")).classList]).toEqual([
-      "ide-client-session-state",
-      "badge",
-    ]);
+    expect([...(await badgeFor("stopped")).classList]).toEqual(["ide-session-state", "badge"]);
   });
 
   it("renders the root path as a second line the theme dims", async () => {
@@ -87,7 +84,7 @@ describe("ide-client session menu", () => {
 
     // The value carries its own class: the trailing block is floated and would
     // otherwise run a long command line off the edge of the card.
-    const value = element.querySelector(".trailing-block .ide-client-session-value");
+    const value = element.querySelector(".trailing-block .ide-session-value");
     expect(value.textContent).toBe("pyright-langserver --stdio");
   });
 
@@ -309,17 +306,15 @@ describe("ide-client session menu", () => {
       spyOn(main.manager, "restart").and.returnValue(Promise.resolve(second));
       await menu.serverList.selectIndex(1);
 
-      expect((await menu.serverList.runAction("ide-client:restart-server")).status).toBe("success");
+      expect((await menu.serverList.runAction("ide:restart-server")).status).toBe("success");
       expect(main.manager.restart).toHaveBeenCalledWith(second);
 
       spyOn(main.manager, "disconnect").and.returnValue(Promise.resolve());
-      expect((await menu.serverList.runAction("ide-client:stop-server")).status).toBe("success");
+      expect((await menu.serverList.runAction("ide:stop-server")).status).toBe("success");
       expect(main.manager.disconnect).toHaveBeenCalledWith(second);
 
       spyOn(main, "showLogForAdapter").and.returnValue(Promise.resolve());
-      expect((await menu.serverList.runAction("ide-client:show-server-log")).status).toBe(
-        "success",
-      );
+      expect((await menu.serverList.runAction("ide:show-server-log")).status).toBe("success");
       expect(main.showLogForAdapter).toHaveBeenCalledWith("zeta");
     });
 

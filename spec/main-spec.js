@@ -14,18 +14,18 @@ const fakeStatusBar = (tiles) => ({
 const makeBusySignal = require("./helpers/busy-signal");
 const { publishSession } = require("./helpers/session-fixtures");
 
-describe("ide-client package", () => {
+describe("ide package", () => {
   beforeEach(async () => {
-    await lumine.packages.activatePackage("ide-client");
+    await lumine.packages.activatePackage("ide");
   });
 
   afterEach(async () => {
-    await lumine.packages.deactivatePackage("ide-client");
+    await lumine.packages.deactivatePackage("ide");
   });
 
   it("exposes the versioned language-server service", () => {
-    const main = lumine.packages.getActivePackage("ide-client").mainModule;
-    const service = main.provideIdeClient();
+    const main = lumine.packages.getActivePackage("ide").mainModule;
+    const service = main.provideIde();
     expect(typeof service.registerAdapter).toBe("function");
     expect(typeof service.adaptersForEditor).toBe("function");
     expect(typeof service.onDidChangeAdapters).toBe("function");
@@ -41,26 +41,26 @@ describe("ide-client package", () => {
     expect(typeof service.didRenameFiles).toBe("function");
     expect(typeof service.didDeleteFiles).toBe("function");
     const hyperclick = main.provideHyperclick();
-    expect(hyperclick.providerName).toBe("ide-client");
+    expect(hyperclick.providerName).toBe("ide");
     expect(typeof hyperclick.getSuggestionForWord).toBe("function");
   });
 
   it("publishes one service per activation and refuses retained calls after reactivation", async () => {
-    let main = lumine.packages.getActivePackage("ide-client").mainModule;
-    const previous = main.provideIdeClient();
-    expect(main.provideIdeClient()).toBe(previous);
-    await lumine.packages.deactivatePackage("ide-client");
+    let main = lumine.packages.getActivePackage("ide").mainModule;
+    const previous = main.provideIde();
+    expect(main.provideIde()).toBe(previous);
+    await lumine.packages.deactivatePackage("ide");
     expect(() => previous.getSessions()).toThrowError(/no longer active/);
-    await lumine.packages.activatePackage("ide-client");
-    main = lumine.packages.getActivePackage("ide-client").mainModule;
-    const current = main.provideIdeClient();
+    await lumine.packages.activatePackage("ide");
+    main = lumine.packages.getActivePackage("ide").mainModule;
+    const current = main.provideIde();
     expect(current).not.toBe(previous);
     expect(() => previous.registerAdapter({})).toThrowError(/no longer active/);
     expect(current.getSessions()).toEqual([]);
   });
 
   it("cancels lazy server bootstrap instead of resuming a command in a later activation", async () => {
-    const main = lumine.packages.getActivePackage("ide-client").mainModule;
+    const main = lumine.packages.getActivePackage("ide").mainModule;
     let finish;
     const CustomServers = require("../lib/custom-servers");
     spyOn(CustomServers.prototype, "activate").and.callFake(
@@ -72,8 +72,8 @@ describe("ide-client package", () => {
     const resumed = jasmine.createSpy("resumed");
     const pending = main.ensureCustomServers().then(resumed, (error) => error);
     const command = main.withCustomServers(resumed);
-    await lumine.packages.deactivatePackage("ide-client");
-    await lumine.packages.activatePackage("ide-client");
+    await lumine.packages.deactivatePackage("ide");
+    await lumine.packages.activatePackage("ide");
     finish();
     const result = await pending;
     expect(result?.name).toBe("AbortError");
@@ -100,8 +100,8 @@ describe("ide-client package", () => {
     let main, service;
 
     beforeEach(() => {
-      main = lumine.packages.getActivePackage("ide-client").mainModule;
-      service = main.provideIdeClient();
+      main = lumine.packages.getActivePackage("ide").mainModule;
+      service = main.provideIde();
       lumine.notifications.clear();
     });
 
@@ -202,17 +202,17 @@ describe("ide-client package", () => {
     const commands = lumine.commands.findCommands({
       target: lumine.views.getView(lumine.workspace),
     });
-    expect(commands.map(({ name }) => name)).toContain("ide-client:toggle-problems");
-    expect(commands.map(({ name }) => name)).toContain("ide-client:restart");
-    expect(commands.map(({ name }) => name)).toContain("ide-client:servers");
-    expect(commands.map(({ name }) => name)).toContain("ide-client:fold-server-ranges");
-    expect(commands.map(({ name }) => name)).toContain("ide-client:expand-selection-range");
-    expect(commands.map(({ name }) => name)).toContain("ide-client:select-linked-ranges");
-    expect(commands.map(({ name }) => name)).toContain("ide-client:color-presentation");
+    expect(commands.map(({ name }) => name)).toContain("ide:toggle-problems");
+    expect(commands.map(({ name }) => name)).toContain("ide:restart");
+    expect(commands.map(({ name }) => name)).toContain("ide:servers");
+    expect(commands.map(({ name }) => name)).toContain("ide:fold-server-ranges");
+    expect(commands.map(({ name }) => name)).toContain("ide:expand-selection-range");
+    expect(commands.map(({ name }) => name)).toContain("ide:select-linked-ranges");
+    expect(commands.map(({ name }) => name)).toContain("ide:color-presentation");
   });
 
   it("satisfies the autocomplete provider contract", () => {
-    const main = lumine.packages.getActivePackage("ide-client").mainModule;
+    const main = lumine.packages.getActivePackage("ide").mainModule;
     const provider = main.provideAutocomplete();
     // autocomplete rejects a provider outright when these are misnamed, and
     // the rejection is only visible at runtime.
@@ -224,7 +224,7 @@ describe("ide-client package", () => {
   });
 
   it("publishes a stable autocomplete facade", () => {
-    const main = lumine.packages.getActivePackage("ide-client").mainModule;
+    const main = lumine.packages.getActivePackage("ide").mainModule;
     const first = main.provideAutocomplete();
 
     expect(main.provideAutocomplete()).toBe(first);
@@ -232,7 +232,7 @@ describe("ide-client package", () => {
   });
 
   it("publishes separate stable symbol facades without loading the providers", () => {
-    const main = lumine.packages.getActivePackage("ide-client").mainModule;
+    const main = lumine.packages.getActivePackage("ide").mainModule;
     spyOn(main, "ensureProviders").and.callThrough();
     const document = main.provideDocumentSymbolProvider();
     const workspace = main.provideWorkspaceSymbolProvider();
@@ -250,7 +250,7 @@ describe("ide-client package", () => {
   });
 
   it("keeps all four formatting eligibility checks behind the lazy facade", async () => {
-    const main = lumine.packages.getActivePackage("ide-client").mainModule;
+    const main = lumine.packages.getActivePackage("ide").mainModule;
     const canFormat = jasmine.createSpy("canFormat").and.resolveTo(true);
     spyOn(main, "ensureProviders").and.returnValue({ codeFormatProvider: { canFormat } });
     const services = [
@@ -272,7 +272,7 @@ describe("ide-client package", () => {
     let main, editors;
 
     beforeEach(() => {
-      main = lumine.packages.getActivePackage("ide-client").mainModule;
+      main = lumine.packages.getActivePackage("ide").mainModule;
       editors = [];
     });
 
@@ -291,7 +291,7 @@ describe("ide-client package", () => {
       await main.format({ target: lumine.views.getView(clicked) });
 
       expect(executor.formatEditor).toHaveBeenCalledWith(clicked, {
-        provider: "ide-client",
+        provider: "ide",
         reason: "manual",
         range: clicked.getBuffer().getRange(),
       });
@@ -351,7 +351,7 @@ describe("ide-client package", () => {
   });
 
   it("consumes a service name that no other provided service nests under", () => {
-    const { consumedServices } = lumine.packages.getLoadedPackage("ide-client").metadata;
+    const { consumedServices } = lumine.packages.getLoadedPackage("ide").metadata;
     // A service named "x.y" is stored at the key path ["x"]["y"], so it is
     // also handed to consumers of "x". Consuming both names would receive the
     // wrong value depending on registration order.
@@ -364,7 +364,7 @@ describe("ide-client package", () => {
   });
 
   it("prepares tree-view renames only when reference updates are requested", async () => {
-    const main = lumine.packages.getActivePackage("ide-client").mainModule;
+    const main = lumine.packages.getActivePackage("ide").mainModule;
     const callbacks = new Map();
     const service = { supportsStagedPreparations: () => true };
     for (const name of [
@@ -414,7 +414,7 @@ describe("ide-client package", () => {
 
     expect(did).toHaveBeenCalledWith(payload);
     const direct = spyOn(main.manager, "willRenameFiles").and.resolveTo(true);
-    expect(await main.provideIdeClient().willRenameFiles(payload)).toBe(true);
+    expect(await main.provideIde().willRenameFiles(payload)).toBe(true);
     expect(direct).toHaveBeenCalledOnceWith(payload);
     registration.dispose();
     expect(callbacks.size).toBe(0);
@@ -422,7 +422,7 @@ describe("ide-client package", () => {
 
   for (const hasEdits of [true, false]) {
     it(`${hasEdits ? "refuses edits" : "accepts empty preparations"} from a tree service without staging`, async () => {
-      const main = lumine.packages.getActivePackage("ide-client").mainModule;
+      const main = lumine.packages.getActivePackage("ide").mainModule;
       const callbacks = new Map();
       const service = {};
       for (const name of [
@@ -460,7 +460,7 @@ describe("ide-client package", () => {
   }
 
   it("hands the neutral file-operation executor to the manager", () => {
-    const main = lumine.packages.getActivePackage("ide-client").mainModule;
+    const main = lumine.packages.getActivePackage("ide").mainModule;
     const executor = { prepare() {} };
     const registration = main.consumeFileOperationsExecutor(executor);
 
@@ -470,7 +470,7 @@ describe("ide-client package", () => {
   });
 
   it("takes only the transient half of busy-signal", () => {
-    const main = lumine.packages.getActivePackage("ide-client").mainModule;
+    const main = lumine.packages.getActivePackage("ide").mainModule;
     const signal = makeBusySignal();
     const registration = main.consumeBusySignal({
       create: () => signal.create(),
@@ -492,7 +492,7 @@ describe("ide-client package", () => {
   });
 
   it("keeps current busy-signal attached when an older registration is disposed", () => {
-    const main = lumine.packages.getActivePackage("ide-client").mainModule;
+    const main = lumine.packages.getActivePackage("ide").mainModule;
     const oldSignal = makeBusySignal();
     const nextSignal = makeBusySignal();
     const oldRegistration = main.consumeBusySignal(oldSignal);
@@ -507,7 +507,7 @@ describe("ide-client package", () => {
   });
 
   it("keeps managed installation activity across service replacement", async () => {
-    const main = lumine.packages.getActivePackage("ide-client").mainModule;
+    const main = lumine.packages.getActivePackage("ide").mainModule;
     let installationChanged;
     const following = { dispose: jasmine.createSpy("stop following installation") };
     main.managedServers = {
@@ -544,7 +544,7 @@ describe("ide-client package", () => {
   });
 
   it("adds its status-bar item to the code-intelligence band", () => {
-    const main = lumine.packages.getActivePackage("ide-client").mainModule;
+    const main = lumine.packages.getActivePackage("ide").mainModule;
     const tiles = [];
     const registration = main.consumeStatusBar(fakeStatusBar(tiles));
     expect(tiles.length).toBe(1);
@@ -558,17 +558,17 @@ describe("ide-client package", () => {
   });
 
   it("removes the status-bar item on deactivation", async () => {
-    const main = lumine.packages.getActivePackage("ide-client").mainModule;
+    const main = lumine.packages.getActivePackage("ide").mainModule;
     const tiles = [];
     // The disposable consumeStatusBar returns belongs to the status-bar
     // package, so it never fires when this package deactivates.
     main.consumeStatusBar(fakeStatusBar(tiles));
-    await lumine.packages.deactivatePackage("ide-client");
+    await lumine.packages.deactivatePackage("ide");
     expect(tiles[0].destroyed).toBe(true);
   });
 
   it("publishes LSP diagnostics through linter.registry", () => {
-    const main = lumine.packages.getActivePackage("ide-client").mainModule;
+    const main = lumine.packages.getActivePackage("ide").mainModule;
     const adapter = {
       id: "test:linter-mapping",
       displayName: "Mapping Language Server",
@@ -620,7 +620,7 @@ describe("ide-client package", () => {
   });
 
   it("publishes workspace diagnostics for unopened files and preserves unchanged reports", async () => {
-    const main = lumine.packages.getActivePackage("ide-client").mainModule;
+    const main = lumine.packages.getActivePackage("ide").mainModule;
     const batches = [];
     const registration = main.consumeLinterRegistry(() => ({
       setMessages: (filePath, messages) => batches.push({ filePath, messages }),
@@ -663,7 +663,7 @@ describe("ide-client package", () => {
   });
 
   it("aggregates cell diagnostics per notebook and evicts cell by cell", () => {
-    const main = lumine.packages.getActivePackage("ide-client").mainModule;
+    const main = lumine.packages.getActivePackage("ide").mainModule;
     const C = require("../lib/converters");
     const delegate = {
       batches: [],
@@ -744,10 +744,10 @@ describe("ide-client package", () => {
   it("says why a server that keeps dying has stopped, and offers its log", async () => {
     // The whole point is that the reason is in the log and nothing said to look
     // there, so the notification is only useful if it carries the way in.
-    const main = lumine.packages.getActivePackage("ide-client").mainModule;
+    const main = lumine.packages.getActivePackage("ide").mainModule;
     spyOn(lumine.notifications, "addError");
     spyOn(main, "showLogForAdapter");
-    lumine.config.set("ide-client.restartLimit", 1);
+    lumine.config.set("ide.restartLimit", 1);
 
     const session = {
       adapter: { id: "ide-example", displayName: "Example Language Server" },
@@ -771,7 +771,7 @@ describe("ide-client package", () => {
 
     options.buttons[0].onDidClick();
     expect(main.showLogForAdapter).toHaveBeenCalledWith("ide-example");
-    lumine.config.unset("ide-client.restartLimit");
+    lumine.config.unset("ide.restartLimit");
   });
 
   const gaveUp = () => ({
@@ -780,7 +780,7 @@ describe("ide-client package", () => {
   });
 
   it("opens server logs with the plain-text grammar", async () => {
-    const main = lumine.packages.getActivePackage("ide-client").mainModule;
+    const main = lumine.packages.getActivePackage("ide").mainModule;
     await lumine.packages.activatePackage("language-text");
     spyOn(main.manager, "getLog").and.returnValue("server log");
 
@@ -793,7 +793,7 @@ describe("ide-client package", () => {
   // A notification button dismisses nothing on its own, and this banner sits
   // over the workspace center the log opens into.
   it("closes the banner it raised once the log it pointed at is open", async () => {
-    const main = lumine.packages.getActivePackage("ide-client").mainModule;
+    const main = lumine.packages.getActivePackage("ide").mainModule;
     lumine.notifications.clear();
     const editor = await lumine.workspace.open();
     spyOn(main, "showLogForAdapter").and.returnValue(Promise.resolve(editor));
@@ -808,7 +808,7 @@ describe("ide-client package", () => {
   // An open can decline, e.g. when the workspace center is full, and then the
   // notification is the one record left of what happened.
   it("keeps the banner up when the log could not be opened", async () => {
-    const main = lumine.packages.getActivePackage("ide-client").mainModule;
+    const main = lumine.packages.getActivePackage("ide").mainModule;
     lumine.notifications.clear();
     spyOn(main, "showLogForAdapter").and.returnValue(Promise.resolve());
 

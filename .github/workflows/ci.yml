@@ -66,7 +66,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          path: ide-client
+          path: ide
       - uses: actions/checkout@v7
         with:
           repository: lumine-code/lumine
@@ -88,10 +88,10 @@ jobs:
       - name: Use HTTPS for GitHub git dependencies
         run: git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
       - name: Install package dependencies
-        working-directory: ide-client
+        working-directory: ide
         run: npm ci --ignore-scripts
       - name: Install declared spec packages
-        run: node lumine/script/install-spec-packages.js --package ide-client --home "$RUNNER_TEMP/lumine-spec-home" --github-env "$GITHUB_ENV"
+        run: node lumine/script/install-spec-packages.js --package ide --home "$RUNNER_TEMP/lumine-spec-home" --github-env "$GITHUB_ENV"
       - name: Install editor dependencies
         working-directory: lumine
         run: |
@@ -106,4 +106,4 @@ jobs:
       - name: Run the Jasmine spec suite
         working-directory: lumine
         timeout-minutes: 20
-        run: xvfb-run --auto-servernum npm start -- --test ../ide-client/spec
+        run: xvfb-run --auto-servernum npm start -- --test ../ide/spec

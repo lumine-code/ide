@@ -38,9 +38,7 @@ describe("independent diagnostic providers", () => {
   beforeEach(() => {
     jasmine.useRealClock();
     manager = new Manager();
-    directory = fs.mkdtempSync(
-      path.join(fs.realpathSync.native(os.tmpdir()), "ide-client-multiple-"),
-    );
+    directory = fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), "ide-multiple-"));
     const file = path.join(directory, "document.sample");
     fs.writeFileSync(file, "bad();\n");
     uri = C.pathToUri(file);
@@ -56,7 +54,7 @@ describe("independent diagnostic providers", () => {
     await lumine.fileWatchClient.settlePendingTeardown();
     if (
       path.dirname(path.resolve(directory)) !== fs.realpathSync.native(os.tmpdir()) ||
-      !path.basename(directory).startsWith("ide-client-multiple-")
+      !path.basename(directory).startsWith("ide-multiple-")
     )
       throw new Error("Unsafe diagnostic fixture cleanup");
     fs.rmSync(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
