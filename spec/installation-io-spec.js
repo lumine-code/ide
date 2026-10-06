@@ -4,6 +4,7 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const childProcess = require("node:child_process");
 const { EventEmitter } = require("node:events");
+const { PassThrough } = require("node:stream");
 const { pipeline } = require("node:stream/promises");
 const { setTimeout: sleep } = require("node:timers/promises");
 const { setTimeout: schedule, clearTimeout: cancelTimer } = require("node:timers");
@@ -197,11 +198,11 @@ describe("Installation I/O ownership", () => {
       await mkdir(...args);
       owner.abort(reason);
     });
-    spyOn(childProcess, "execFile");
+    spyOn(childProcess, "spawn");
     const target = path.join(scratch, "npm");
     await expectAsync(api.npmInstallPackage("server", "1.0.0", target)).toBeRejectedWith(reason);
     expect(fs.readdirSync(target)).toEqual([]);
-    expect(childProcess.execFile).not.toHaveBeenCalled();
+    expect(childProcess.spawn).not.toHaveBeenCalled();
   });
 
   it("waits for the cancelled npm process tree to close before releasing staging", async () => {
@@ -210,14 +211,13 @@ describe("Installation I/O ownership", () => {
     child.pid = 123;
     child.kill = jasmine.createSpy("kill");
     if (process.platform !== "win32") spyOn(process, "kill");
-    let callback;
-    spyOn(childProcess, "execFile").and.callFake((command, args, _options, done) => {
-      if (command === "taskkill") {
-        done();
-        return new EventEmitter();
-      }
-      callback = done;
+    spyOn(childProcess, "execFile").and.callFake((_command, _args, _options, done) => {
+      done();
+      return new EventEmitter();
+    });
+    spyOn(childProcess, "spawn").and.callFake((_command, args, options) => {
       expect(args[1]).toBe(process.platform === "win32" ? '"server@^1 || ^2"' : "server@^1 || ^2");
+      expect(options.detached).toBe(process.platform !== "win32");
       started.resolve();
       return child;
     });
@@ -248,8 +248,7 @@ describe("Installation I/O ownership", () => {
     } else {
       expect(process.kill).toHaveBeenCalledWith(-123, "SIGKILL");
     }
-    callback(new Error("process terminated"), "", "");
-    child.emit("close");
+    child.emit("close", null, "SIGKILL");
     await expectAsync(pending).toBeRejectedWith(owner.signal.reason);
   });
 
@@ -263,6 +262,33 @@ describe("Installation I/O ownership", () => {
     api.setServerInstallationStatus("installing");
     expect(status).toHaveBeenCalledWith("installing");
     expect(managed.setInstallationStatus).not.toHaveBeenCalled();
+  });
+
+  it("reports missing npm and a bounded diagnostic tail from failed npm processes", async () => {
+    let missing = true;
+    spyOn(childProcess, "spawn").and.callFake(() => {
+      const child = new EventEmitter();
+      child.stdout = new PassThrough();
+      child.stderr = new PassThrough();
+      queueMicrotask(() => {
+        if (missing) child.emit("error", Object.assign(new Error("not found"), { code: "ENOENT" }));
+        else child.stderr.write(`${"x".repeat(70000)}\nDependency tree is incompatible.`);
+        child.stdout.end();
+        child.stderr.end();
+        child.emit("close", 1, null);
+      });
+      return child;
+    });
+    await expectAsync(api.npmInstallPackage("server", "1.0.0", scratch)).toBeRejectedWithError(
+      /Could not find.*PATH/,
+    );
+    missing = false;
+    const error = await api
+      .npmInstallPackage("server", "1.0.0", scratch)
+      .catch((failure) => failure);
+    expect(error.message).toMatch(/npm could not install server@1\.0\.0/);
+    expect(error.message).toMatch(/Dependency tree is incompatible\.$/);
+    expect(error.message.length).toBeLessThan(66000);
   });
 
   it("preserves a semver range and a directory containing shell characters in Windows npm", async () => {
@@ -305,19 +331,19 @@ describe("Installation I/O ownership", () => {
         "setInterval(() => {}, 1000);",
       ].join("\n"),
     );
-    const execute = childProcess.execFile;
+    const spawn = childProcess.spawn;
     let child;
-    spyOn(childProcess, "execFile").and.callFake((command, args, options, done) => {
-      if (command === "taskkill") return execute(command, args, options, done);
-      child = execute(
-        process.execPath,
-        [parent, descendant, ready, late, trigger],
-        {
-          ...options,
-          env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
-        },
-        done,
-      );
+    spyOn(childProcess, "spawn").and.callFake((_command, _args, options) => {
+      child = spawn(process.execPath, [parent, descendant, ready, late, trigger], {
+        ...options,
+        shell: false,
+        env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
+      });
+      if (process.platform === "linux") {
+        const stat = fs.readFileSync(`/proc/${child.pid}/stat`, "utf8");
+        const group = Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[2]);
+        expect(group).toBe(child.pid);
+      }
       return child;
     });
     const pending = api.npmInstallPackage("server", "1.0.0", scratch);
