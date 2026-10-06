@@ -5,6 +5,8 @@ const crypto = require("node:crypto");
 const childProcess = require("node:child_process");
 const { EventEmitter } = require("node:events");
 const { pipeline } = require("node:stream/promises");
+const { setTimeout: sleep } = require("node:timers/promises");
+const { setTimeout: schedule, clearTimeout: cancelTimer } = require("node:timers");
 const { ZipFile } = require("yazl");
 
 const deferred = () => {
@@ -22,6 +24,20 @@ const response = (body) => ({
   text: async () => String(body),
   arrayBuffer: async () => Buffer.from(String(body)),
 });
+
+async function within(promise, description, timeout = 10000) {
+  let timer;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_resolve, reject) => {
+        timer = schedule(() => reject(new Error(`Timed out waiting for ${description}.`)), timeout);
+      }),
+    ]);
+  } finally {
+    cancelTimer(timer);
+  }
+}
 
 describe("Installation I/O ownership", () => {
   let scratch, owner, sources, managed, api, InstallApi;
@@ -267,10 +283,10 @@ describe("Installation I/O ownership", () => {
     }
   });
 
-  it("kills a POSIX npm descendant with ignored stdio before it can write after cancellation", async () => {
-    if (process.platform === "win32") return;
+  it("kills an npm descendant with ignored stdio before it can write after cancellation", async () => {
     const ready = path.join(scratch, "descendant-ready");
     const late = path.join(scratch, "late-write");
+    const trigger = path.join(scratch, "write-after-cancellation");
     const descendant = path.join(scratch, "descendant.cjs");
     const parent = path.join(scratch, "npm.cjs");
     fs.writeFileSync(
@@ -278,9 +294,8 @@ describe("Installation I/O ownership", () => {
       [
         'const fs = require("node:fs");',
         'process.on("SIGTERM", () => {});',
-        'fs.writeFileSync(process.argv[2], "ready");',
-        'setTimeout(() => fs.writeFileSync(process.argv[3], "late bytes"), 250);',
-        "setInterval(() => {}, 1000);",
+        "fs.writeFileSync(process.argv[2], String(process.pid));",
+        'const timer = setInterval(() => { if (fs.existsSync(process.argv[4])) { clearInterval(timer); fs.writeFileSync(process.argv[3], "late bytes"); } }, 10);',
       ].join("\n"),
     );
     fs.writeFileSync(
@@ -292,10 +307,11 @@ describe("Installation I/O ownership", () => {
     );
     const execute = childProcess.execFile;
     let child;
-    spyOn(childProcess, "execFile").and.callFake((_command, _args, options, done) => {
+    spyOn(childProcess, "execFile").and.callFake((command, args, options, done) => {
+      if (command === "taskkill") return execute(command, args, options, done);
       child = execute(
         process.execPath,
-        [parent, descendant, ready, late],
+        [parent, descendant, ready, late, trigger],
         {
           ...options,
           env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
@@ -305,21 +321,52 @@ describe("Installation I/O ownership", () => {
       return child;
     });
     const pending = api.npmInstallPackage("server", "1.0.0", scratch);
+    const polling = new AbortController();
     pending.catch(() => {});
     try {
-      await conditionPromise(() => fs.existsSync(ready));
+      const marker = async () => {
+        while (!fs.existsSync(ready)) await sleep(20, undefined, { signal: polling.signal });
+      };
+      await within(
+        Promise.race([
+          marker(),
+          pending.then(() => {
+            throw new Error("npm fixture exited before its descendant was ready.");
+          }),
+        ]),
+        "npm descendant startup marker",
+      );
       owner.abort();
-      await expectAsync(pending).toBeRejectedWith(owner.signal.reason);
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await expectAsync(within(pending, "cancelled npm process closure")).toBeRejectedWith(
+        owner.signal.reason,
+      );
+      // Arm the write only after the helper releases staging: a write while
+      // taskkill is still settling is not a write from an orphaned process.
+      fs.writeFileSync(trigger, "write now");
+      // Package VM globals can retain the runner's fake setTimeout binding.
+      await sleep(500);
       expect(fs.existsSync(late)).toBe(false);
     } finally {
-      if (child?.pid) {
-        try {
-          process.kill(-child.pid, "SIGKILL");
-        } catch (error) {
-          expect(error.code).toBe("ESRCH");
+      polling.abort();
+      // A surviving fixture descendant exits naturally once its trigger is
+      // armed. Never target a PID from the ready file after the tree closed.
+      fs.writeFileSync(trigger, "cleanup");
+      owner.abort();
+      if (child?.pid && child.exitCode === null && child.signalCode === null) {
+        if (process.platform === "win32") {
+          child.kill();
+        } else {
+          try {
+            process.kill(-child.pid, "SIGKILL");
+          } catch (error) {
+            expect(error.code).toBe("ESRCH");
+          }
         }
       }
+      await within(
+        pending.catch(() => {}),
+        "npm fixture cleanup",
+      );
     }
   });
 
