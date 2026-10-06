@@ -65,7 +65,7 @@ describe("InstallApi", () => {
       grammarScopes: ["source.custom"],
       resolveServer: async () => null,
     };
-    api = managed.apiFor(adapter);
+    api = new InstallApi(managed, adapter, { signal: managed.signal });
   });
 
   afterEach(async () => {
@@ -314,7 +314,7 @@ describe("InstallApi", () => {
 
       expect(seen.at(-1)).toBe("failed");
       expect(fs.existsSync(path.join(storageRoot, "ide-custom"))).toBe(false);
-      expect(fs.readdirSync(storageRoot).filter((n) => n.startsWith(".stage-"))).toEqual([]);
+      expect(fs.readdirSync(path.join(storageRoot, ".transactions", "ide-custom"))).toEqual([]);
     });
 
     it("walks one status vocabulary whichever way the server is acquired", async () => {
@@ -325,7 +325,7 @@ describe("InstallApi", () => {
       const seen = [];
       managed.onDidChangeInstallation(({ status }) => seen.push(status));
       await managed.install("ide-custom");
-      expect(seen).toEqual(["checking", "downloading", "installing", null]);
+      expect(seen).toEqual(["waiting", "checking", "downloading", "installing", null]);
     });
 
     it("lists a hook-based adapter beside the descriptor ones", async () => {

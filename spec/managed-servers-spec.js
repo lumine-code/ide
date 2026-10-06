@@ -275,8 +275,7 @@ describe("ManagedServers", () => {
 
       expect(managed.installFor(adapter)).toBe(null);
       expect(fs.existsSync(path.join(storageRoot, "ide-test"))).toBe(false);
-      // No staging directory is left behind either.
-      expect(fs.readdirSync(storageRoot).filter((name) => name.startsWith(".stage-"))).toEqual([]);
+      expect(fs.readdirSync(path.join(storageRoot, ".transactions", "ide-test"))).toEqual([]);
     });
 
     it("skips verification only when the descriptor says the source publishes none", async () => {
@@ -311,10 +310,9 @@ describe("ManagedServers", () => {
       // already been set aside — the one window where the previous copy is not
       // where it belongs.
       const rename = fs.promises.rename;
-      let calls = 0;
       spyOn(fs.promises, "rename").and.callFake((from, to) => {
-        calls += 1;
-        if (calls === 2) return Promise.reject(new Error("swap interrupted"));
+        if (path.basename(from) === "stage" && to === target)
+          return Promise.reject(new Error("swap interrupted"));
         return rename(from, to);
       });
 
@@ -445,12 +443,10 @@ describe("ManagedServers", () => {
       expect(manager.adapterContext(adapter, scratch).managedServer).toBe(null);
     });
 
-    it("ignores a record whose payload has gone missing", async () => {
+    it("reports a record whose payload has gone missing", async () => {
       const adapter = await install();
       fs.rmSync(path.join(storageRoot, "ide-test", "testlang"), { force: true });
-      managed.refresh();
-      // Better to fall back to PATH than to launch a path that is not there.
-      expect(managed.installFor(adapter)).toBe(null);
+      expect(() => managed.installFor(adapter)).toThrowError(/ide-test.*testlang/i);
     });
 
     it("refuses to act on an adapter that declares no managed server", () => {
@@ -526,17 +522,22 @@ describe("ManagedServers", () => {
   });
 
   describe("staging leftovers", () => {
-    it("sweeps stage and backup directories from an interrupted install", async () => {
+    it("preserves legacy stage and backup trees whose ownership cannot be established", async () => {
       fs.mkdirSync(path.join(storageRoot, ".stage-ide-test-1-1"), { recursive: true });
       fs.mkdirSync(path.join(storageRoot, ".backup-ide-test-1-1"), { recursive: true });
       fs.mkdirSync(path.join(storageRoot, "ide-test"), { recursive: true });
 
       await managed.sweep();
 
-      expect(fs.readdirSync(storageRoot)).toEqual(["ide-test"]);
+      expect(
+        fs
+          .readdirSync(storageRoot)
+          .filter((name) => ![".locks", ".transactions"].includes(name))
+          .sort(),
+      ).toEqual([".backup-ide-test-1-1", ".stage-ide-test-1-1", "ide-test"]);
     });
 
-    it("restores an interrupted swap when only the backup remains", async () => {
+    it("does not recover an unowned legacy backup over a missing installation", async () => {
       const backup = path.join(storageRoot, `.backup-ide-test-${process.pid}-1`);
       fs.mkdirSync(backup, { recursive: true });
       fs.writeFileSync(path.join(backup, "install.json"), "{}\n");
@@ -546,8 +547,14 @@ describe("ManagedServers", () => {
 
       await managed.sweep();
 
-      expect(fs.existsSync(path.join(storageRoot, "ide-test", "install.json"))).toBe(true);
-      expect(fs.readdirSync(storageRoot)).toEqual(["ide-test"]);
+      expect(fs.existsSync(path.join(storageRoot, "ide-test"))).toBe(false);
+      expect(fs.existsSync(path.join(backup, "install.json"))).toBe(true);
+      expect(
+        fs
+          .readdirSync(storageRoot)
+          .filter((name) => ![".locks", ".transactions"].includes(name))
+          .sort(),
+      ).toEqual([`.backup-ide-test-${process.pid}-1`, `.stage-ide-test-${process.pid}-1`]);
     });
 
     it("is a no-op when nothing has ever been installed", async () => {

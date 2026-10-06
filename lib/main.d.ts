@@ -103,7 +103,8 @@ export interface ServerConfigurationContext {
   /** Available after preflight, for configuration pulls and subsequent pushes. */
   session?: LanguageServerSession;
 }
-export type ServerInstallationStatus = "checking" | "downloading" | "installing" | "failed" | null;
+export type ServerInstallationStatus =
+  "waiting" | "checking" | "downloading" | "installing" | "failed" | null;
 export type DownloadedFileType = "uncompressed" | "gzip" | "gzip-tar" | "xz-tar" | "zip";
 export interface GithubRelease {
   version: string;
@@ -118,28 +119,45 @@ export interface GithubRelease {
  * `verifyFileChecksum`, when a custom installer owns download verification.
  */
 export interface InstallApi {
+  /** Aborted when the installation ends or its adapter/client lifetime ends. */
+  readonly signal: AbortSignal;
   resolver: ServerResolver;
   latestGithubRelease(
     repository: string,
-    options?: { preRelease?: boolean },
+    options?: { preRelease?: boolean; signal?: AbortSignal },
   ): Promise<GithubRelease>;
-  githubReleaseByTag(repository: string, tag: string): Promise<GithubRelease>;
-  npmPackageLatestVersion(name: string): Promise<string>;
+  githubReleaseByTag(
+    repository: string,
+    tag: string,
+    options?: { signal?: AbortSignal },
+  ): Promise<GithubRelease>;
+  npmPackageLatestVersion(name: string, options?: { signal?: AbortSignal }): Promise<string>;
   npmPackageInstalledVersion(name: string, directory: string): string | null;
-  npmInstallPackage(name: string, version: string, directory: string): Promise<void>;
+  npmInstallPackage(
+    name: string,
+    version: string,
+    directory: string,
+    options?: { signal?: AbortSignal },
+  ): Promise<void>;
   downloadFile(
     url: string,
     destination: string,
-    options?: { type?: DownloadedFileType; digest?: string },
+    options?: { type?: DownloadedFileType; digest?: string; signal?: AbortSignal },
   ): Promise<string>;
-  makeFileExecutable(path: string): Promise<void>;
-  verifyFileChecksum(path: string, digest: string): Promise<void>;
+  makeFileExecutable(path: string, options?: { signal?: AbortSignal }): Promise<void>;
+  verifyFileChecksum(
+    path: string,
+    digest: string,
+    options?: { signal?: AbortSignal },
+  ): Promise<void>;
   setServerInstallationStatus(status: ServerInstallationStatus): void;
 }
 export interface ServerInstallContext {
   /** The staging directory to fill; it becomes the install directory. */
   storagePath: string;
   version: string | null;
+  /** The same lifetime signal exposed by api.signal. */
+  signal: AbortSignal;
   api: InstallApi;
   adapter: LanguageServerAdapter;
 }
@@ -656,11 +674,14 @@ export interface LanguageServerService {
    */
   reportMissingServer(adapterId: string, options?: { description?: string }): object | null;
   /** Fetch and install this adapter's server; reports progress and failure itself. */
-  installServer(adapterId: string, options?: { version?: string }): Promise<object>;
+  installServer(
+    adapterId: string,
+    options?: { version?: string; signal?: AbortSignal },
+  ): Promise<object>;
   /** Install the newest release, or resolve unchanged when already current. */
-  updateServer(adapterId: string): Promise<object>;
+  updateServer(adapterId: string, options?: { signal?: AbortSignal }): Promise<object>;
   /** Remove only the managed copy; a PATH or bundled server is left alone. */
-  uninstallServer(adapterId: string): Promise<void>;
+  uninstallServer(adapterId: string, options?: { signal?: AbortSignal }): Promise<void>;
   managedServer(adapterId: string): ManagedServerInstall | null;
   /** What is happening to that adapter's server right now, or null. */
   serverInstallationStatus(adapterId: string): ServerInstallationStatus;

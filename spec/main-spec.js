@@ -508,15 +508,19 @@ describe("ide-client package", () => {
 
   it("keeps managed installation activity across service replacement", async () => {
     const main = lumine.packages.getActivePackage("ide-client").mainModule;
-    spyOn(main, "ensureManagedServers");
     let installationChanged;
     const following = { dispose: jasmine.createSpy("stop following installation") };
     main.managedServers = {
+      disposed: false,
       onDidChangeInstallation(callback) {
         installationChanged = callback;
         return following;
       },
+      dispose() {
+        this.disposed = true;
+      },
     };
+    spyOn(main, "ensureManagedServers").and.returnValue(main.managedServers);
     main.manager.adapters.set("test-install", { displayName: "Test Server" });
     const oldSignal = makeBusySignal();
     const nextSignal = makeBusySignal();

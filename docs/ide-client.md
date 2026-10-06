@@ -214,8 +214,8 @@ The service you receive:
 | `restart(session)`, `stop(session)`                               | Serialized lifecycle control; restart may resolve `null` when cancelled or unavailable.  |
 | `reportMissingServer(adapterId, opts?)`                           | Says once per window that the server was not found; honours the package's opt-out.       |
 | `installServer(adapterId, opts?)`                                 | Fetches and installs the server; reports its own progress and failure.                   |
-| `updateServer(adapterId)`                                         | Installs the newest release, or resolves unchanged when already current.                 |
-| `uninstallServer(adapterId)`                                      | Removes the managed copy only.                                                           |
+| `updateServer(adapterId, opts?)`                                  | Installs the newest release, or resolves unchanged when already current.                 |
+| `uninstallServer(adapterId, opts?)`                               | Removes the managed copy only.                                                           |
 | `managedServer(adapterId)`                                        | The installed copy, or `null`.                                                           |
 | `serverInstallationStatus(adapterId)`                             | What is happening to that server right now, or `null`.                                   |
 | `onDidChangeServerInstallation(fn)`                               | `{ adapterId, status }` as an install proceeds.                                          |
@@ -442,14 +442,20 @@ Four things are worth knowing before writing a descriptor:
 
 Descriptors are validated at `registerAdapter`, not at install time, so a typo surfaces when the package activates.
 
-Installing, updating and removing all stop the adapter's sessions first, swap the directory, and re-attach — Windows refuses to replace a running executable, and a server that keeps running through the swap would go on serving from a directory that no longer exists.
+Installing and updating prepare and validate the new payload before stopping the adapter's sessions, replacing the directory and reattaching. Removing stops sessions before deleting the managed copy. A failed stop preserves the current installation. Windows refuses to replace a running executable, and a server that keeps running through the swap would go on serving from a directory that no longer exists.
+
+Install, update and uninstall requests for the same adapter run in order. A lease also serializes changes to that adapter's installation across editor windows; other adapters can install independently. Staging, backups and recovery metadata belong to the operation holding that lease. Startup recovery repairs interrupted swaps only when their ownership is established, and never deletes another window's active staging or unknown legacy trees.
+
+The service methods accept an optional `signal`: `installServer(adapterId, { version, signal })`, `updateServer(adapterId, { signal })` and `uninstallServer(adapterId, { signal })`. Cancellation, adapter unregistration or client deactivation rejects pending operations with `AbortError`. A cancelled operation cannot commit its staged files or publish later progress. A custom hook that ignores cancellation retains its isolated staging and lease until it settles, so a replacement cannot race its remaining writes; client deactivation does not wait indefinitely for that hook.
+
+An installed directory is authoritative. A corrupt `install.json`, invalid relative payload path or missing payload reports an installation error rather than hiding the damage by choosing the bundled or PATH copy. Reinstall the managed server to repair it, or uninstall it to use another available source.
 
 ### Fetching your own server
 
 A descriptor only describes the shapes it was designed for. An adapter whose server does not fit one — several binaries rather than a server, a release layout nobody anticipated — implements `installServer` instead and uses the primitives the hub hands it. This is the model Zed's extension API uses, and the names mirror it deliberately.
 
 ```js
-async installServer({ storagePath, api }) {
+async installServer({ storagePath, api, signal }) {
   api.setServerInstallationStatus("downloading");
   const release = await api.latestGithubRelease("owner/tool");
   const asset = release.assets.find((a) => a.name === assetForThisPlatform());
@@ -458,15 +464,21 @@ async installServer({ storagePath, api }) {
     digest: asset.digest,
   });
   await api.makeFileExecutable(`${storagePath}/tool`);
+  signal.throwIfAborted();
   return { version: release.version, binary: "tool" };
 }
 ```
 
 Fill `storagePath` and return `{ version, binary }` or `{ version, module }` naming what to launch, relative to the install directory. An adapter with `bundledServer: true` may return only `{ version }` when the managed payload contains companion tools and the server itself remains the bundled copy; `managedServerDisplayName` gives that toolchain its own label in Manage Servers. Everything else is unchanged: the hub stages, swaps atomically, restores an interrupted swap from its backup on the next start, writes the same `install.json`, stops and restarts sessions in the same order, and reports the same status. It is the descriptor path without the descriptor.
 
+The hook receives the operation's `signal`, also exposed as `api.signal`. Pass it to any asynchronous work the adapter performs itself and check it before direct filesystem writes. The API's transfer, extraction, npm, checksum and resolver helpers already use that lifetime; an optional per-call `{ signal }` can cancel one helper sooner. Expired API calls, including synchronous status reporting, reject or throw `AbortError`.
+
+A completed installation expires its signal after delivering the operation's result. Retain the returned install record when needed, and acquire fresh helpers for later work.
+
 | primitive                                          |                                                                                                                                                |
 | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | `resolver`                                         | shared path validation, selection and launch helpers for SDK checks and custom installation logic                                              |
+| `signal`                                           | the current operation's lifetime signal                                                                                                        |
 | `latestGithubRelease(repository, { preRelease })`  | `{ version, tag, assets: [{ name, url, size, digest? }] }`; throws with the status rather than resolving empty                                 |
 | `githubReleaseByTag(repository, tag)`              | the same shape                                                                                                                                 |
 | `npmPackageLatestVersion(name)`                    |                                                                                                                                                |
@@ -475,7 +487,7 @@ Fill `storagePath` and return `{ version, binary }` or `{ version, module }` nam
 | `downloadFile(url, destination, { type, digest })` | verifies an optional `algorithm:hex` digest before writing or extracting; `type` ∈ `uncompressed` \| `gzip` \| `gzip-tar` \| `xz-tar` \| `zip` |
 | `makeFileExecutable(path)`                         | no-op on Windows                                                                                                                               |
 | `verifyFileChecksum(path, digest)`                 | verifies an already-written file against an `algorithm:hex` digest                                                                             |
-| `setServerInstallationStatus(status)`              | `checking` \| `downloading` \| `installing` \| `failed` \| `null`                                                                              |
+| `setServerInstallationStatus(status)`              | `waiting` \| `checking` \| `downloading` \| `installing` \| `failed` \| `null`                                                                 |
 
 Two things to know. **`managedServer` and `installServer` are mutually exclusive** — declaring both leaves it ambiguous which one fills the staging directory, and is rejected at `registerAdapter`. And a custom installer still owns verification policy: pass the release asset's `digest` to `downloadFile`, or call `verifyFileChecksum` for a file acquired another way; omitting both is an explicit unverified download.
 
