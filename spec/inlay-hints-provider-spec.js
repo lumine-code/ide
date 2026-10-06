@@ -165,6 +165,35 @@ describe("InlayHintsProvider", () => {
     await expectAsync(provider.inlayHints(editor, [0, 2])).toBeRejectedWithError("ContentModified");
   });
 
+  it("declines a pending answer after the server invalidates its hints", async () => {
+    let finish;
+    const pending = new Promise((resolve) => (finish = resolve));
+    const session = makeSession(() => pending);
+    const manager = makeManager(session);
+    provider = new InlayHintsProvider(manager);
+
+    const request = provider.inlayHints(editor, [0, 2]);
+    await flush();
+    manager.requestRefresh(session, "inlayHint");
+    finish([lspHint(0, 11, ": outdated")]);
+    expect(await request).toBeNull();
+  });
+
+  it("expires an invalidated request while its session lookup is still pending", async () => {
+    let finish;
+    const pending = new Promise((resolve) => (finish = resolve));
+    const session = makeSession(() => [lspHint(0, 11, ": outdated")]);
+    const manager = makeManager(session);
+    spyOn(manager, "activeSessionForFeature").and.returnValue(pending);
+    provider = new InlayHintsProvider(manager);
+
+    const request = provider.inlayHints(editor, [0, 2]);
+    manager.requestRefresh(session, "inlayHint");
+    finish(session);
+    expect(await request).toBeNull();
+    expect(session.requests).toEqual([]);
+  });
+
   it("invalidates when the server asks for a refresh and when a session starts", async () => {
     const manager = makeManager(makeSession(() => []));
     provider = new InlayHintsProvider(manager);

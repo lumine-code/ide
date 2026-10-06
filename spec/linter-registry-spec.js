@@ -108,6 +108,45 @@ describe("ide linter registry lifecycle", () => {
     expect(service.register).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps enabled sibling cell reports when another cell disables diagnostics", () => {
+    const notebookPath = path.resolve("mixed-cells.ipynb");
+    const enabledEditor = { getRootScopeDescriptor: () => null };
+    const disabledEditor = { getRootScopeDescriptor: () => null };
+    const record = {
+      filePath: notebookPath,
+      cellIndexOf: (id) => ({ enabled: 0, disabled: 1 })[id] ?? -1,
+    };
+    for (const [cellId, editor] of [
+      ["enabled", enabledEditor],
+      ["disabled", disabledEditor],
+    ]) {
+      main.manager.workspaceDocuments.bind(editor, {
+        editor,
+        uri: converters.cellUri(notebookPath, cellId),
+        cellId,
+        record,
+      });
+    }
+    const adapter = registerAdapter(
+      adapterFor("mixed-cells", {
+        isFeatureAvailable: (feature, editor) =>
+          feature !== "diagnostics" || editor !== disabledEditor,
+      }),
+    );
+    const service = registry();
+    connect(service);
+    const delegate = service.delegates[0];
+    publish(adapter, "enabled error", converters.cellUri(notebookPath, "enabled"));
+    for (const report of ["hidden error", null]) {
+      publish(adapter, report, converters.cellUri(notebookPath, "disabled"));
+      expect(delegate.setMessages.calls.mostRecent().args[1].map((m) => m.excerpt)).toEqual([
+        "enabled error",
+      ]);
+    }
+    main.manager.workspaceDocuments.unbind(enabledEditor);
+    main.manager.workspaceDocuments.unbind(disabledEditor);
+  });
+
   it("reconnects a registry with current snapshots after diagnostics changed while disconnected", () => {
     const adapter = registerAdapter(adapterFor("reconnected"));
     const previous = registry();
@@ -167,12 +206,12 @@ describe("ide linter registry lifecycle", () => {
     const service = registry();
     connect(service);
     publish(oldAdapter, "old cell", converters.cellUri(notebookPath, "c1"));
-    expect(main.notebookBuckets.has(oldAdapter.id)).toBe(true);
+    expect(main.linterBridge.notebookBuckets.has(oldAdapter.id)).toBe(true);
 
     await main.manager.unregisterAdapter(oldAdapter);
     expect(service.delegates[0].dispose).toHaveBeenCalledTimes(1);
-    expect(main.indieDelegates.has(oldAdapter.id)).toBe(false);
-    expect(main.notebookBuckets.has(oldAdapter.id)).toBe(false);
+    expect(main.linterBridge.delegates.has(oldAdapter.id)).toBe(false);
+    expect(main.linterBridge.notebookBuckets.has(oldAdapter.id)).toBe(false);
     publish(oldAdapter, "late old cell", converters.cellUri(notebookPath, "c1"));
     expect(service.register).toHaveBeenCalledTimes(1);
 
@@ -200,6 +239,39 @@ describe("ide linter registry lifecycle", () => {
     expect(service.delegates[0].dispose).toHaveBeenCalledTimes(1);
     edge.dispose();
     expect(service.delegates[0].dispose).toHaveBeenCalledTimes(1);
+  });
+  it("releases an adapter generation's revisions and queued presentation when it is removed", async () => {
+    const adapter = registerAdapter(adapterFor("released-generation"));
+    const service = registry();
+    connect(service);
+    const bridge = main.linterBridge;
+    main.manager.emitter.emit("did-change-features", { adapter });
+    expect(bridge.featureRevisions.has(adapter)).toBe(true);
+    spyOn(main.manager, "featureEnabledForPath").and.resolveTo(true);
+    publish(adapter, "queued old generation");
+    await Promise.resolve();
+    expect(bridge.ready.size).toBe(1);
+    expect(bridge.pending.has(adapter)).toBe(true);
+    expect(bridge.owners.has(adapter)).toBe(true);
+
+    await main.manager.unregisterAdapter(adapter);
+    expect(bridge.featureRevisions.has(adapter)).toBe(false);
+    expect(bridge.pending.has(adapter)).toBe(false);
+    expect(bridge.owners.has(adapter)).toBe(false);
+    expect(bridge.ready.size).toBe(0);
+    expect(bridge.presentationTimer).toBeNull();
+    expect(service.delegates[0].dispose).toHaveBeenCalledTimes(1);
+
+    const replacement = registerAdapter(adapterFor("released-generation"));
+    main.manager.emitter.emit("did-change-features", { adapter });
+    expect(bridge.featureRevisions.has(adapter)).toBe(false);
+    publish(replacement, "current generation");
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(service.delegates[0].setMessages).not.toHaveBeenCalled();
+    expect(service.delegates[1].setMessages.calls.mostRecent().args[1][0].excerpt).toBe(
+      "current generation",
+    );
   });
 
   it("coalesces pending presentation and does not convert disabled diagnostics", async () => {

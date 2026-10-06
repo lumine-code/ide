@@ -469,6 +469,54 @@ describe("ide package", () => {
     expect(main.manager.fileOperations.executor).toBe(null);
   });
 
+  it("ignores queued file notifications from a replaced tree-view service edge", () => {
+    const main = lumine.packages.getActivePackage("ide").mainModule;
+    const serviceFor = () => {
+      const callbacks = new Map();
+      const service = {};
+      for (const name of [
+        "onWillCreateFiles",
+        "onWillRenameFiles",
+        "onWillDeleteFiles",
+        "onDidCreateFiles",
+        "onDidRenameFiles",
+        "onDidDeleteFiles",
+      ]) {
+        service[name] = (callback) => {
+          callbacks.set(name, callback);
+          return { dispose: () => callbacks.delete(name) };
+        };
+      }
+      return { service, callbacks };
+    };
+    const previous = serviceFor();
+    const oldEdge = main.consumeTreeViewFileOperations(previous.service);
+    const queued = previous.callbacks.get("onDidCreateFiles");
+    const current = serviceFor();
+    const currentEdge = main.consumeTreeViewFileOperations(current.service);
+    const did = spyOn(main.manager, "didCreateFiles");
+    const payload = { files: [{ path: "created" }] };
+
+    oldEdge.dispose();
+    queued(payload);
+    expect(did).not.toHaveBeenCalled();
+    current.callbacks.get("onDidCreateFiles")(payload);
+    expect(did).toHaveBeenCalledOnceWith(payload);
+    currentEdge.dispose();
+  });
+
+  it("keeps a renewed file-operation edge when the same executor is supplied again", () => {
+    const main = lumine.packages.getActivePackage("ide").mainModule;
+    const executor = { prepare() {} };
+    const previous = main.consumeFileOperationsExecutor(executor);
+    const current = main.consumeFileOperationsExecutor(executor);
+
+    previous.dispose();
+    expect(main.manager.fileOperations.executor).toBe(executor);
+    current.dispose();
+    expect(main.manager.fileOperations.executor).toBe(null);
+  });
+
   it("takes only the transient half of busy-signal", () => {
     const main = lumine.packages.getActivePackage("ide").mainModule;
     const signal = makeBusySignal();
@@ -554,6 +602,22 @@ describe("ide package", () => {
 
     registration.dispose();
     expect(tiles[0].destroyed).toBe(true);
+    expect(main.serverStatus).toBe(null);
+  });
+
+  it("keeps the current status item when a previous service edge is disposed", () => {
+    const main = lumine.packages.getActivePackage("ide").mainModule;
+    const tiles = [];
+    const previous = main.consumeStatusBar(fakeStatusBar(tiles));
+    const current = main.consumeStatusBar(fakeStatusBar(tiles));
+    const view = main.serverStatus;
+
+    previous.dispose();
+    expect(tiles[0].destroyed).toBe(true);
+    expect(tiles[1].destroyed).toBe(false);
+    expect(main.serverStatus).toBe(view);
+    current.dispose();
+    expect(tiles[1].destroyed).toBe(true);
     expect(main.serverStatus).toBe(null);
   });
 
@@ -738,6 +802,53 @@ describe("ide package", () => {
 
     main.manager.workspaceDocuments.unbind(editorA);
     main.manager.workspaceDocuments.unbind(editorB);
+    registration.dispose();
+  });
+
+  it("keeps a replacement session's cell diagnostics when an older session is cleared", () => {
+    const main = lumine.packages.getActivePackage("ide").mainModule;
+    const C = require("../lib/converters");
+    const notebookPath = require("path").resolve("proj", "replacement.ipynb");
+    const uri = C.cellUri(notebookPath, "cell");
+    const editor = { getRootScopeDescriptor: () => null };
+    main.manager.workspaceDocuments.bind(editor, {
+      editor,
+      uri,
+      cellId: "cell",
+      record: { filePath: notebookPath, cellIndexOf: () => 0 },
+    });
+    const delegate = { setMessages: jasmine.createSpy("setMessages"), dispose() {} };
+    const registration = main.consumeLinterRegistry(() => delegate);
+    const adapter = {
+      id: "test:replacement-cell",
+      displayName: "Cell Language Server",
+      grammarScopes: ["source.linter-test"],
+      resolveServer: async () => null,
+    };
+    main.manager.registerAdapter(adapter);
+    const previous = { adapter };
+    const current = { adapter };
+    const report = (session, message) =>
+      main.manager.publishDiagnostics(session, {
+        uri,
+        diagnostics: [
+          {
+            range: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } },
+            severity: 1,
+            message,
+          },
+        ],
+      });
+
+    report(previous, "previous");
+    report(current, "replacement");
+    main.manager.clearDiagnosticsForSession(previous);
+    expect(delegate.setMessages.calls.mostRecent().args[1].map((m) => m.excerpt)).toEqual([
+      "replacement",
+    ]);
+    main.manager.clearDiagnosticsForSession(current);
+    expect(delegate.setMessages.calls.mostRecent().args).toEqual([notebookPath, []]);
+    main.manager.workspaceDocuments.unbind(editor);
     registration.dispose();
   });
 

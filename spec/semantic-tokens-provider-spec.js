@@ -352,7 +352,7 @@ describe("SemanticTokensProvider", () => {
     await flush();
     manager.requestRefresh(session, "semanticTokens");
     pending.resolve({ data: [0, 0, 5, 0, 0], resultId: "old" });
-    await full;
+    expect(await full).toBeNull();
     answer = { data: [], resultId: "fresh" };
     await provider.semanticTokens(editor);
 
@@ -361,6 +361,38 @@ describe("SemanticTokensProvider", () => {
       "textDocument/semanticTokens/full",
     ]);
   });
+
+  it("declines a pending range answer after the server invalidates its tokens", async () => {
+    const pending = deferred();
+    const session = makeSession(() => pending.promise);
+    const manager = makeManager(session);
+    provider = new SemanticTokensProvider(manager);
+
+    const range = provider.semanticTokensInRange(editor, [0, 1]);
+    await flush();
+    manager.requestRefresh(session, "semanticTokens");
+    pending.resolve({ data: [0, 0, 5, 0, 0] });
+    expect(await range).toBeNull();
+  });
+
+  for (const mode of ["full", "range"]) {
+    it(`expires an invalidated ${mode} request while session lookup is pending`, async () => {
+      const pending = deferred();
+      const session = makeSession(() => ({ data: [0, 0, 5, 0, 0], resultId: "outdated" }));
+      const manager = makeManager(session);
+      spyOn(manager, "activeSessionForFeature").and.returnValue(pending.promise);
+      provider = new SemanticTokensProvider(manager);
+
+      const request =
+        mode === "full"
+          ? provider.semanticTokens(editor)
+          : provider.semanticTokensInRange(editor, [0, 1]);
+      manager.requestRefresh(session, "semanticTokens");
+      pending.resolve(session);
+      expect(await request).toBeNull();
+      expect(session.requests).toEqual([]);
+    });
+  }
 
   it("invalidates when the server asks for a refresh and when a session starts", async () => {
     const manager = makeManager(makeSession(() => ({ data: [] })));
