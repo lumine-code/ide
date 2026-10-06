@@ -889,13 +889,13 @@ describe("AST document projections", () => {
       { uri, languageId: "python", text: "value=1\n" },
       async () => {
         expect(session.documents.get(C.uriKey(host)).editor === editor).toBe(true);
-        expect(session.temporaryDocuments.size).toBe(1);
+        expect(session.documentSync.temporaryDocuments.size).toBe(1);
         expect(manager.publishDiagnostics(session, { uri, diagnostics: [] })).toBe(false);
         await session.request("textDocument/formatting", { textDocument: { uri } });
       },
     );
     expect(session.documents.get(C.uriKey(host)).editor === editor).toBe(true);
-    expect(session.temporaryDocuments.size).toBe(0);
+    expect(session.documentSync.temporaryDocuments.size).toBe(0);
     expect(manager.publishDiagnostics(session, { uri: host, diagnostics: [] })).toBe(true);
     expect(editor.getText()).toBe(text);
   });

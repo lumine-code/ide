@@ -39,7 +39,7 @@ describe("adapter-owned standard file watchers", () => {
         /fileWatchers/,
       );
     const file = path.join(root, "main.tf");
-    manager.routeFileEvents([
+    manager.fileOperations.routeEvents([
       { action: "created", path: file },
       { action: "updated", path: file },
       { action: "deleted", path: file },
@@ -73,7 +73,7 @@ describe("adapter-owned standard file watchers", () => {
         registerOptions: { watchers: [{ globPattern: "**/*.tf", kind: 3 }] },
       },
     ]);
-    manager.routeFileEvents([
+    manager.fileOperations.routeEvents([
       { action: "created", path: file },
       { action: "created", path: file },
       { action: "updated", path: file },
@@ -84,10 +84,10 @@ describe("adapter-owned standard file watchers", () => {
     expect(notifications[0].params.changes.map((value) => value.type)).toEqual([1, 2, 3, 1, 2]);
     expect(notifications[0].params.changes.at(-1).uri).toBe(pathToFileURL(outside).href); // Dynamic watchers retain their declared scope.
     manager.unregisterCapabilities(session, [{ id: "dynamic" }]);
-    manager.routeFileEvents([{ action: "updated", path: file }]);
+    manager.fileOperations.routeEvents([{ action: "updated", path: file }]);
     expect(notifications.length).toBe(1);
     await manager.unregisterAdapter(session.adapter);
-    manager.routeFileEvents([{ action: "created", path: file }]);
+    manager.fileOperations.routeEvents([{ action: "created", path: file }]);
     expect(notifications.length).toBe(1);
   });
 });

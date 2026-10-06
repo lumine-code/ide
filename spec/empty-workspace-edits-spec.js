@@ -112,14 +112,14 @@ describe("Workspace edits with empty targets", () => {
     const uri = C.pathToUri(filePath);
     const document = { editor, uri, version: 1 };
     const session = { documents: new Map([[C.uriKey(uri), document]]) };
-    const resolveEditor = spyOn(manager, "editorForWorkspaceEdit").and.callThrough();
-    const plan = await manager.preflightWorkspaceEdit(
+    const resolveEditor = spyOn(manager.workspaceEdits, "editorForWorkspaceEdit").and.callThrough();
+    const plan = await manager.workspaceEdits.preflightWorkspaceEdit(
       [{ textDocument: { uri, version: 1 }, edits: [] }],
       session,
     );
     document.version = 2;
 
-    const result = await manager.applyWorkspaceEditPlanDetailed(plan);
+    const result = await manager.workspaceEdits.applyWorkspaceEditPlanDetailed(plan);
 
     expect(result.applied).toBe(false);
     expect(result.failureReason).toContain("A document changed");

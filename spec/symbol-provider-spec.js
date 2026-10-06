@@ -417,7 +417,7 @@ describe("symbol services", () => {
       cellIndexOf: () => 0,
       routedEditors: new Map([["a", new Set([editor])]]),
     };
-    manager.registerExternalDocument(editor, { editor, uri, cellId: "a", record });
+    manager.workspaceDocuments.bind(editor, { editor, uri, cellId: "a", record });
     expect(provider.getDocumentSymbolSources(editor)[0].state).toBe("unavailable");
     session.documents.set(C.uriKey(uri), { editor, uri, subscriptions: { dispose() {} } });
     expect(provider.getDocumentSymbolSources(editor)[0].state).toBe("ready");

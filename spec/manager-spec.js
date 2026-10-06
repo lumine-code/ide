@@ -460,7 +460,7 @@ describe("LanguageServerManager external documents", () => {
   it("routes a bound editor to its cell URI and back", () => {
     const editor = cellEditor();
     const uri = C.cellUri(notebookPath, "c1");
-    manager.registerExternalDocument(editor, { editor, uri, cellId: "c1", record: record() });
+    manager.workspaceDocuments.bind(editor, { editor, uri, cellId: "c1", record: record() });
 
     expect(manager.uriForEditor(editor)).toBe(uri);
     const resolved = manager.resolveUri(uri);
@@ -469,7 +469,7 @@ describe("LanguageServerManager external documents", () => {
     expect(resolved.notebookPath).toBe(notebookPath);
     expect(resolved.cellIndex).toBe(0);
 
-    manager.unregisterExternalDocument(editor);
+    manager.workspaceDocuments.unbind(editor);
     expect(manager.uriForEditor(editor)).toBeNull();
     expect(manager.resolveUri(uri)).toBeNull();
   });
@@ -526,14 +526,14 @@ describe("LanguageServerManager external documents", () => {
     registerFakeSession(manager, notHolding);
 
     const editor = cellEditor();
-    manager.registerExternalDocument(editor, { editor, uri, cellId: "c1", record: record() });
+    manager.workspaceDocuments.bind(editor, { editor, uri, cellId: "c1", record: record() });
     expect(manager.sessionsForEditor(editor)).toEqual([holding]);
   });
 
   it("matches notebook-aware document selectors for bound editors", () => {
     const editor = cellEditor();
     const uri = C.cellUri(notebookPath, "c1");
-    manager.registerExternalDocument(editor, { editor, uri, cellId: "c1", record: record() });
+    manager.workspaceDocuments.bind(editor, { editor, uri, cellId: "c1", record: record() });
     const session = { adapter: { id: "test", grammarScopes: ["source.python"] } };
 
     // Scheme now follows the document, not a hard-coded "file".
@@ -1193,7 +1193,7 @@ describe("LanguageServerManager capabilities", () => {
     ]);
     const tsPath = path.join("C:", "project", "a.ts");
     const pyPath = path.join("C:", "project", "b.py");
-    manager.routeFileEvents([
+    manager.fileOperations.routeEvents([
       { action: "created", path: tsPath },
       { action: "updated", path: tsPath },
       { action: "created", path: pyPath },
@@ -1212,7 +1212,7 @@ describe("LanguageServerManager capabilities", () => {
         registerOptions: { watchers: [{ globPattern: "**/*.ts" }] },
       },
     ]);
-    manager.routeFileEvents([{ action: "updated", path: tsPath }]);
+    manager.fileOperations.routeEvents([{ action: "updated", path: tsPath }]);
     expect(notifications.at(-1).params.changes).toEqual([{ uri: C.pathToUri(tsPath), type: 2 }]);
   });
 
@@ -1241,7 +1241,7 @@ describe("LanguageServerManager capabilities", () => {
     };
     registerFakeSession(manager, session);
     const root = path.join("C:", "project");
-    manager.routeFileEvents([
+    manager.fileOperations.routeEvents([
       { action: "created", path: path.join(root, "New.MD") },
       { action: "created", path: path.join(root, "ignored.txt") },
       { action: "deleted", path: path.join(root, "old.markdown") },
@@ -1294,7 +1294,7 @@ describe("LanguageServerManager capabilities", () => {
       notify: (method, params) => notifications.push({ method, params }),
     };
     registerFakeSession(manager, session);
-    spyOn(manager, "applyWorkspaceEdits").and.resolveTo(true);
+    spyOn(manager.workspaceEdits, "applyWorkspaceEdits").and.resolveTo(true);
     const payload = {
       files: [
         {
@@ -1310,8 +1310,9 @@ describe("LanguageServerManager capabilities", () => {
 
     expect(requests[0].method).toBe("workspace/willRenameFiles");
     expect(requests[0].params.files[0].oldUri).toBe(C.pathToUri(payload.files[0].oldPath));
-    expect(manager.applyWorkspaceEdits.calls.count()).toBe(1);
-    const [edits, label, options] = manager.applyWorkspaceEdits.calls.mostRecent().args;
+    expect(manager.workspaceEdits.applyWorkspaceEdits.calls.count()).toBe(1);
+    const [edits, label, options] =
+      manager.workspaceEdits.applyWorkspaceEdits.calls.mostRecent().args;
     expect(edits[0].edit).toEqual({ changes: {} });
     expect(edits[0].session).toBe(session);
     expect(label).toBe("Prepare file rename");
@@ -1338,7 +1339,7 @@ describe("LanguageServerManager capabilities", () => {
       paths: [filePath],
       entries: [{ path: filePath, isDirectory: false }],
     });
-    manager.routeFileEvents([{ action: "created", path: filePath }]);
+    manager.fileOperations.routeEvents([{ action: "created", path: filePath }]);
 
     expect(notifications).toEqual([
       { id: "one", method: "workspace/didCreateFiles" },
@@ -1375,7 +1376,7 @@ describe("LanguageServerManager capabilities", () => {
         throw new Error("not ready");
       },
     });
-    spyOn(manager, "applyWorkspaceEdits").and.callFake(async () => {
+    spyOn(manager.workspaceEdits, "applyWorkspaceEdits").and.callFake(async () => {
       text = "prepared";
       return true;
     });
@@ -1383,7 +1384,7 @@ describe("LanguageServerManager capabilities", () => {
     expect(await manager.willDeleteFiles({ paths: [filePath] })).toBe(false);
 
     expect(text).toBe("original");
-    expect(manager.applyWorkspaceEdits).not.toHaveBeenCalled();
+    expect(manager.workspaceEdits.applyWorkspaceEdits).not.toHaveBeenCalled();
     manager.sessions.clear();
   });
 
@@ -1393,7 +1394,7 @@ describe("LanguageServerManager capabilities", () => {
     const uri = C.pathToUri(filePath);
     const editor = await lumine.workspace.buildTextEditor();
     editor.setText("one two");
-    spyOn(manager, "editorForWorkspaceEdit").and.resolveTo(editor);
+    spyOn(manager.workspaceEdits, "editorForWorkspaceEdit").and.resolveTo(editor);
     const responses = [
       { changes: { [uri]: [{ range: lspRange(0, 0, 3), newText: "ONE" }] } },
       { changes: { [uri]: [{ range: lspRange(0, 4, 7), newText: "TWO" }] } },

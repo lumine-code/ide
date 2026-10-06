@@ -81,7 +81,7 @@ describe("Staged file operation preparations", () => {
   it("stages raw edits without opening targets or preflighting until commit", async () => {
     const target = file("closed.test");
     sessionFor(async () => editFor(target));
-    const preflight = spyOn(manager, "preflightWorkspaceEdit").and.callThrough();
+    const preflight = spyOn(manager.workspaceEdits, "preflightWorkspaceEdit").and.callThrough();
     const workspaceOpen = spyOn(lumine.workspace, "open").and.callThrough();
 
     const stage = await manager.prepareRenameFiles(payload());
@@ -104,7 +104,7 @@ describe("Staged file operation preparations", () => {
     const stage = await manager.prepareRenameFiles(payload());
     expect(first.getText()).toBe("original\n");
     expect(second.getText()).toBe("original\n");
-    const apply = spyOn(manager, "applyWorkspaceEdits").and.callThrough();
+    const apply = spyOn(manager.workspaceEdits, "applyWorkspaceEdits").and.callThrough();
 
     const committed = stage.commit();
     expect(stage.commit()).toBe(committed);
@@ -112,7 +112,7 @@ describe("Staged file operation preparations", () => {
     expect(first.getText()).toBe("prepared\n");
     expect(second.getText()).toBe("prepared\n");
     expect(apply.calls.count()).toBe(1);
-    expect(manager.fileOperationPreparations.size).toBe(0);
+    expect(manager.fileOperations.preparations.size).toBe(0);
   });
 
   it("keeps every closed reference target alive until a multi-file commit finishes", async () => {
@@ -140,7 +140,7 @@ describe("Staged file operation preparations", () => {
     const session = sessionFor(() => reply.promise);
     const controller = new AbortController();
     const warning = spyOn(lumine.notifications, "addWarning");
-    const apply = spyOn(manager, "applyWorkspaceEdits").and.callThrough();
+    const apply = spyOn(manager.workspaceEdits, "applyWorkspaceEdits").and.callThrough();
     const pending = manager.prepareRenameFiles(payload(controller.signal));
 
     controller.abort();
@@ -150,7 +150,7 @@ describe("Staged file operation preparations", () => {
     await flush();
     expect(apply).not.toHaveBeenCalled();
     expect(warning).not.toHaveBeenCalled();
-    expect(manager.fileOperationPreparations.size).toBe(0);
+    expect(manager.fileOperations.preparations.size).toBe(0);
   });
 
   it("rejects a relevant buffer changed and reverted while the server was preparing", async () => {
@@ -175,7 +175,7 @@ describe("Staged file operation preparations", () => {
 
     expect(await manager.prepareRenameFiles(payload(controller.signal))).toBe(false);
     await flush();
-    expect(manager.fileOperationPreparations.size).toBe(0);
+    expect(manager.fileOperations.preparations.size).toBe(0);
   });
 
   it("keeps an oversized timeout inside the timer's supported range", async () => {
@@ -231,7 +231,7 @@ describe("Staged file operation preparations", () => {
     sessionFor(async () => editFor(target));
     const stage = await manager.prepareRenameFiles(payload());
     const acquisition = deferred();
-    spyOn(manager, "editorForWorkspaceEdit").and.returnValue(acquisition.promise);
+    spyOn(manager.workspaceEdits, "editorForWorkspaceEdit").and.returnValue(acquisition.promise);
     const editor = lumine.workspace.buildTextEditor();
     editor.setText("original\n");
     editors.push(editor);

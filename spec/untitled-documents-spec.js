@@ -66,7 +66,7 @@ describe("Unsaved language-server documents", () => {
     expect(manager.uriForEditor(editor)).toBe(uri);
     expect(manager.uriForEditor(other)).not.toBe(uri);
     expect(manager.resolveUri(uri)).toEqual({ kind: "untitled", editor });
-    expect(await manager.editorForWorkspaceEdit(uri)).toBe(editor);
+    expect(await manager.workspaceEdits.editorForWorkspaceEdit(uri)).toBe(editor);
     const result = await manager.applyWorkspaceEdit({
       changes: {
         [uri]: [

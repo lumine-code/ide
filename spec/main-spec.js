@@ -464,9 +464,9 @@ describe("ide-client package", () => {
     const executor = { prepare() {} };
     const registration = main.consumeFileOperationsExecutor(executor);
 
-    expect(main.manager.fileOperationsExecutor).toBe(executor);
+    expect(main.manager.fileOperations.executor).toBe(executor);
     registration.dispose();
-    expect(main.manager.fileOperationsExecutor).toBe(null);
+    expect(main.manager.fileOperations.executor).toBe(null);
   });
 
   it("takes only the transient half of busy-signal", () => {
@@ -679,13 +679,13 @@ describe("ide-client package", () => {
     };
     const editorA = { getRootScopeDescriptor: () => null };
     const editorB = { getRootScopeDescriptor: () => null };
-    main.manager.registerExternalDocument(editorA, {
+    main.manager.workspaceDocuments.bind(editorA, {
       editor: editorA,
       uri: C.cellUri(notebookPath, "c1"),
       cellId: "c1",
       record,
     });
-    main.manager.registerExternalDocument(editorB, {
+    main.manager.workspaceDocuments.bind(editorB, {
       editor: editorB,
       uri: C.cellUri(notebookPath, "c2"),
       cellId: "c2",
@@ -732,8 +732,8 @@ describe("ide-client package", () => {
     expect(after.messages.length).toBe(1);
     expect(after.messages[0].location.cell).toBe(3);
 
-    main.manager.unregisterExternalDocument(editorA);
-    main.manager.unregisterExternalDocument(editorB);
+    main.manager.workspaceDocuments.unbind(editorA);
+    main.manager.workspaceDocuments.unbind(editorB);
     registration.dispose();
   });
 

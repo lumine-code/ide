@@ -155,13 +155,13 @@ describe("ide-client linter registry lifecycle", () => {
     for (const cellId of ["c1", "c2"]) {
       const editor = { getRootScopeDescriptor: () => null };
       const manager = main.manager;
-      manager.registerExternalDocument(editor, {
+      manager.workspaceDocuments.bind(editor, {
         editor,
         uri: converters.cellUri(notebookPath, cellId),
         cellId,
         record,
       });
-      registrations.add(new Disposable(() => manager.unregisterExternalDocument(editor)));
+      registrations.add(new Disposable(() => manager.workspaceDocuments.unbind(editor)));
     }
     const oldAdapter = registerAdapter(adapterFor("notebook"));
     const service = registry();

@@ -485,7 +485,7 @@ describe("NotebookDocuments against a fake server", () => {
       { start: 1, deleteCount: 1, cells: [] },
     ]);
     expect(session.documents.has(C.uriKey(bridge.uriForCell("c2")))).toBe(false);
-    expect(manager.externalUris.has(C.uriKey(bridge.uriForCell("c2")))).toBe(false);
+    expect(manager.workspaceDocuments.resolveUri(bridge.uriForCell("c2"))).toBeNull();
     expect([...notebooks.records][0].version).toBe(3);
   });
 
@@ -816,11 +816,13 @@ describe("NotebookDocuments against a fake server", () => {
     const cellB = { id: "c2", kind: "code", text: "b\n", scopeName: "text.plain" };
     const bridge = notebooks.open({ filePath: notebookPath, cells: [cellA, cellB] });
     await bridge.attached;
-    const key = C.uriKey(bridge.uriForCell("c2"));
-    expect(manager.externalUris.has(key)).toBe(true);
+    const uri = bridge.uriForCell("c2");
+    expect(manager.workspaceDocuments.resolveUri(uri)).toEqual(
+      jasmine.objectContaining({ kind: "cell", editor: null, cellId: "c2" }),
+    );
 
     await bridge.updateCells([cellA]);
-    expect(manager.externalUris.has(key)).toBe(false);
+    expect(manager.workspaceDocuments.resolveUri(uri)).toBeNull();
   });
 
   it("accepts cell diagnostics stamped with either the cell or the notebook version", async () => {

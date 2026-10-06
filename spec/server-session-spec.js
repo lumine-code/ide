@@ -9,6 +9,19 @@ const { publishSession } = require("./helpers/session-fixtures");
 
 const FIXTURE = path.join(__dirname, "fixtures", "fake-server.js");
 
+const inspectFileOperationPaths = async (paths) =>
+  Object.freeze(
+    paths.map((filePath) => {
+      let status = "missing";
+      try {
+        status = fs.lstatSync(filePath).isDirectory() ? "directory" : "file";
+      } catch (error) {
+        if (error.code !== "ENOENT" && error.code !== "ENOTDIR") throw error;
+      }
+      return Object.freeze({ path: filePath, status });
+    }),
+  );
+
 const until = async (condition, timeout = 5000) => {
   const start = Date.now();
   while (Date.now() - start < timeout) {
@@ -81,19 +94,9 @@ describe("ServerSession against a fake server", () => {
   const installFileOperationsExecutor = () => {
     const executor = {
       plans: [],
-      inspect: jasmine.createSpy("inspect file-operation paths").and.callFake(async (paths) =>
-        Object.freeze(
-          paths.map((filePath) => {
-            let status = "missing";
-            try {
-              status = fs.lstatSync(filePath).isDirectory() ? "directory" : "file";
-            } catch (error) {
-              if (error.code !== "ENOENT" && error.code !== "ENOTDIR") throw error;
-            }
-            return Object.freeze({ path: filePath, status });
-          }),
-        ),
-      ),
+      inspect: jasmine
+        .createSpy("inspect file-operation paths")
+        .and.callFake(inspectFileOperationPaths),
       prepare: jasmine.createSpy("prepare file operations").and.callFake(async (operations) => {
         const virtual = new Map();
         const keyFor = (filePath) =>
@@ -1698,6 +1701,7 @@ describe("ServerSession against a fake server", () => {
       dispose: jasmine.createSpy("dispose"),
     };
     manager.setFileOperationsExecutor({
+      inspect: inspectFileOperationPaths,
       prepare: jasmine.createSpy("prepare").and.resolveTo({ status: "ready", plan }),
     });
     const filePath = path.join(tempDir, "version-during-resource.js");
@@ -1841,9 +1845,10 @@ describe("ServerSession against a fake server", () => {
       dispose() {},
     };
     manager.setFileOperationsExecutor({
+      inspect: inspectFileOperationPaths,
       prepare: jasmine.createSpy("prepare").and.resolveTo({ status: "ready", plan }),
     });
-    const didRename = spyOn(manager, "didRenameFiles");
+    const didRename = spyOn(manager.fileOperations, "didRenameFiles");
     const warning = spyOn(lumine.notifications, "addWarning");
     const session = { documents: new Map() };
     spyOn(lumine.window, "confirm").and.resolveTo(0);
@@ -1892,7 +1897,7 @@ describe("ServerSession against a fake server", () => {
             const lifecycle = { id: 1, operationIndex: 0, operation: operations[0] };
             willListener(lifecycle);
             fs.renameSync(source, target);
-            manager.routeFileEvents([
+            manager.fileOperations.routeEvents([
               { action: "created", path: internal },
               { action: "deleted", path: source },
               { action: "updated", path: external },
@@ -1920,9 +1925,9 @@ describe("ServerSession against a fake server", () => {
       },
     };
     manager.setFileOperationsExecutor(executor);
-    const publish = spyOn(manager, "publishFileOperationEffects").and.callThrough();
-    const watched = spyOn(manager, "notifyWatchedFileEvents").and.callThrough();
-    const deliver = spyOn(manager, "deliverFileEvents").and.callThrough();
+    const publish = spyOn(manager.fileOperations, "publishEffects").and.callThrough();
+    const watched = spyOn(manager.fileOperations, "notifyWatchedFiles").and.callThrough();
+    const deliver = spyOn(manager.fileOperations, "deliverEvents").and.callThrough();
     spyOn(lumine.window, "confirm").and.resolveTo(0);
 
     expect(
@@ -1943,7 +1948,7 @@ describe("ServerSession against a fake server", () => {
     ]);
     expect(deliver).toHaveBeenCalledOnceWith([{ action: "updated", path: external }]);
 
-    manager.routeFileEvents([{ action: "created", path: internal }]);
+    manager.fileOperations.routeEvents([{ action: "created", path: internal }]);
     expect(deliver.calls.count()).toBe(1);
   });
 
@@ -1985,7 +1990,7 @@ describe("ServerSession against a fake server", () => {
       },
     };
     manager.setFileOperationsExecutor(executor);
-    spyOn(manager, "updateEditorsForFileEffects").and.throwError("retarget failed");
+    spyOn(manager.workspaceDocuments, "pathsAfterEffects").and.throwError("retarget failed");
 
     const result = await manager.applyWorkspaceEditDetailed({
       documentChanges: [{ kind: "create", uri: C.pathToUri(target) }],
@@ -2022,7 +2027,7 @@ describe("ServerSession against a fake server", () => {
             async executeNext() {
               const lifecycle = { id: 21, operationIndex: 0, operation: operations[0] };
               willListener(lifecycle);
-              manager.routeFileEvents([{ action: "created", path: internal }]);
+              manager.fileOperations.routeEvents([{ action: "created", path: internal }]);
               manager.setFileOperationsExecutor(null);
               fs.renameSync(source, target);
               fs.writeFileSync(internal, "recovery");
@@ -2050,8 +2055,8 @@ describe("ServerSession against a fake server", () => {
       },
     };
     manager.setFileOperationsExecutor(executor);
-    const publish = spyOn(manager, "publishFileOperationEffects").and.callThrough();
-    const deliver = spyOn(manager, "deliverFileEvents").and.callThrough();
+    const publish = spyOn(manager.fileOperations, "publishEffects").and.callThrough();
+    const deliver = spyOn(manager.fileOperations, "deliverEvents").and.callThrough();
     spyOn(lumine.window, "confirm").and.resolveTo(0);
 
     const result = await manager.applyWorkspaceEditDetailed({
@@ -2075,27 +2080,27 @@ describe("ServerSession against a fake server", () => {
     const first = path.join(tempDir, "first-gate");
     const second = path.join(tempDir, "second-gate");
     const child = path.join(first, "child.ts");
-    const deliver = spyOn(manager, "deliverFileEvents").and.callThrough();
-    manager.beginFileOperationEventGate({
+    const deliver = spyOn(manager.fileOperations, "deliverEvents").and.callThrough();
+    manager.fileOperations.beginGate({
       id: "first",
       operation: { kind: "create", path: first },
     });
-    manager.beginFileOperationEventGate({
+    manager.fileOperations.beginGate({
       id: "second",
       operation: { kind: "create", path: second },
     });
-    manager.routeFileEvents([
+    manager.fileOperations.routeEvents([
       { action: "created", path: first },
       { action: "updated", path: child },
     ]);
 
-    await manager.finishFileOperationEventGate({
+    await manager.fileOperations.finishGate({
       id: "first",
       result: { status: "applied", effects: [{ kind: "create", path: first }] },
       eventTrace: { internalRoots: [], coveredRoots: [{ path: first, recursive: true }] },
     });
-    manager.routeFileEvents([{ action: "created", path: first }]);
-    await manager.finishFileOperationEventGate({
+    manager.fileOperations.routeEvents([{ action: "created", path: first }]);
+    await manager.fileOperations.finishGate({
       id: "second",
       result: { status: "skipped", effects: [] },
       eventTrace: { internalRoots: [], coveredRoots: [{ path: second, recursive: true }] },
@@ -2557,6 +2562,7 @@ describe("ServerSession against a fake server", () => {
       dispose: jasmine.createSpy("dispose"),
     };
     manager.setFileOperationsExecutor({
+      inspect: inspectFileOperationPaths,
       prepare: jasmine.createSpy("prepare").and.resolveTo({ status: "ready", plan }),
     });
 
@@ -2662,6 +2668,7 @@ describe("ServerSession against a fake server", () => {
       dispose() {},
     };
     manager.setFileOperationsExecutor({
+      inspect: inspectFileOperationPaths,
       prepare: jasmine.createSpy("prepare").and.resolveTo({ status: "ready", plan }),
     });
     spyOn(lumine.window, "confirm").and.resolveTo(0);
@@ -2697,6 +2704,7 @@ describe("ServerSession against a fake server", () => {
       dispose() {},
     };
     manager.setFileOperationsExecutor({
+      inspect: inspectFileOperationPaths,
       prepare: jasmine.createSpy("prepare").and.resolveTo({ status: "ready", plan }),
     });
     spyOn(lumine.window, "confirm").and.resolveTo(0);
@@ -2727,6 +2735,7 @@ describe("ServerSession against a fake server", () => {
       dispose() {},
     };
     manager.setFileOperationsExecutor({
+      inspect: inspectFileOperationPaths,
       prepare: jasmine.createSpy("prepare").and.resolveTo({ status: "ready", plan }),
     });
     spyOn(lumine.window, "confirm").and.resolveTo(0);
