@@ -32,6 +32,7 @@ describe("ide package", () => {
     expect(typeof service.createProjectDiagnostics).toBe("function");
     expect(typeof service.sessionForEditor).toBe("function");
     expect(typeof service.activeSessionsForEditor).toBe("function");
+    expect(typeof service.requestForDocument).toBe("function");
     expect(typeof service.activeSessionForFeature).toBe("function");
     expect(typeof service.applyWorkspaceEdit).toBe("function");
     expect(typeof service.willCreateFiles).toBe("function");

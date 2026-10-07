@@ -612,7 +612,30 @@ export interface LanguageServerService {
   /** Resolves once the session finished starting; null when absent, failed, or not running. */
   activeSessionForEditor(editor: TextEditor): Promise<LanguageServerSession | null>;
   /** Every running session serving that editor, in adapter registration order. */
-  activeSessionsForEditor(editor: TextEditor): Promise<LanguageServerSession[]>;
+  activeSessionsForEditor(
+    editor: TextEditor,
+    options?: { adapterId?: string },
+  ): Promise<LanguageServerSession[]>;
+  /** Routes through the selected adapter after document synchronization; rejects stale source generations. */
+  requestForDocument<T = unknown>(
+    editor: TextEditor,
+    options: {
+      adapterId?: string;
+      method: string;
+      params?:
+        | Record<string, unknown>
+        | unknown[]
+        | null
+        | ((document: Readonly<{ uri: string; version: number; text: string }>) => unknown);
+      feature?: LanguageServerFeature;
+      signal?: AbortSignal;
+      validate?(document: Readonly<{ uri: string; version: number; text: string }>): boolean;
+    },
+  ): Promise<{
+    result: T;
+    document: Readonly<{ uri: string; version: number; text: string }>;
+    isCurrent(): boolean;
+  } | null>;
   /**
    * The first running session that serves `method`, honouring dynamic
    * registrations and the adapter's feature switches. Prefer this over
