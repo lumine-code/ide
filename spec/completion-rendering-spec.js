@@ -137,4 +137,94 @@ describe("IDE completion documentation through autocomplete", () => {
     expect(pre.querySelector(".syntax--variable.syntax--parameter").textContent).toBe("predicate");
     expect(pre.querySelector(".syntax--type.syntax--predefined").textContent).toBe("string");
   });
+
+  it("keeps Ctrl-Space rows consistent while resolving and reopening JavaScript globals", async () => {
+    editor = await lumine.workspace.open("eslint.config.js");
+    editor.setText('const globals = require("globals");\nmodule.exports = [{ rules: {} }];');
+    editor.setCursorBufferPosition([1, 27]);
+    await editor.whenGrammarSettled();
+    await new Promise(requestAnimationFrame);
+    await new Promise(requestAnimationFrame);
+    const items = ["globals", "js", "module", "n", "prettier", "runtimeModules"].map((label) => ({
+      label,
+      kind: 6,
+    }));
+    const signatures = {
+      globals: "(alias) const globals: Globals\nimport globals",
+      js: "(alias) const js: { readonly meta: { readonly name: string; }; }\nimport js",
+    };
+    const session = {
+      adapter: {},
+      supports: () => true,
+      capabilityOptions: () => ({ resolveProvider: true }),
+      request: async (method, item) =>
+        method === "completionItem/resolve"
+          ? {
+              ...item,
+              detail: signatures[item.label],
+              documentation: { kind: "markdown", value: "" },
+            }
+          : { items },
+    };
+    const provider = new CompletionProvider({
+      addCapabilityFragment() {},
+      uriForEditor: () => "file:///eslint.config.js",
+      allGrammarScopes: () => [editor.getGrammar().scopeName],
+      activeSessionsForEditor: async () => [session],
+    });
+    registration = autocompletePackage.mainModule.consumeAutocomplete(provider);
+    watchRegistration = autocompletePackage.mainModule.provideAutocompleteWatchEditor()(editor);
+    const editorElement = editor.getElement();
+    editorElement.focus();
+    const list = autocompletePackage.mainModule.autocompleteManager.suggestionList;
+    const view = list.suggestionListElement;
+    const waitForSignature = async (signature) => {
+      const deadline = Date.now() + 4000;
+      while (Date.now() < deadline) {
+        const rendered = view.descriptionContent.querySelector("pre")?.textContent;
+        const embedded = view.descriptionContent
+          .querySelector("lumine-text-editor")
+          ?.getModel()
+          .getText();
+        if (rendered === signature || embedded === signature) {
+          for (let frame = 0; frame < 4; frame++) await new Promise(requestAnimationFrame);
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      throw new Error("Resolved global signature did not render");
+    };
+    const expectRows = () => {
+      expect(
+        Array.from(view.ol.querySelectorAll(".left-label"), (label) => label.textContent),
+      ).toEqual(items.map(() => ""));
+      expect(Array.from(view.ol.querySelectorAll(".word"), (word) => word.textContent)).toEqual(
+        items.map(({ label }) => label),
+      );
+      const row = view.ol.firstChild;
+      const iconCell = row.querySelector(".icon-container");
+      const icon = iconCell.querySelector(".icon").getBoundingClientRect();
+      const word = row.querySelector(".word").getBoundingClientRect();
+      expect(word.left - icon.right).toBeCloseTo(
+        parseFloat(getComputedStyle(iconCell).paddingRight),
+        0,
+      );
+    };
+
+    // Ctrl-Space invokes this command without inserting a prefix.
+    lumine.commands.dispatch(editorElement, "autocomplete:activate");
+    await waitForSignature(signatures.globals);
+    expectRows();
+    list.selectNext();
+    await waitForSignature(signatures.js);
+    expectRows();
+    expect(view.descriptionContent.textContent).not.toContain(signatures.globals);
+
+    autocompletePackage.mainModule.autocompleteManager.cancelSuggestions();
+    await new Promise(requestAnimationFrame);
+    lumine.commands.dispatch(editorElement, "autocomplete:activate");
+    await waitForSignature(signatures.globals);
+    expectRows();
+    provider.dispose();
+  });
 });

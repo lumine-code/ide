@@ -405,6 +405,131 @@ describe("CompletionProvider resolve and commands", () => {
     expect(session.requests.length).toBe(1);
   });
 
+  it("keeps newly resolved signatures out of the completion rows and in their documentation", async () => {
+    const { session, provider } = resolvingProvider((method, item) =>
+      method === "completionItem/resolve"
+        ? { label: item.label, detail: `(alias) const ${item.label}: string` }
+        : { items: [{ label: "console" }, { label: "constant" }] },
+    );
+    const [first, second] = await provider.getSuggestions({
+      editor: stubEditor(),
+      bufferPosition: { row: 0, column: 2 },
+      prefix: "co",
+    });
+    for (const suggestion of [first, second]) {
+      const detailed = await provider.getSuggestionDetailsOnSelect(suggestion);
+      expect(detailed.leftLabel).toBeUndefined();
+      expect(detailed.description).toBe(`(alias) const ${suggestion.displayText}: string`);
+      expect(suggestion.leftLabel).toBeUndefined();
+    }
+    expect(provider.cache.items.every((suggestion) => suggestion.leftLabel === undefined)).toBe(
+      true,
+    );
+    expect(
+      session.requests.filter(({ method }) => method === "completionItem/resolve").length,
+    ).toBe(2);
+  });
+
+  it("keeps the original row label while composing a changed signature with plain documentation", async () => {
+    for (const documentation of [
+      "Console documentation.",
+      { kind: "plaintext", value: "Console documentation." },
+    ]) {
+      const { session, provider } = resolvingProvider((method) =>
+        method === "completionItem/resolve"
+          ? { label: "console", detail: "const console: Console", documentation }
+          : { items: [{ label: "console", detail: "Console" }] },
+      );
+      const first = await selectFirst(provider, session);
+      const detailed = await provider.getSuggestionDetailsOnSelect(first);
+      expect(detailed.leftLabel).toBe("Console");
+      expect(detailed.description).toBe("const console: Console\n\nConsole documentation.");
+      expect(detailed.descriptionMarkdown).toBeUndefined();
+    }
+  });
+
+  it("shows a signature without repeating an unchanged initial row label", async () => {
+    const { session, provider } = resolvingProvider((method) =>
+      method === "completionItem/resolve"
+        ? { label: "console", detail: "Console", documentation: "Console documentation." }
+        : { items: [{ label: "console", detail: "Console" }] },
+    );
+    const detailed = await provider.getSuggestionDetailsOnSelect(
+      await selectFirst(provider, session),
+    );
+    expect(detailed.leftLabel).toBe("Console");
+    expect(detailed.description).toBe("Console documentation.");
+  });
+
+  it("renders a resolved signature as literal TypeScript with empty Markdown documentation", async () => {
+    const signature = "const value: `prefix```suffix`";
+    const { session, provider } = resolvingProvider((method) =>
+      method === "completionItem/resolve"
+        ? { label: "console", detail: signature, documentation: { kind: "markdown", value: "" } }
+        : { items: [{ label: "console" }] },
+    );
+    const detailed = await provider.getSuggestionDetailsOnSelect(
+      await selectFirst(provider, session),
+    );
+    expect(detailed.leftLabel).toBeUndefined();
+    expect(detailed.description).toBe(signature);
+    expect(detailed.descriptionMarkdown).toBe(`\`\`\`\`typescript\n${signature}\n\`\`\`\``);
+    expect(typeof detailed.descriptionCodeBlockRenderer).toBe("function");
+  });
+
+  it("combines a typed JavaScript signature with the server's Markdown documentation", async () => {
+    const { provider } = resolvingProvider((method) =>
+      method === "completionItem/resolve"
+        ? {
+            label: "console",
+            detail: "const console: Console",
+            documentation: { kind: "markdown", value: "**Console** documentation." },
+          }
+        : { items: [{ label: "console" }] },
+    );
+    const editor = stubEditor();
+    editor.getGrammar = () => ({ scopeName: "source.js", name: "JavaScript" });
+    const [first] = await provider.getSuggestions({
+      editor,
+      bufferPosition: { row: 0, column: 2 },
+      prefix: "co",
+    });
+    const detailed = await provider.getSuggestionDetailsOnSelect(first);
+    expect(detailed.description).toBe("const console: Console\n\n**Console** documentation.");
+    expect(detailed.descriptionMarkdown).toBe(
+      "```typescript\nconst console: Console\n```\n\n**Console** documentation.",
+    );
+    expect(typeof detailed.descriptionCodeBlockRenderer).toBe("function");
+  });
+
+  it("clears old documentation while retaining a newly resolved signature", async () => {
+    for (const documentation of [null, "", { kind: "markdown", value: "" }]) {
+      const { session, provider } = resolvingProvider((method) =>
+        method === "completionItem/resolve"
+          ? { label: "console", detail: "const console: Console", documentation }
+          : {
+              items: [
+                {
+                  label: "console",
+                  documentation: { kind: "markdown", value: "**Old documentation**" },
+                },
+              ],
+            },
+      );
+      const detailed = await provider.getSuggestionDetailsOnSelect(
+        await selectFirst(provider, session),
+      );
+      expect(detailed.description).toBe("const console: Console");
+      expect(detailed.descriptionMarkdown || "").not.toContain("Old documentation");
+      if (documentation?.kind === "markdown") {
+        expect(detailed.descriptionMarkdown).toContain("const console: Console");
+      } else {
+        expect(detailed.descriptionMarkdown).toBeUndefined();
+        expect(detailed.descriptionCodeBlockRenderer).toBeUndefined();
+      }
+    }
+  });
+
   it("attaches the shared renderer when resolving Markdown documentation", async () => {
     const { session, provider } = resolvingProvider((method) =>
       method === "completionItem/resolve"
@@ -466,7 +591,11 @@ describe("CompletionProvider resolve and commands", () => {
     );
     const first = await selectFirst(provider, session);
     const detailed = await provider.getSuggestionDetailsOnSelect(first);
-    expect(detailed.descriptionMarkdown).toBe(first.descriptionMarkdown);
+    expect(detailed.leftLabel).toBeUndefined();
+    expect(detailed.description).toBe("resolved detail\n\n**Documentation**");
+    expect(detailed.descriptionMarkdown).toBe(
+      "```typescript\nresolved detail\n```\n\n**Documentation**",
+    );
     expect(detailed.descriptionCodeBlockRenderer).toBe(first.descriptionCodeBlockRenderer);
   });
 
@@ -565,6 +694,70 @@ describe("CompletionProvider duplicate server data", () => {
 });
 
 describe("CompletionProvider caching", () => {
+  it("retains resolved documentation and the original row label when an identity cache is renewed", async () => {
+    let source = "co";
+    const grammar = { scopeName: "source.ts", name: "TypeScript" };
+    const languageMode = {};
+    const projectionFor = (text) => ({
+      isIdentity: true,
+      text,
+      source: text,
+      isCurrent: () => source === text,
+    });
+    const originalProjection = projectionFor(source);
+    const session = sessionWith(
+      (method) =>
+        method === "completionItem/resolve"
+          ? {
+              label: "console",
+              detail: "const console: Console",
+              documentation: { kind: "markdown", value: "Console documentation." },
+              projection: originalProjection,
+            }
+          : { items: [{ label: "console" }], projection: originalProjection },
+      { completionProvider: { resolveProvider: true } },
+    );
+    session.responseProjection = (result) => result.projection;
+    session.mapCompletionItem = (item) => item;
+    session.currentDocumentProjection = async () => projectionFor(source);
+    session.canRenewCompletionResponse = () => true;
+    session.renewCompletionItem = (item, _editor, _uri, projection) => ({ ...item, projection });
+    session.rememberCompletionResponse = (result, _editor, _uri, projection) => {
+      result.projection = projection;
+    };
+    const editor = stubEditor();
+    editor.getText = () => source;
+    editor.getGrammar = () => grammar;
+    editor.getBuffer = () => ({
+      characterIndexForPosition: (position) => position.column,
+      getLanguageMode: () => languageMode,
+    });
+    const provider = new CompletionProvider(managerWith(session));
+    const [first] = await provider.getSuggestions({
+      editor,
+      bufferPosition: { row: 0, column: 2 },
+      prefix: "co",
+    });
+    const detailed = await provider.getSuggestionDetailsOnSelect(first);
+    source = "con";
+    const [renewed] = await provider.getSuggestions({
+      editor,
+      bufferPosition: { row: 0, column: 3 },
+      prefix: "con",
+    });
+    expect(session.requests.map(({ method }) => method)).toEqual([
+      "textDocument/completion",
+      "completionItem/resolve",
+    ]);
+    expect(renewed).not.toBe(detailed);
+    expect(renewed.leftLabel).toBeUndefined();
+    expect(renewed.description).toBe(detailed.description);
+    expect(renewed.descriptionMarkdown).toBe(detailed.descriptionMarkdown);
+    expect(renewed.descriptionCodeBlockRenderer).toBe(detailed.descriptionCodeBlockRenderer);
+    expect(renewed._resolved).toBe(true);
+    provider.dispose();
+  });
+
   it("keeps a grown plain-text edit when resolve only fills in documentation", async () => {
     const session = sessionWith(
       (method) =>
