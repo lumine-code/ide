@@ -25,8 +25,16 @@ describe("Staged file operation preparations", () => {
   afterEach(async () => {
     await manager.deactivate();
     for (const editor of editors) editor.destroy();
+    await lumine.fileWatchClient.settlePendingTeardown();
     lumine.config.unset("ide.fileOperationPreparationTimeout");
-    fs.rmSync(directory, { recursive: true, force: true });
+    // Native file deletion can finish after its watcher releases the handle
+    // on Windows. Keep cleanup strict while allowing that release to settle.
+    await fs.promises.rm(directory, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    });
   });
 
   const file = (name, text = "original\n") => {
