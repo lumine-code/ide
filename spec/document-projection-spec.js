@@ -29,7 +29,15 @@ describe("AST document projections", () => {
     await session?.stop();
     await manager.deactivate();
     editor?.destroy();
-    fs.rmSync(directory, { recursive: true, force: true });
+    await lumine.fileWatchClient.settlePendingTeardown();
+    // Windows can finish deleting a watched file after its handle closes.
+    // Retry only fixture removal, and still fail if cleanup cannot complete.
+    await fs.promises.rm(directory, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    });
   });
   async function start(extra = {}, responses = {}) {
     const launch = {

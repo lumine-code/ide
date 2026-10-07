@@ -34,7 +34,15 @@ describe("Unsaved language-server documents", () => {
     await manager.deactivate();
     editor?.destroy();
     lumine.project.setPaths([]);
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    await lumine.fileWatchClient.settlePendingTeardown();
+    // Windows can finish deleting a watched file after its handle closes.
+    // Retry only fixture removal, and still fail if cleanup cannot complete.
+    await fs.promises.rm(tempDir, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    });
   });
 
   const register = (config = {}) => {

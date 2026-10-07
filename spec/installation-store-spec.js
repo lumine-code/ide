@@ -1,6 +1,7 @@
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const { randomUUID } = require("node:crypto");
 const { spawn } = require("node:child_process");
 const { setTimeout: delay } = require("node:timers/promises");
 const InstallationStore = require("../lib/installation-store");
@@ -30,13 +31,23 @@ describe("InstallationStore", () => {
     if (lease) leases.push(lease);
     return lease;
   };
-  const childOwner = (body) => {
+  const childOwner = (body, { retirementFailures = 0 } = {}) => {
     const modulePath = require.resolve("../lib/installation-store");
     const source = `
       const fs = require('node:fs');
+      const path = require('node:path');
       const Store = require(${JSON.stringify(modulePath)});
       (async () => {
-        const store = new Store({storageRoot:${JSON.stringify(storageRoot)},pollInterval:5});
+        let renameFailures = 0;
+        const fileSystem = {...fs,promises:{...fs.promises,rename:async (from,to) => {
+          if (renameFailures < ${retirementFailures} &&
+              ['.released-','.retired-'].some(prefix => path.basename(to).startsWith(prefix))) {
+            renameFailures++;
+            throw Object.assign(new Error('Lock directory is busy'),{code:'EPERM'});
+          }
+          return fs.promises.rename(from,to);
+        }}};
+        const store = new Store({storageRoot:${JSON.stringify(storageRoot)},pollInterval:5,fileSystem});
         const lease = await store.acquire('ide-test');
         ${body}
       })().catch(error => { process.send({error:error.stack}); process.exitCode = 1; });
@@ -387,34 +398,189 @@ describe("InstallationStore", () => {
     await delay(1);
   });
 
-  it("serializes competing processes that reclaim the same orphaned lock", async () => {
-    const abandoned = childOwner(
-      `await lease.createStage(); process.send({stage:lease.stagePath}); process.on('message', () => {});`,
+  it("retries a busy lock retirement without admitting a contender or honoring cancellation", async () => {
+    let renameFailures = 0;
+    const injected = {
+      ...fs,
+      promises: {
+        ...fs.promises,
+        rename: async (from, to) => {
+          if (path.basename(to).startsWith(".released-") && renameFailures < 2) {
+            renameFailures++;
+            throw Object.assign(new Error("Lock directory is busy"), { code: "EPERM" });
+          }
+          return fs.promises.rename(from, to);
+        },
+      },
+    };
+    const controller = new AbortController();
+    const lease = await acquire(
+      { signal: controller.signal },
+      new InstallationStore({ storageRoot, fileSystem: injected }),
     );
-    await message(abandoned);
-    await stopChild(abandoned);
-    const activity = path.join(scratch, "activity.jsonl");
-    const workers = Array.from({ length: 3 }, () =>
-      childOwner(`
+    let successor;
+    const waiting = acquire().then((owned) => (successor = owned));
+    controller.abort(new Error("Installation cancelled"));
+    const released = lease.release();
+    await delay(10);
+    expect(successor).toBeUndefined();
+    expect(lease.active).toBeTrue();
+    expect(store.readOwner(lease.lockPath).token).toBe(lease.token);
+    await released;
+    expect(renameFailures).toBe(2);
+    expect(lease.active).toBeFalse();
+    expect((await waiting).token).not.toBe(lease.token);
+  });
+
+  it("bounds retirement retries and preserves the owned live lock on persistent failure", async () => {
+    let blocked = true;
+    let attempts = 0;
+    const denied = Object.assign(new Error("Lock directory is busy"), { code: "EACCES" });
+    const injected = {
+      ...fs,
+      promises: {
+        ...fs.promises,
+        rename: async (from, to) => {
+          if (blocked && path.basename(to).startsWith(".released-")) {
+            attempts++;
+            throw denied;
+          }
+          return fs.promises.rename(from, to);
+        },
+      },
+    };
+    const lease = await acquire({}, new InstallationStore({ storageRoot, fileSystem: injected }));
+    try {
+      await expectAsync(lease.release()).toBeRejectedWith(denied);
+      expect(attempts).toBe(11);
+      expect(lease.active).toBeTrue();
+      expect(store.readOwner(lease.lockPath).token).toBe(lease.token);
+      expect(await acquire({ wait: false })).toBeNull();
+    } finally {
+      blocked = false;
+    }
+    await lease.release();
+    expect(lease.active).toBeFalse();
+  });
+
+  it("never retires a different lock generation after a failed rename", async () => {
+    let attempts = 0;
+    const successorToken = randomUUID();
+    const injected = {
+      ...fs,
+      promises: {
+        ...fs.promises,
+        rename: async (from, to) => {
+          if (path.basename(to).startsWith(".released-") && attempts++ === 0) {
+            const owner = store.readOwner(from);
+            fs.writeFileSync(
+              path.join(from, "owner.json"),
+              JSON.stringify({ ...owner, token: successorToken }),
+            );
+            throw Object.assign(new Error("Lock directory is busy"), { code: "EBUSY" });
+          }
+          return fs.promises.rename(from, to);
+        },
+      },
+    };
+    const lease = await acquire({}, new InstallationStore({ storageRoot, fileSystem: injected }));
+    try {
+      await expectAsync(lease.release()).toBeRejectedWithError(/no longer owned/);
+      expect(attempts).toBe(1);
+      expect(store.readOwner(lease.lockPath).token).toBe(successorToken);
+      expect(lease.active).toBeTrue();
+    } finally {
+      fs.writeFileSync(path.join(lease.lockPath, "owner.json"), JSON.stringify(lease.owner));
+    }
+  });
+
+  for (const changed of ["owner", "liveness", "reaper"]) {
+    it(`revalidates ${changed} before retrying an orphaned lock retirement`, async () => {
+      const lease = await acquire();
+      const replacement = randomUUID();
+      let alive = false;
+      let attempts = 0;
+      const marker = path.join(lease.lockPath, "reaper.json");
+      const injected = {
+        ...fs,
+        promises: {
+          ...fs.promises,
+          rename: async (from, to) => {
+            if (path.basename(to).startsWith(".retired-")) {
+              attempts++;
+              if (changed === "owner")
+                fs.writeFileSync(
+                  path.join(from, "owner.json"),
+                  JSON.stringify({ ...lease.owner, token: replacement }),
+                );
+              else if (changed === "liveness") alive = true;
+              else {
+                const reaper = JSON.parse(fs.readFileSync(marker, "utf8"));
+                fs.writeFileSync(marker, JSON.stringify({ ...reaper, token: replacement }));
+              }
+              throw Object.assign(new Error("Lock directory is busy"), { code: "EPERM" });
+            }
+            return fs.promises.rename(from, to);
+          },
+        },
+      };
+      const recovering = new InstallationStore({
+        storageRoot,
+        fileSystem: injected,
+        isProcessAlive: () => alive,
+      });
+      try {
+        expect(await recovering.acquire("ide-test", { wait: false })).toBeNull();
+        expect(attempts).toBe(1);
+        expect(store.readOwner(lease.lockPath).token).toBe(
+          changed === "owner" ? replacement : lease.token,
+        );
+        if (changed === "reaper")
+          expect(JSON.parse(fs.readFileSync(marker, "utf8")).token).toBe(replacement);
+        else expect(fs.existsSync(marker)).toBeFalse();
+      } finally {
+        fs.writeFileSync(path.join(lease.lockPath, "owner.json"), JSON.stringify(lease.owner));
+      }
+    });
+  }
+
+  for (const retirementFailures of [0, 2]) {
+    it(`serializes competing processes that reclaim the same orphaned lock${retirementFailures ? " despite temporary retirement failures" : ""}`, async () => {
+      const abandoned = childOwner(
+        `await lease.createStage(); process.send({stage:lease.stagePath}); process.on('message', () => {});`,
+      );
+      await message(abandoned);
+      await stopChild(abandoned);
+      const activity = path.join(scratch, "activity.jsonl");
+      const workers = Array.from({ length: 3 }, () =>
+        childOwner(
+          `
       fs.appendFileSync(${JSON.stringify(activity)},JSON.stringify({event:'start',token:lease.token})+'\\n');
       await new Promise(resolve => setTimeout(resolve,20));
       fs.appendFileSync(${JSON.stringify(activity)},JSON.stringify({event:'end',token:lease.token})+'\\n');
-      await lease.release(); process.send({released:true}); process.disconnect();
-    `),
-    );
-    await Promise.all(workers.map(message));
-    const events = fs
-      .readFileSync(activity, "utf8")
-      .trim()
-      .split(/\r?\n/)
-      .map((line) => JSON.parse(line));
-    expect(events.length).toBe(6);
-    for (let index = 0; index < events.length; index += 2) {
-      expect(events[index].event).toBe("start");
-      expect(events[index + 1]).toEqual({ event: "end", token: events[index].token });
-    }
-    expect(new Set(events.map(({ token }) => token)).size).toBe(3);
-  });
+      await lease.release(); process.send({released:true,renameFailures}); process.disconnect();
+    `,
+          { retirementFailures },
+        ),
+      );
+      const replies = await Promise.all(workers.map(message));
+      expect(replies.map(({ renameFailures }) => renameFailures)).toEqual(
+        Array(3).fill(retirementFailures),
+      );
+      const events = fs
+        .readFileSync(activity, "utf8")
+        .trim()
+        .split(/\r?\n/)
+        .map((line) => JSON.parse(line));
+      expect(events.length).toBe(6);
+      for (let index = 0; index < events.length; index += 2) {
+        expect(events[index].event).toBe("start");
+        expect(events[index + 1]).toEqual({ event: "end", token: events[index].token });
+      }
+      expect(new Set(events.map(({ token }) => token)).size).toBe(3);
+      expect(fs.existsSync(path.join(store.locksRoot, "ide-test"))).toBeFalse();
+    });
+  }
 
   it("releases a live lock when its own abandoned stage cannot yet be removed", async () => {
     let locked = true;

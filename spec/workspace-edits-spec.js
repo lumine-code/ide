@@ -63,7 +63,15 @@ describe("Workspace edit target lifetimes", () => {
     for (const editor of editors) {
       if (!editor.isDestroyed()) editor.destroy();
     }
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    await lumine.fileWatchClient.settlePendingTeardown();
+    // Windows can finish deleting a watched file after its handle closes.
+    // Retry only fixture removal, and still fail if cleanup cannot complete.
+    await fs.promises.rm(tempDir, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 100,
+    });
   });
 
   for (const replace of [false, true]) {
