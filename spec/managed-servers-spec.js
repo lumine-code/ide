@@ -126,6 +126,71 @@ describe("ManagedServers", () => {
       expect(compareVersions("2026-01-28", "2026-02-01")).toBeLessThan(0);
       expect(compareVersions("2026-02-08", "2026-02-08")).toBe(0);
     });
+
+    it("compares numeric prerelease identifiers rather than their spelling", () => {
+      expect(compareVersions("1.1.0-rc.10", "1.1.0-rc.2")).toBeGreaterThan(0);
+      expect(compareVersions("1.1.0-beta.2", "1.1.0-beta.11")).toBeLessThan(0);
+      expect(compareVersions("1.1.0-999", "1.1.0-0a")).toBeLessThan(0);
+    });
+
+    it("keeps the SemVer prerelease precedence chain in order", () => {
+      const versions = ["alpha", "alpha.1", "alpha.beta", "beta", "beta.2", "beta.11", "rc.1"];
+      for (let index = 1; index < versions.length; index++) {
+        expect(
+          compareVersions(`1.0.0-${versions[index - 1]}`, `1.0.0-${versions[index]}`),
+        ).toBeLessThan(0);
+      }
+      expect(compareVersions("1.0.0-alpha.1", "1.0.0-alpha.1.0")).toBeLessThan(0);
+    });
+
+    it("ignores build metadata, including hyphens and numeric-looking fields", () => {
+      expect(compareVersions("1.2.3+build-10", "1.2.3+build-2")).toBe(0);
+      expect(compareVersions("1.2.3+build-10", "1.2.3")).toBe(0);
+      expect(compareVersions("1.2.3-rc.2+build.99", "v1.2.3-rc.2+other")).toBe(0);
+    });
+
+    it("does not round long numeric identifiers while comparing them", () => {
+      expect(compareVersions("1.0.0-10000000000000000", "1.0.0-9999999999999999")).toBeGreaterThan(
+        0,
+      );
+      expect(compareVersions("9007199254740993.0.0", "9007199254740992.0.0")).toBeGreaterThan(0);
+    });
+
+    it("offers newer prereleases and does not offer an older prerelease as an update", () => {
+      const adapter = register(githubDescriptor());
+      const installed = spyOn(managed, "installFor").and.returnValue({ version: "1.1.0-rc.2" });
+      managed.latest.set(adapter.id, { version: "1.1.0-rc.10" });
+      expect(managed.describe(adapter).updatable).toBe(true);
+      installed.and.returnValue({ version: "1.1.0-rc.10" });
+      managed.latest.set(adapter.id, { version: "1.1.0-rc.2" });
+      expect(managed.describe(adapter).updatable).toBe(false);
+    });
+  });
+
+  it("passes a latest lookup's cancellation into the adapter API", async () => {
+    const controller = new AbortController();
+    let hookSignal;
+    const adapter = {
+      id: "ide-abortable-latest",
+      displayName: "Abortable latest",
+      grammarScopes: ["source.test"],
+      resolveServer: async () => null,
+      installServer: async () => ({}),
+      latestServerVersion: (api) => {
+        hookSignal = api.signal;
+        return new Promise((_resolve, reject) => {
+          hookSignal.addEventListener("abort", () => reject(hookSignal.reason), { once: true });
+        });
+      },
+    };
+    manager.registerAdapter(adapter);
+    const pending = managed.latestVersion(adapter, { signal: controller.signal });
+    const reason = new DOMException("The version lookup was canceled", "AbortError");
+    controller.abort(reason);
+    await expectAsync(pending).toBeRejectedWith(reason);
+    expect(hookSignal.aborted).toBe(true);
+    expect(hookSignal.reason).toBe(reason);
+    expect(managed.latest.has(adapter.id)).toBe(false);
   });
 
   describe("parseSidecar", () => {
