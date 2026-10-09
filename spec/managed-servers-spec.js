@@ -432,7 +432,17 @@ describe("ManagedServers", () => {
           integrity: integrityOf(companionArchive),
         },
       };
-      routes["https://registry.npmjs.org/companion/%5E2.0.0"] = JSON.stringify(companionMetadata);
+      routes["https://registry.npmjs.org/companion"] = JSON.stringify({
+        versions: {
+          "2.4.0": companionMetadata,
+          "3.0.0": {
+            version: "3.0.0",
+            dist: {
+              tarball: "https://registry.npmjs.org/companion/-/companion-3.0.0.tgz",
+            },
+          },
+        },
+      });
       routes[companionMetadata.dist.tarball] = companionArchive;
       register(
         npmDescriptor({
@@ -443,7 +453,10 @@ describe("ManagedServers", () => {
       const record = await managed.install("ide-test");
 
       expect(record.packages).toEqual(["testpkg", "companion"]);
-      expect(requested).toContain("https://registry.npmjs.org/companion/%5E2.0.0");
+      expect(requested).toContain("https://registry.npmjs.org/companion");
+      expect(requested).toContain(companionMetadata.dist.tarball);
+      expect(requested).not.toContain("https://registry.npmjs.org/companion/%5E2.0.0");
+      expect(requested).not.toContain("https://registry.npmjs.org/companion/-/companion-3.0.0.tgz");
       expect(
         fs.readFileSync(
           path.join(storageRoot, "ide-test", "node_modules", "companion", "index.js"),
