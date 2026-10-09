@@ -738,8 +738,8 @@ export interface LanguageServerService {
   openNotebookDocument(descriptor: NotebookDocumentDescriptor): NotebookBridge | null;
   /**
    * The adapters serving an open notebook, for a consumer deciding whether to
-   * stand down. Empty when no bridge is open for the path. Sticky across a
-   * server restart for the bridge's lifetime.
+   * stand down. Empty when no bridge is open or its sessions are stopped or
+   * failed; coverage returns when a replacement actually opens the notebook.
    */
   adaptersForNotebook(filePath: string): LanguageServerAdapter[];
   /** The `vscode-notebook-cell:` URI for a cell of a notebook. */

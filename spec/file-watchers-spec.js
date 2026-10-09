@@ -59,6 +59,23 @@ describe("adapter-owned standard file watchers", () => {
       },
     ]);
   });
+  it("delivers relative watchers for legal child names beginning with two dots", () => {
+    const child = path.join(root, "..config", "main.tf");
+    session.adapter.fileWatchers = [
+      { globPattern: { baseUri: pathToFileURL(root).href, pattern: "**/*.tf" } },
+    ];
+    manager.fileOperations.routeEvents([
+      { action: "updated", path: child },
+      { action: "updated", path: path.join(root, "..", "outside.tf") },
+      { action: "updated", path: path.join(other, "main.tf") },
+    ]);
+    expect(notifications).toEqual([
+      {
+        method: "workspace/didChangeWatchedFiles",
+        params: { changes: [{ uri: pathToFileURL(child).href, type: 2 }] },
+      },
+    ]);
+  });
   it("merges relative static and dynamic watchers without duplicates, preserves event order and retires them with the adapter", async () => {
     const file = path.join(root, "main.tf"),
       outside = path.join(other, "external.tf");
