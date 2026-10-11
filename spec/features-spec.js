@@ -336,7 +336,10 @@ describe("diagnostics switch", () => {
     main = lumine.packages.getActivePackage("ide").mainModule;
     manager = main.manager;
     spyOn(lumine.grammars, "selectGrammarAsync").and.resolveTo({ scopeName: "source.js" });
-    adapter = adapterFor("ide-a");
+    adapter = adapterFor("ide-a", {
+      settingsKeyPaths: ["ide-a"],
+      restartKeyPaths: ["ide-a.serverPath"],
+    });
     manager.registerAdapter(adapter);
     session = { adapter, state: "running", documents: new Map() };
     messages = new Map();
@@ -383,6 +386,61 @@ describe("diagnostics switch", () => {
     lumine.config.set("ide-a.features.diagnostics", true);
     await conditionPromise(() => messages.get(FILE)?.length === 1);
     expect(messages.get(FILE).map(({ excerpt }) => excerpt)).toEqual(["broken"]);
+  });
+
+  it("keeps the live session and process while hiding and restoring fresh push reports", async () => {
+    jasmine.useRealClock();
+    const launch = {
+      command: process.execPath,
+      args: [path.join(__dirname, "fixtures", "fake-server.js")],
+      env: { ELECTRON_RUN_AS_NODE: "1" },
+      transport: "stdio",
+    };
+    const CurrentServerSession = require("../lib/server-session");
+    session = new CurrentServerSession(manager, adapter, __dirname, launch);
+    const restarted = spyOn(manager, "restartAdapter");
+    await session.start();
+    publishSession(manager, session);
+    const serverProcess = session.process;
+    const notify = (excerpt) =>
+      session.request("test/notify", {
+        jsonrpc: "2.0",
+        method: "textDocument/publishDiagnostics",
+        params: {
+          uri: C.pathToUri(FILE),
+          diagnostics: [
+            {
+              severity: 1,
+              message: excerpt,
+              range: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } },
+            },
+          ],
+        },
+      });
+    try {
+      await notify("before toggle");
+      await conditionPromise(() => messages.get(FILE)?.length === 1);
+      lumine.config.set("ide-a.features.diagnostics", false);
+      await conditionPromise(() => messages.get(FILE)?.length === 0);
+      await notify("updated while hidden");
+      expect(manager.diagnosticsFor(session, C.pathToUri(FILE))[0].message).toBe(
+        "updated while hidden",
+      );
+      expect(messages.get(FILE)).toEqual([]);
+
+      lumine.config.set("ide-a.features.diagnostics", true);
+      await conditionPromise(() => messages.get(FILE)?.length === 1);
+      expect(messages.get(FILE).map(({ excerpt }) => excerpt)).toEqual(["updated while hidden"]);
+      expect(restarted).not.toHaveBeenCalled();
+      expect(manager.allSessions()).toContain(session);
+      expect(session.process).toBe(serverProcess);
+      expect(serverProcess.exitCode).toBeNull();
+      const received = await session.request("test/getReceived");
+      expect(received.filter(({ method }) => method === "initialize").length).toBe(1);
+      expect(received.some(({ method }) => method === "shutdown")).toBe(false);
+    } finally {
+      await session.stop();
+    }
   });
 
   it("publishes workspace results only for grammar scopes with diagnostics enabled", async () => {

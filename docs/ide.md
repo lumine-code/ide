@@ -316,6 +316,8 @@ The `languageId` sent to the server is resolved in order: `languageIdForScope(sc
 
 `getSettings` is pushed as `workspace/didChangeConfiguration` after initialize, and re-pushed whenever a config key listed in `settingsKeyPaths` changes. Changes received while a session is starting are coalesced and pushed once it reaches `running`, so its initialization snapshot cannot make a newer setting disappear. A key read by `resolveServer` or `getInitializationOptions` belongs in `restartKeyPaths` instead: the manager serializes and coalesces those changes, restarts every root, and starts a previously unavailable server for files that are already open. A change matching both lists restarts without first pushing settings to the process being replaced. Without either list the settings are sent once and never refreshed.
 
+Feature switches control the client and do not belong in `restartKeyPaths` or server initialization choices. Keep diagnostic transport and server analysis settings independent of local diagnostic visibility. A broad `settingsKeyPaths` entry may also match feature keys and resend the same `getSettings` value; this preserves the existing session. Marker and minimap visibility are rendering controls and do not change the language-server session.
+
 `getInitializedNotifications` returns protocol-extension notifications that must follow `initialized` and the initial settings push, such as `css/customDataChanged`. They are written to the connection in array order before the session becomes available to feature providers.
 
 `handleServerRequest` and `handleServerNotification` cover protocol extensions owned by one server rather than LSP itself. Core client handlers still take precedence; the adapter sees only otherwise-unhandled traffic. Requests must return the JSON-RPC result the server expects, while notifications are also emitted through `session.onNotification` after the adapter observes them.
@@ -567,7 +569,7 @@ The hub reads `<adapter id>.features.<name>` by default. Set `featuresKeyPath` t
 
 The `features` field on the adapter object is the fallback for an adapter with no config namespace — a custom server from `language-servers.json`, whose id carries a colon. A package should use `configSchema`, which the user can actually change; that wins over the field.
 
-`diagnostics` is the odd one: servers may push them or expose the LSP 3.17 pull model. Switching diagnostics off hides stored results; pull-capable servers are also not queried until the switch is enabled again.
+`diagnostics` controls local presentation and pull scheduling. Switching it off hides stored results and pauses diagnostic pulls for disabled scopes while the server session keeps running. Pushed reports still update the cache, and switching diagnostics on restores the latest stored results and resumes pulls. The switch does not disable server analysis or code actions; those keep their own settings and feature controls.
 
 ## Teardown
 
