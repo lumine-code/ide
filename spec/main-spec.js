@@ -1,3 +1,4 @@
+const windowService = require("./helpers/window-service");
 const fakeStatusBar = (tiles) => ({
   addRightTile(options) {
     const tile = {
@@ -595,7 +596,7 @@ describe("ide package", () => {
   it("adds its status-bar item to the code-intelligence band", () => {
     const main = lumine.packages.getActivePackage("ide").mainModule;
     const tiles = [];
-    const registration = main.consumeStatusBar(fakeStatusBar(tiles));
+    const registration = main.consumeStatusBar(windowService(fakeStatusBar(tiles)));
     expect(tiles.length).toBe(1);
     // Outside source control (310) on the right panel.
     expect(tiles[0].priority).toBe(250);
@@ -609,8 +610,8 @@ describe("ide package", () => {
   it("keeps the current status item when a previous service edge is disposed", () => {
     const main = lumine.packages.getActivePackage("ide").mainModule;
     const tiles = [];
-    const previous = main.consumeStatusBar(fakeStatusBar(tiles));
-    const current = main.consumeStatusBar(fakeStatusBar(tiles));
+    const previous = main.consumeStatusBar(windowService(fakeStatusBar(tiles)));
+    const current = main.consumeStatusBar(windowService(fakeStatusBar(tiles)));
     const view = main.serverStatus;
 
     previous.dispose();
@@ -627,7 +628,7 @@ describe("ide package", () => {
     const tiles = [];
     // The disposable consumeStatusBar returns belongs to the status-bar
     // package, so it never fires when this package deactivates.
-    main.consumeStatusBar(fakeStatusBar(tiles));
+    main.consumeStatusBar(windowService(fakeStatusBar(tiles)));
     await lumine.packages.deactivatePackage("ide");
     expect(tiles[0].destroyed).toBe(true);
   });

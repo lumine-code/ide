@@ -1,3 +1,4 @@
+const windowService = require("./helpers/window-service");
 const { publishSession } = require("./helpers/session-fixtures");
 
 describe("ide status-bar item", () => {
@@ -41,7 +42,7 @@ describe("ide status-bar item", () => {
     await lumine.packages.activatePackage("ide");
     main = lumine.packages.getActivePackage("ide").mainModule;
     tiles = [];
-    main.consumeStatusBar(fakeStatusBar());
+    main.consumeStatusBar(windowService(fakeStatusBar()));
     view = main.serverStatus;
     flush();
   });
@@ -140,7 +141,7 @@ describe("ide status-bar item", () => {
   });
 
   it("replaces the item when the status bar is consumed twice", () => {
-    main.consumeStatusBar(fakeStatusBar());
+    main.consumeStatusBar(windowService(fakeStatusBar()));
     expect(tiles.length).toBe(2);
     expect(tiles[0].destroyed).toBe(true);
     expect(tiles[1].destroyed).toBe(false);
