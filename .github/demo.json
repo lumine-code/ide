@@ -1,0 +1,17 @@
+{
+  "title": "ide",
+  "description": "Inspect the active TypeScript language-server session.",
+  "recordedOn": "2026-10-13",
+  "sourceRevision": "53198893432b1e94aa488e1ce36127b9133167e9",
+  "mode": "normal",
+  "fontSettings": "default",
+  "themeSourceRevision": "6564a9e21899b5541e9c8f8006f9be6d6d72e6ad",
+  "images": [
+    {
+      "file": "demo.png",
+      "label": "Inspect the active TypeScript language-server session.",
+      "width": 1150,
+      "height": 600
+    }
+  ]
+}

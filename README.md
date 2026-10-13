@@ -15,6 +15,8 @@ Coordinates language-server adapters, starts sessions lazily when matching edito
 - **Inspection**: exposes server state, capabilities, documents, diagnostics, logs and lifecycle actions through the server list and status bar.
 - **Activity**: reports server startup, slow requests and server-reported background work through the shared busy indicator, keeping concurrent operations independent.
 
+![Inspect the active TypeScript language-server session.](.github/demo.png)
+
 ## Installation
 
 To install `ide` search for it in the Install pane of the Lumine settings, or run the command `lumine --install lumine-code/ide`.
