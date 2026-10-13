@@ -25,6 +25,8 @@ Install the separate `file-operations` package if language servers should be all
 
 Commands available in `lumine-workspace`:
 
+Document commands act on the editor that invoked them, including notebook cells and editors in additional windows. Application-menu commands retain that window's document context.
+
 - `ide:servers`: list the running language servers and act on one of them,
 - `ide:manage-servers`: list the language servers the editor can install and act on one of them,
 - `ide:restart`: restart the language servers for the active editor,
