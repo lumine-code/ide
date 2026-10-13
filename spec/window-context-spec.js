@@ -47,3 +47,30 @@ describe("language-server color dialogs in editor windows", () => {
     expect(features.colorLists.has(extra)).toBe(false);
   });
 });
+
+describe("language server menus in editor windows", () => {
+  beforeEach(async () => {
+    jasmine.useRealClock();
+    jasmine.attachToDOM(lumine.workspace.getElement());
+    await lumine.packages.activatePackage("ide");
+  });
+  afterEach(async () => {
+    await lumine.packages.deactivatePackage("ide");
+    await lumine.workspace.discardEditorWindows();
+  });
+  it("creates server and management menus in their requested native hosts", async () => {
+    const workspace = lumine.workspace;
+    const extra = await workspace.openEditorWindow({ show: false });
+    const main = lumine.packages.getActivePackage("ide").mainModule;
+    const local = main.getSessionMenu(workspace.getMainWindow());
+    const remote = main.getSessionMenu(extra);
+    local.serverListHost.getPanel();
+    remote.serverListHost.getPanel();
+    expect(remote.serverList.getElement().ownerDocument).toBe(extra.getDocument());
+    expect(local.serverList.getElement().ownerDocument).toBe(document);
+    remote.detailsListHost.getPanel();
+    expect(remote.detailsList.getElement().ownerDocument).toBe(extra.getDocument());
+    await workspace.attachWindow(extra);
+    expect(main.sessionMenus.has(extra)).toBe(false);
+  });
+});
