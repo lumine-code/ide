@@ -8,7 +8,9 @@
           "submenu": [
             {
               "label": "Language Servers",
-              "command": "ide:servers"
+              "command": "ide:servers",
+              "group": "services",
+              "order": 10
             }
           ]
         }
@@ -19,14 +21,18 @@
       "submenu": [
         {
           "label": "Format with Language Server",
-          "command": "ide:format"
+          "command": "ide:format",
+          "group": "format",
+          "order": 20
         },
         {
           "label": "Folding",
           "submenu": [
             {
               "label": "Fold Language Server Ranges",
-              "command": "ide:fold-server-ranges"
+              "command": "ide:fold-server-ranges",
+              "group": "manual",
+              "order": 30
             }
           ]
         }
@@ -37,11 +43,15 @@
       "submenu": [
         {
           "label": "Expand Language Server Range",
-          "command": "ide:expand-selection-range"
+          "command": "ide:expand-selection-range",
+          "group": "structure",
+          "order": 10
         },
         {
           "label": "Select Linked Ranges",
-          "command": "ide:select-linked-ranges"
+          "command": "ide:select-linked-ranges",
+          "group": "structure",
+          "order": 20
         }
       ]
     },
