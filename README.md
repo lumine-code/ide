@@ -56,52 +56,13 @@ Commands available in `.ide-color-presentations`:
 
 - `ide:apply-color-presentation`: apply the selected color spelling.
 
-## Usage
+## Documentation
 
-Language servers are registered by adapter packages that consume the `ide` service:
-
-```js
-consumeIde(ide) {
-  return ide.registerAdapter({
-    id: "example",
-    displayName: "Example Language Server",
-    grammarScopes: ["source.example"],
-    async resolveServer({ rootPath }) {
-      return { command: "/absolute/path/to/example-ls", args: ["--stdio"], cwd: rootPath };
-    },
-  });
-}
-```
-
-Commands are spawned directly with `shell: false`; arguments belong in `args`. The default session scope is one server per project root; a server whose capabilities declare multi-root support is handed further folders instead of being started again, so `sessionScope: "workspace"` is needed only for servers with no notion of a root. New, unsaved editors use `untitled:` document URIs carrying the current grammar's extension and the first project root, falling back to the working directory when no project is open. The URI stays stable for that language; changing the grammar or saving closes the old document and opens the appropriate URI. The complete public shapes are documented in `lib/main.d.ts`.
-
-An adapter that serves embedded fragments declares `documentSymbolScopes` as the subset of `grammarScopes` whose whole document it owns. For example, an HTML server can complete markup in Markdown while offering document symbols only in HTML and its templates. Omitted metadata defaults to `grammarScopes`; an empty array exposes no document symbol source. Source enumeration and exact document requests enforce this ownership without changing workspace symbols, definitions or other language features.
-
-Text edits from `WorkspaceEdit` are applied to versioned editor buffers by this package. Filesystem inspection and resource operations are delegated to the optional `file-operations` infrastructure instead; `ide` never falls back to reading or mutating paths itself. The executor's lifecycle lets the hub retarget buffers and replace private staging noise with durable LSP file events, and a session advertises create, rename and delete support only when that executor was available during initialize.
-
-Tree-view reference updates are staged until every operation guard accepts the move. Cancelling the prompt, changing its path or rejecting a later guard discards them. Language-server preparation for creation, reference updates and deletion has a shared 30-second deadline; adjust `ide.fileOperationPreparationTimeout` from 1 to 3600 seconds. A timeout cancels the operation and reports its reason. Reference edits stay unsaved in editor buffers, and files with real edits stay open for review; empty edit entries never open files.
-
-With `busy-signal` installed, the client reports server startup and common finite language requests when they take longer than 400 ms, even when the server does not report progress. Standard LSP progress supplies the server's own description of its work, including background indexing when the server reports it. Persistent workspace diagnostic subscriptions appear only while the server reports work. Several operations can run at once without clearing each other's indicators; each clears when it finishes or its session ends. Running servers themselves remain listed in the separate IDE status-bar item.
-
-Every registered language-server adapter appears in `linter:toggle-linter`, even before it reports diagnostics. That list can mute or restore its messages without stopping the server or disabling its other features. Removing the adapter removes its entry and messages.
-
-## Configuration
-
-Any language server can be wired without an adapter package through `language-servers.json` in the configuration directory (open it with `ide:open-custom-servers-file`). Each entry needs a `command` and grammar `scopes`; `args`, `languageId`, `sessionScope`, `transport`, `env`, `initializationOptions`, `settings`, and `features` are optional. `settings` feeds both `workspace/configuration` lookups and the configuration push after startup, and `features` switches individual capabilities off — an adapter package holds the same switches in its own settings, but a custom server has no settings page to put them on:
-
-```json
-{
-  "gopls": {
-    "command": "gopls",
-    "args": ["serve"],
-    "scopes": ["source.go"],
-    "settings": { "gopls": { "usePlaceholders": true } },
-    "features": { "inlayHints": false }
-  }
-}
-```
-
-Saving the file restarts exactly the servers whose entries changed.
+- [Language servers](docs/language-servers.md): install adapters and frontends, manage server copies, configure custom servers and diagnose sessions.
+- [Code intelligence](docs/code-intelligence.md): use diagnostics, completion, symbols, navigation and other feature frontends.
+- [Writing a language-server adapter](docs/language-server-adapter.md): implement and test an adapter through the shared resolver.
+- [`ide` service](docs/ide.md) and [TypeScript declarations](lib/main.d.ts): the canonical public contract and lifecycle.
+- [Editor API](https://lumine-code.github.io/api/): editor objects used by integrations.
 
 ## Customization
 
