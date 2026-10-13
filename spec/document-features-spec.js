@@ -10,6 +10,7 @@ const lspRange = (row, start, end) => ({
 const makeEditor = () => {
   const editor = {
     getPath: () => "C:\\project\\file.js",
+    getElement: () => document.body,
     getBuffer: () => ({ onDidChangeText: () => ({ dispose() {} }) }),
     onDidDestroy: () => ({ dispose() {} }),
     getCursorBufferPosition: () => ({ row: 0, column: 2 }),
