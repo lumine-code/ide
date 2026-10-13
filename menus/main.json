@@ -1,6 +1,51 @@
 {
   "menu": [
     {
+      "label": "View",
+      "submenu": [
+        {
+          "label": "Developer",
+          "submenu": [
+            {
+              "label": "Language Servers",
+              "command": "ide:servers"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Edit",
+      "submenu": [
+        {
+          "label": "Format with Language Server",
+          "command": "ide:format"
+        },
+        {
+          "label": "Folding",
+          "submenu": [
+            {
+              "label": "Fold Language Server Ranges",
+              "command": "ide:fold-server-ranges"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "label": "Selection",
+      "submenu": [
+        {
+          "label": "Expand Language Server Range",
+          "command": "ide:expand-selection-range"
+        },
+        {
+          "label": "Select Linked Ranges",
+          "command": "ide:select-linked-ranges"
+        }
+      ]
+    },
+    {
       "label": "Packages",
       "submenu": [
         {
