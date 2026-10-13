@@ -11,9 +11,11 @@ describe("ide status-bar item", () => {
         destroyed: false,
         destroy() {
           this.destroyed = true;
+          options.item.remove();
         },
       };
       tiles.push(tile);
+      lumine.workspace.getElement().appendChild(options.item);
       return tile;
     },
   });
@@ -38,6 +40,7 @@ describe("ide status-bar item", () => {
   };
 
   beforeEach(async () => {
+    jasmine.attachToDOM(lumine.workspace.getElement());
     lumine.config.set("ide.statusBar.enabled", true);
     await lumine.packages.activatePackage("ide");
     main = lumine.packages.getActivePackage("ide").mainModule;
@@ -120,13 +123,16 @@ describe("ide status-bar item", () => {
     expect(lines).toEqual(["zeta Server (running)", "alpha Server (starting)"]);
   });
 
-  it("opens the session menu on a left click only", () => {
-    spyOn(main.sessionMenu, "toggle");
+  it("opens the session menu on a left click only", async () => {
+    await main.ensureCustomServers();
+    const menu = main.getSessionMenu();
+    spyOn(menu, "toggle");
     view.element.dispatchEvent(new MouseEvent("click", { button: 2 }));
-    expect(main.sessionMenu.toggle).not.toHaveBeenCalled();
+    expect(menu.toggle).not.toHaveBeenCalled();
 
     view.element.dispatchEvent(new MouseEvent("click", { button: 0 }));
-    expect(main.sessionMenu.toggle).toHaveBeenCalled();
+    await Promise.resolve();
+    expect(menu.toggle).toHaveBeenCalled();
   });
 
   it("stays hidden while the setting is off", () => {

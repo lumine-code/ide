@@ -58,6 +58,8 @@ Commands available in `.ide-color-presentations`:
 
 ## Documentation
 
+The language-server status item's context menu opens the running-server list, server management and the problems panel. Left click opens the same running-server list.
+
 - [Language servers](docs/language-servers.md): install adapters and frontends, manage server copies, configure custom servers and diagnose sessions.
 - [Code intelligence](docs/code-intelligence.md): use diagnostics, completion, symbols, navigation and other feature frontends.
 - [Writing a language-server adapter](docs/language-server-adapter.md): implement and test an adapter through the shared resolver.

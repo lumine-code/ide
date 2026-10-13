@@ -7,7 +7,7 @@ describe("ide package assets", () => {
   it("ships one grouped Packages submenu for every workspace command", () => {
     expect(manifest.files).toContain("menus");
     const menu = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "menus", "main.json")));
-    expect(Object.keys(menu)).toEqual(["menu"]);
+    expect(Object.keys(menu)).toEqual(["menu", "context-menu"]);
     expect(menu.menu[0].label).toBe("Packages");
     const packageMenu = menu.menu[0].submenu[0];
     expect(packageMenu.label).toBe("IDE");
