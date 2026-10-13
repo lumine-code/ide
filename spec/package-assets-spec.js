@@ -8,8 +8,7 @@ describe("ide package assets", () => {
     expect(manifest.files).toContain("menus");
     const menu = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "menus", "main.json")));
     expect(Object.keys(menu)).toEqual(["menu", "context-menu"]);
-    expect(menu.menu[0].label).toBe("Packages");
-    const packageMenu = menu.menu[0].submenu[0];
+    const packageMenu = menu.menu.find((item) => item.label === "Packages").submenu[0];
     expect(packageMenu.label).toBe("IDE");
     const groups = [[]];
     for (const item of packageMenu.submenu) {
