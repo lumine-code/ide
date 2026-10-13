@@ -101,11 +101,11 @@ describe("Language server activity", () => {
       cancellable: true,
       cancel() {},
     });
-    expect(signal.entries()[0].title).toBe("Test Server: Indexing · Click to cancel");
+    expect(signal.entries()[0].title).toBe("Test Server: Indexing");
     signal.entries()[0].options.onDidClick();
     expect(signal.entries()[0].title).toBe("Test Server: Indexing");
     task.update({ cancellable: true });
-    expect(signal.entries()[0].title).toContain("Click to cancel");
+    expect(signal.entries()[0].title).toBe("Test Server: Indexing");
     task.dispose();
     expect(signal.completed[0].title).toBe("Test Server: Indexing");
   });
@@ -115,7 +115,7 @@ describe("Language server activity", () => {
     const replacement = makeBusySignal();
     activity.setBusySignal(replacement);
     expect(signal.completed[0].title).toBe("Test Server: Indexing");
-    expect(replacement.entries()[0].title).toBe("Test Server: Indexing · Click to cancel");
+    expect(replacement.entries()[0].title).toBe("Test Server: Indexing");
   });
 
   it("ignores cancellation callbacks captured before a task ends", () => {
@@ -238,7 +238,7 @@ describe("Language server progress adapter", () => {
       progress(session, "a", { kind: "begin", title: "Diagnostics", cancellable: true }),
     );
     advanceClock(400);
-    expect(signal.entries()[0].title).toBe("Test Server: Diagnostics · Click to cancel");
+    expect(signal.entries()[0].title).toBe("Test Server: Diagnostics");
     signal.entries()[0].options.onDidClick();
     expect(cancel).toHaveBeenCalledTimes(1);
     expect(session.notify).not.toHaveBeenCalled();

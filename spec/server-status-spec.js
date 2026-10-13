@@ -59,7 +59,9 @@ describe("ide status-bar item", () => {
     // answer to "is a server up for this file?".
     expect(view.element.style.display).toBe("");
     expect(view.label.textContent).toBe("IDE (0)");
-    expect(view.tooltipContent.textContent).toBe("No language servers are running");
+    expect(view.tooltipContent.textContent).toBe(
+      "No language servers running. Click to view servers.",
+    );
   });
 
   it("counts the servers once they appear", () => {
@@ -116,11 +118,12 @@ describe("ide status-bar item", () => {
     expect(view.failed.textContent).toBe("1");
   });
 
-  it("names the servers and their states on hover, one line each", () => {
+  it("summarizes server state and the primary action in one tooltip", () => {
     addSession(stubSession("running", "zeta"));
     addSession(stubSession("starting", "alpha"));
-    const lines = [...view.tooltipContent.children].map((line) => line.textContent);
-    expect(lines).toEqual(["zeta Server (running)", "alpha Server (starting)"]);
+    expect(view.tooltipContent.textContent).toBe(
+      "2 language servers (1 starting). Click to view servers.",
+    );
   });
 
   it("opens the session menu on a left click only", async () => {

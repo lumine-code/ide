@@ -3036,7 +3036,7 @@ describe("ServerSession against a fake server", () => {
     const pending = session.request("textDocument/hover", {}).catch((error) => error);
     await until(() => busy.titles.length > 0);
     expect(busy.titles[0]).toContain("Fake Server: Loading hover");
-    expect(busy.titles[0]).toContain("Click to cancel");
+    expect(busy.providers[0].options.onDidClick).toEqual(jasmine.any(Function));
     busy.providers[0].options.onDidClick();
     const error = await pending;
     expect(error.name).toBe("AbortError");
