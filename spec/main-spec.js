@@ -1,4 +1,6 @@
 const windowService = require("./helpers/window-service");
+const path = require("node:path");
+const { createRequire } = require("node:module");
 const fakeStatusBar = (tiles) => ({
   addRightTile(options) {
     const tile = {
@@ -64,7 +66,10 @@ describe("ide package", () => {
   it("cancels lazy server bootstrap instead of resuming a command in a later activation", async () => {
     const main = lumine.packages.getActivePackage("ide").mainModule;
     let finish;
-    const CustomServers = require("../lib/custom-servers");
+    const pack = lumine.packages.getActivePackage("ide");
+    const CustomServers = createRequire(path.join(pack.path, "package.json"))(
+      "./lib/custom-servers",
+    );
     spyOn(CustomServers.prototype, "activate").and.callFake(
       () =>
         new Promise((resolve) => {
