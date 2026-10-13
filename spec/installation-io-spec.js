@@ -498,17 +498,17 @@ describe("Installation I/O ownership", () => {
     fs.writeFileSync(path.join(source, "second"), "later bytes");
     const archive = path.join(scratch, "server.tar.gz");
     tar.c({ file: archive, cwd: source, gzip: true, sync: true }, ["first", "second"]);
-    const extract = tar.x;
-    spyOnProperty(tar, "x", "get").and.returnValue((options) =>
-      extract({
-        ...options,
-        filter: (name, entry) => {
-          const allowed = options.filter(name, entry);
-          if (name === "first") owner.abort();
-          return allowed;
-        },
-      }),
-    );
+    const aborted = Object.getOwnPropertyDescriptor(
+      Object.getPrototypeOf(owner.signal),
+      "aborted",
+    ).get;
+    // The first filter call accepts its entry, then revokes the real owner.
+    // This observes tar's I/O boundary without replacing an ESM export.
+    spyOnProperty(owner.signal, "aborted", "get").and.callFake(() => {
+      const wasAborted = aborted.call(owner.signal);
+      if (!wasAborted) owner.abort();
+      return wasAborted;
+    });
     await expectAsync(
       sources.extract(archive, target, archive, 0, { signal: owner.signal }),
     ).toBeRejected();
@@ -516,4 +516,17 @@ describe("Installation I/O ownership", () => {
     expect(fs.statSync(path.join(target, "first")).size).toBe(65536);
     expect(fs.existsSync(path.join(target, "second"))).toBe(false);
   });
+  for (const suffix of ["tar.gz", "tar.xz"]) {
+    it(`does not allocate extraction I/O when cancelled while loading ${suffix}`, async () => {
+      const archive = path.join(scratch, `unopened.${suffix}`);
+      const target = path.join(scratch, `cancelled-${suffix}`);
+      const reason = new Error("Extraction dependency loading cancelled");
+      const stat = spyOn(fs, "stat").and.callThrough();
+      const pending = sources.extract(archive, target, archive, 0, { signal: owner.signal });
+      owner.abort(reason);
+      await expectAsync(pending).toBeRejectedWith(reason);
+      expect(stat.calls.allArgs().some(([filename]) => filename === archive)).toBe(false);
+      expect(fs.existsSync(target)).toBe(false);
+    });
+  }
 });
