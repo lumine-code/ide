@@ -64,7 +64,7 @@
   "context-menu": {
     ".ide-server-status": [
       { "type": "separator" },
-      { "label": "Servers…", "command": "ide:servers", "mouseBindingLabel": "LMB" },
+      { "label": "Servers…", "command": "ide:servers" },
       { "label": "Manage Servers…", "command": "ide:manage-servers" },
       { "label": "Toggle Problems", "command": "ide:toggle-problems" },
       { "type": "separator" }

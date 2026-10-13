@@ -26,7 +26,6 @@ describe("IDE status action menu", () => {
       ["ide:servers", "ide:manage-servers", "ide:toggle-problems"],
     );
     const dispatch = spyOn(lumine.commands, "dispatch");
-    expect(lumine.contextMenu.templateForElement(view.element)[0].mouseBindingLabel).toBe("LMB");
     view.element.dispatchEvent(new MouseEvent("click", { button: 2 }));
     expect(dispatch).not.toHaveBeenCalled();
     view.element.click();
