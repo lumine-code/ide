@@ -21,6 +21,27 @@ describe("server resolution ownership", () => {
     grammarScopes: ["source.resolver-lifecycle"],
     resolveServer,
   });
+  it("initializes managed storage only when a resolution reads its installation", () => {
+    const adapter = adapterFor(async () => null);
+    adapter.installServer = async () => ({});
+    const installed = { version: "1.0.0" };
+    const managed = {
+      installFor: jasmine.createSpy("read installation").and.returnValue(installed),
+      dispose() {},
+    };
+    const initialize = jasmine.createSpy("initialize managed storage").and.callFake(() => {
+      manager.setManagedServers(managed);
+    });
+    manager.setManagedServersInitializer(initialize);
+    manager.registerAdapter(adapter);
+    const context = manager.adapterContext(adapter, rootPath);
+
+    expect(initialize).not.toHaveBeenCalled();
+    expect(context.getManagedServer()).toBe(installed);
+    expect(context.getManagedServer()).toBe(installed);
+    expect(initialize).toHaveBeenCalledTimes(1);
+    expect(managed.installFor).toHaveBeenCalledOnceWith(adapter);
+  });
   it("rejects an invalid launch before stopping a healthy source", async () => {
     const adapter = adapterFor(async () => ({ command: "server", transport: "bad-transport" }));
     manager.registerAdapter(adapter);
