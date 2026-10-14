@@ -398,6 +398,123 @@ describe("InstallationStore", () => {
     await delay(1);
   });
 
+  async function abandonedLock() {
+    await store.prepare();
+    const lockPath = path.join(store.locksRoot, "ide-test");
+    const observed = {
+      format: 1,
+      adapterId: "ide-test",
+      token: randomUUID(),
+      pid: 1,
+      host: store.host,
+    };
+    fs.mkdirSync(lockPath);
+    fs.writeFileSync(path.join(lockPath, "owner.json"), JSON.stringify(observed));
+    return { lockPath, observed };
+  }
+
+  for (const code of ["EPERM", "EACCES", "EBUSY"]) {
+    it(`preserves a competing recovery marker when Windows reports ${code} for its hard link`, async () => {
+      const { lockPath, observed } = await abandonedLock();
+      const marker = path.join(lockPath, "reaper.json");
+      const competing = { token: randomUUID(), pid: 2, host: store.host };
+      fs.writeFileSync(marker, JSON.stringify(competing));
+      const recovering = new InstallationStore({
+        storageRoot,
+        isProcessAlive: (pid) => pid !== observed.pid,
+        fileSystem: {
+          ...fs,
+          promises: {
+            ...fs.promises,
+            link: async () => {
+              throw Object.assign(new Error("Recovery marker already exists"), { code });
+            },
+          },
+        },
+      });
+
+      expect(await recovering.reclaim(lockPath, observed)).toBeFalse();
+      expect(JSON.parse(fs.readFileSync(marker, "utf8"))).toEqual(competing);
+      expect(store.readOwner(lockPath)).toEqual(observed);
+    });
+  }
+
+  it("retries a temporarily blocked recovery claim without a marker", async () => {
+    const { lockPath, observed } = await abandonedLock();
+    let attempts = 0;
+    const recovering = new InstallationStore({
+      storageRoot,
+      isProcessAlive: () => false,
+      fileSystem: {
+        ...fs,
+        promises: {
+          ...fs.promises,
+          link: async (from, to) => {
+            if (attempts++ === 0)
+              throw Object.assign(new Error("Lock directory is busy"), { code: "EPERM" });
+            return fs.promises.link(from, to);
+          },
+        },
+      },
+    });
+
+    expect(await recovering.reclaim(lockPath, observed)).toBeTrue();
+    expect(attempts).toBe(2);
+    expect(fs.existsSync(lockPath)).toBeFalse();
+    expect(fs.readdirSync(store.locksRoot)).toEqual([]);
+  });
+
+  it("does not claim a replacement lock after its first recovery link is blocked", async () => {
+    const { lockPath, observed } = await abandonedLock();
+    const replacement = { ...observed, token: randomUUID() };
+    let attempts = 0;
+    const recovering = new InstallationStore({
+      storageRoot,
+      isProcessAlive: () => false,
+      fileSystem: {
+        ...fs,
+        promises: {
+          ...fs.promises,
+          link: async () => {
+            attempts++;
+            fs.writeFileSync(path.join(lockPath, "owner.json"), JSON.stringify(replacement));
+            throw Object.assign(new Error("Lock directory is being replaced"), { code: "EPERM" });
+          },
+        },
+      },
+    });
+
+    expect(await recovering.reclaim(lockPath, observed)).toBeFalse();
+    expect(attempts).toBe(1);
+    expect(store.readOwner(lockPath)).toEqual(replacement);
+    expect(fs.existsSync(path.join(lockPath, "reaper.json"))).toBeFalse();
+  });
+
+  it("bounds recovery claim retries and preserves ownership on persistent failure", async () => {
+    const { lockPath, observed } = await abandonedLock();
+    const denied = Object.assign(new Error("Recovery claim is denied"), { code: "EPERM" });
+    let attempts = 0;
+    const recovering = new InstallationStore({
+      storageRoot,
+      isProcessAlive: () => false,
+      fileSystem: {
+        ...fs,
+        promises: {
+          ...fs.promises,
+          link: async () => {
+            attempts++;
+            throw denied;
+          },
+        },
+      },
+    });
+
+    await expectAsync(recovering.reclaim(lockPath, observed)).toBeRejectedWith(denied);
+    expect(attempts).toBe(11);
+    expect(store.readOwner(lockPath)).toEqual(observed);
+    expect(fs.readdirSync(store.locksRoot)).toEqual(["ide-test"]);
+  });
+
   it("retries a busy lock retirement without admitting a contender or honoring cancellation", async () => {
     let renameFailures = 0;
     const injected = {
