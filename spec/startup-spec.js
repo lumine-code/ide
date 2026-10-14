@@ -24,6 +24,23 @@ global.lumine = {
   main.initialize();
   main.activate();
   await Promise.resolve();
+  assert.equal(main.manager._fileOperations, null);
+  const completion = main.provideAutocomplete();
+  const signature = main.provideHoverSignature();
+  assert.deepEqual([...completion.triggerCharacters], []);
+  assert.deepEqual([...signature.triggerCharacters], []);
+  assert.deepEqual([...signature.retriggerCharacters], []);
+  main.manager.sessions.set("metadata", {
+    state: "running",
+    capabilityOptions: method => method === "textDocument/completion"
+      ? { triggerCharacters: [".", ":", "."] }
+      : { triggerCharacters: ["("], retriggerCharacters: [","] },
+  });
+  assert.deepEqual([...completion.triggerCharacters], [".", ":"]);
+  assert.deepEqual([...signature.triggerCharacters], ["("]);
+  assert.deepEqual([...signature.retriggerCharacters], [","]);
+  main.manager.sessions.clear();
+  assert.notEqual(main._providersReady, true);
   let beforeStep, afterStep;
   main.manager.setFileOperationsExecutor({
     onWillExecuteStep(callback) { beforeStep = callback; return new api.Disposable(); },
@@ -46,11 +63,15 @@ global.lumine = {
     return { dispose() {} };
   });
   assert.equal(delegates, 1);
+  const projectDiagnostics = service.createProjectDiagnostics("startup-test", { setAllMessages() {} });
+  projectDiagnostics.setAllMessages([]);
+  projectDiagnostics.dispose();
   main.manager.fileOperations.routeEvents([{ action: "updated", path: "C:/startup/test.js" }]);
   linterConnection.dispose();
   registered.dispose();
   await main.deactivate();
-  for (const filename of ${JSON.stringify(["server-session", "session-controller", "workspace-edits", "workspace-documents", "diagnostic-scope-cache", "server-activity", "converters", "linter-messages", "language-ids", "capabilities", "server-resolver", "managed-servers", "installation-store", "installation-controller", "installation-io", "file-operation-preparation", "workspace-file-operations-runtime"].map((file) => require.resolve("../lib/" + file)))}) {
+  assert.throws(() => completion.triggerCharacters, { name: "AbortError" });
+  for (const filename of ${JSON.stringify(["server-session", "session-controller", "workspace-edits", "workspace-documents", "diagnostic-scope-cache", "server-activity", "converters", "linter-messages", "language-ids", "capabilities", "server-resolver", "managed-servers", "installation-store", "installation-controller", "installation-io", "file-operation-preparation", "workspace-file-operations-runtime", "language-server-manager-runtime", "completion-provider", "signature-provider", "documentation-code-block"].map((file) => require.resolve("../lib/" + file)))}) {
     assert.equal(require.cache[filename], undefined, filename + " loaded before an IDE operation");
   }
 })().catch(error => { console.error(error); process.exitCode = 1; });
