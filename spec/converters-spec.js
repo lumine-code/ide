@@ -15,11 +15,11 @@ describe("ide converters", () => {
   });
   describe("uriKey", () => {
     // The same file has more than one correct URI. Pyright echoes back
-    // `file:///c%3A/…ASILOI~1/…` for the `file:///C:/…ASILOI%7E1/…` it was
+    // `file:///c%3A/…DEMOUS~1/…` for the `file:///C:/…DEMOUS%7E1/…` it was
     // given, and as raw strings those are two different map keys.
     it("agrees across the spellings a server may choose", () => {
-      const client = "file:///C:/Users/ASILOI%7E1/AppData/Local/project/greeter.py";
-      const server = "file:///c%3A/Users/ASILOI~1/AppData/Local/project/greeter.py";
+      const client = "file:///C:/Users/DEMOUS%7E1/AppData/Local/project/greeter.py";
+      const server = "file:///c%3A/Users/DEMOUS~1/AppData/Local/project/greeter.py";
       expect(client).not.toBe(server);
       expect(C.uriKey(client)).toBe(C.uriKey(server));
     });
@@ -51,8 +51,8 @@ describe("ide converters", () => {
     it("agrees across the spellings a server may choose for a cell URI", () => {
       // Cell URIs are re-spelled the same way file URIs are: the key is
       // rebuilt from the decoded notebook path plus the fragment.
-      const client = "vscode-notebook-cell:///C:/Users/ASILOI%7E1/project/nb.ipynb#cell-1";
-      const server = "vscode-notebook-cell:///c%3A/Users/ASILOI~1/project/nb.ipynb#cell-1";
+      const client = "vscode-notebook-cell:///C:/Users/DEMOUS%7E1/project/nb.ipynb#cell-1";
+      const server = "vscode-notebook-cell:///c%3A/Users/DEMOUS~1/project/nb.ipynb#cell-1";
       expect(client).not.toBe(server);
       expect(C.uriKey(client)).toBe(C.uriKey(server));
       // Different cells of one notebook stay different keys.

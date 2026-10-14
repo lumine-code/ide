@@ -1507,13 +1507,13 @@ describe("LanguageServerManager diagnostics", () => {
   });
 
   it("finds them again under the client's spelling of the same file", () => {
-    // Pyright echoes `file:///c%3A/…ASILOI~1/…` for the
-    // `file:///C:/…ASILOI%7E1/…` it was given. Stored under one and looked up
+    // Pyright echoes `file:///c%3A/…DEMOUS~1/…` for the
+    // `file:///C:/…DEMOUS%7E1/…` it was given. Stored under one and looked up
     // under the other, every lookup came back empty — which is what the
     // intentions provider reads to give a server the diagnostic it should fix,
     // so quick fixes were offered no context at all.
-    const fromClient = "file:///C:/Users/ASILOI%7E1/project/greeter.py";
-    const fromServer = "file:///c%3A/Users/ASILOI~1/project/greeter.py";
+    const fromClient = "file:///C:/Users/DEMOUS%7E1/project/greeter.py";
+    const fromServer = "file:///c%3A/Users/DEMOUS~1/project/greeter.py";
     const windows = { documents: new Map([[C.uriKey(fromClient), { version: 1 }]]) };
 
     manager.publishDiagnostics(windows, {
@@ -1530,7 +1530,7 @@ describe("LanguageServerManager diagnostics", () => {
     // the canonical key would hand it something that is not a URI at all.
     const published = [];
     manager.onDidPublishDiagnostics((event) => published.push(event.uri));
-    const fromServer = "file:///c%3A/Users/ASILOI~1/project/greeter.py";
+    const fromServer = "file:///c%3A/Users/DEMOUS~1/project/greeter.py";
     const windows = { documents: new Map() };
 
     manager.publishDiagnostics(windows, { uri: fromServer, diagnostics: [{ message: "x" }] });

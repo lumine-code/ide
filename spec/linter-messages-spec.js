@@ -293,8 +293,8 @@ describe("LSP diagnostics linter mapping", () => {
     // that spells the same file differently is not a different file, but it
     // was a different string, so nothing was ever shown for it.
     it("is the editor's spelling, not the server's", () => {
-      const fromServer = "file:///c%3A/Users/asiloisad/project/main.py";
-      const fromEditor = "file:///C:/Users/asiloisad/project/main.py";
+      const fromServer = "file:///c%3A/Users/demo-user/project/main.py";
+      const fromEditor = "file:///C:/Users/demo-user/project/main.py";
       expect(fromServer).not.toBe(fromEditor);
       expect(toLinterMessages(fromServer, []).filePath).toBe(
         toLinterMessages(fromEditor, []).filePath,
