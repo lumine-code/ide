@@ -1,18 +1,13 @@
 {
   "menu": [
     {
-      "label": "View",
+      "label": "Developer",
       "submenu": [
         {
-          "label": "Developer",
-          "submenu": [
-            {
-              "label": "Language Servers",
-              "command": "ide:servers",
-              "group": "services",
-              "order": 10
-            }
-          ]
+          "label": "Language Servers…",
+          "command": "ide:servers",
+          "group": "services",
+          "order": 10
         }
       ]
     },
@@ -62,35 +57,12 @@
           "label": "IDE",
           "submenu": [
             {
-              "label": "Servers",
-              "command": "ide:servers"
-            },
-            {
-              "label": "Manage Servers",
-              "command": "ide:manage-servers"
-            },
-            {
-              "label": "Restart",
-              "command": "ide:restart"
-            },
-            {
-              "label": "Show Log",
-              "command": "ide:show-log"
-            },
-            {
-              "label": "Open Custom Servers File",
-              "command": "ide:open-custom-servers-file"
-            },
-            {
-              "type": "separator"
+              "label": "Format",
+              "command": "ide:format"
             },
             {
               "label": "Toggle Problems",
               "command": "ide:toggle-problems"
-            },
-            {
-              "label": "Format",
-              "command": "ide:format"
             },
             {
               "type": "separator"
@@ -110,6 +82,29 @@
             {
               "label": "Color Presentation…",
               "command": "ide:color-presentation"
+            },
+            {
+              "type": "separator"
+            },
+            {
+              "label": "Servers…",
+              "command": "ide:servers"
+            },
+            {
+              "label": "Manage Servers…",
+              "command": "ide:manage-servers"
+            },
+            {
+              "label": "Restart",
+              "command": "ide:restart"
+            },
+            {
+              "label": "Show Log",
+              "command": "ide:show-log"
+            },
+            {
+              "label": "Open Custom Servers File",
+              "command": "ide:open-custom-servers-file"
             }
           ]
         }
