@@ -16,6 +16,13 @@ describe("ide package assets", () => {
       else groups.at(-1).push(item.command);
     }
     expect(groups).toEqual([
+      ["ide:format", "ide:toggle-problems"],
+      [
+        "ide:fold-server-ranges",
+        "ide:expand-selection-range",
+        "ide:select-linked-ranges",
+        "ide:color-presentation",
+      ],
       [
         "ide:servers",
         "ide:manage-servers",
@@ -23,15 +30,8 @@ describe("ide package assets", () => {
         "ide:show-log",
         "ide:open-custom-servers-file",
       ],
-      ["ide:toggle-problems", "ide:format"],
-      [
-        "ide:fold-server-ranges",
-        "ide:expand-selection-range",
-        "ide:select-linked-ranges",
-        "ide:color-presentation",
-      ],
     ]);
-    expect(packageMenu.submenu.at(-1).label).toBe("Color Presentation…");
+    expect(packageMenu.submenu.at(-1).label).toBe("Open Custom Servers File");
   });
 
   it("provides document links through the hyperclick service", () => {
