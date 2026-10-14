@@ -185,6 +185,29 @@ describe("Language server progress adapter", () => {
   const progress = (session, token, value) => ({ session, params: { token, value } });
   const send = (manager, event) => manager.handleProgress(event.session, event.params);
 
+  it("retains the busy service until real work and preserves synchronous replacement", () => {
+    expect(manager._activity).toBeNull();
+    const task = manager.beginActivity(session, "lazy", { title: "Indexing" });
+    expect(signal.entries().map(({ title }) => title)).toEqual(["Test Server: Indexing"]);
+    const replacement = makeBusySignal();
+    manager.setBusySignal(replacement);
+    expect(signal.entries()).toEqual([]);
+    expect(replacement.entries().map(({ title }) => title)).toEqual(["Test Server: Indexing"]);
+    manager.setBusySignal(null);
+    expect(replacement.entries()).toEqual([]);
+    task.dispose();
+    expect(replacement.providers.size).toBe(0);
+  });
+
+  it("retires an unused busy service without creating activity during teardown", () => {
+    expect(manager._activity).toBeNull();
+    manager.killAllSessions();
+    manager.setBusySignal(makeBusySignal());
+    expect(manager._busySignal).toBeNull();
+    expect(manager._activity).toBeNull();
+    expect(signal.entries()).toEqual([]);
+  });
+
   it("includes begin details, percentage-only reports and final messages", () => {
     send(
       manager,

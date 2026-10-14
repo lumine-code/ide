@@ -25,6 +25,11 @@ global.lumine = {
   main.activate();
   await Promise.resolve();
   assert.equal(main.manager._fileOperations, null);
+  const busySignal = {};
+  main.manager.setBusySignal(busySignal);
+  assert.equal(main.manager._busySignal, busySignal);
+  assert.equal(main.manager._activity, null);
+  main.manager.setBusySignal(null);
   const completion = main.provideAutocomplete();
   const signature = main.provideHoverSignature();
   assert.deepEqual([...completion.triggerCharacters], []);
