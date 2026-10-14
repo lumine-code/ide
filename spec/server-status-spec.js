@@ -1,5 +1,7 @@
 const windowService = require("./helpers/window-service");
 const { publishSession } = require("./helpers/session-fixtures");
+const path = require("node:path");
+const { createRequire } = require("node:module");
 
 describe("ide status-bar item", () => {
   let main, view, tiles;
@@ -62,6 +64,31 @@ describe("ide status-bar item", () => {
     expect(view.tooltipContent.textContent).toBe(
       "No language servers running. Click to view servers.",
     );
+  });
+
+  it("shares its compatibility constructor and replaces it after a package reload", async () => {
+    const first = lumine.packages.getActivePackage("ide");
+    const firstRequire = createRequire(path.join(first.path, "package.json"));
+    const previous = main.ServerStatusView;
+    expect(view.constructor).toBe(previous);
+    expect(firstRequire("./lib/server-status-view")).toBe(previous);
+    expect(Object.keys(main)).not.toContain("ServerStatusView");
+    await lumine.packages.unloadPackage("ide");
+    const coldRequire = createRequire(path.join(first.path, "package.json"));
+    const coldConstructor = coldRequire("./lib/server-status-view");
+    expect(coldConstructor).not.toBe(previous);
+    const current = await lumine.packages.activatePackage("ide");
+    main = current.mainModule;
+    main.consumeStatusBar(windowService(fakeStatusBar()));
+    view = main.serverStatus;
+    flush();
+    const currentRequire = createRequire(path.join(current.path, "package.json"));
+    expect(view.constructor).toBe(main.ServerStatusView);
+    expect(currentRequire("./lib/server-status-view")).toBe(main.ServerStatusView);
+    expect(main.ServerStatusView).toBe(coldConstructor);
+    expect(main.ServerStatusView).not.toBe(previous);
+    expect(view.label.textContent).toBe("IDE (0)");
+    expect(view.element.style.display).toBe("");
   });
 
   it("counts the servers once they appear", () => {
