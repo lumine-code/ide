@@ -76,7 +76,7 @@ global.lumine = {
   registered.dispose();
   await main.deactivate();
   assert.throws(() => completion.triggerCharacters, { name: "AbortError" });
-  for (const filename of ${JSON.stringify(["server-session", "session-controller", "workspace-edits", "workspace-documents", "diagnostic-scope-cache", "server-activity", "converters", "linter-messages", "language-ids", "capabilities", "server-resolver", "managed-servers", "installation-store", "installation-controller", "installation-io", "file-operation-preparation", "workspace-file-operations-runtime", "language-server-manager-runtime", "completion-provider", "signature-provider", "documentation-code-block"].map((file) => require.resolve("../lib/" + file)))}) {
+  for (const filename of ${JSON.stringify(["server-session", "session-controller", "workspace-edits", "workspace-documents", "diagnostic-scope-cache", "server-activity", "converters", "linter-messages", "language-ids", "capabilities", "server-resolver", "managed-servers", "installation-store", "installation-controller", "installation-io", "file-operation-preparation", "workspace-file-operations-runtime", "language-server-manager-runtime", "completion-provider", "signature-provider", "documentation-code-block", "workspace-file-operations", "linter-bridge", "linter-bridge-runtime"].map((file) => require.resolve("../lib/" + file)))}) {
     assert.equal(require.cache[filename], undefined, filename + " loaded before an IDE operation");
   }
 })().catch(error => { console.error(error); process.exitCode = 1; });
