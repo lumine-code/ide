@@ -21,6 +21,8 @@ const outcome = (promise) =>
     (value) => ({ value }),
     (error) => ({ error }),
   );
+// Abandoned work must settle promptly. Successful installations include real
+// disk transactions and use the normal Jasmine deadline instead.
 const promptly = async (promise) => {
   let timer;
   try {
@@ -152,7 +154,8 @@ describe("managed installation ownership", () => {
     const first = outcome(managed.install("installation-test", { version: "1.0.0" }));
     await entered.promise;
     try {
-      await promptly(managed.install("independent-test", { version: "2.0.0" }));
+      // The unrelated hook stays blocked until this installation has committed.
+      await managed.install("independent-test", { version: "2.0.0" });
       expect(fs.readFileSync(payloadPath("independent-test"), "utf8")).toBe("2.0.0");
       expect(fs.existsSync(payloadPath())).toBe(false);
     } finally {
@@ -215,7 +218,7 @@ describe("managed installation ownership", () => {
     expect(failed).toBe(true);
     expect(managed.installationStatus(adapter.id)).toBe("failed");
     expect(fs.readFileSync(payloadPath(), "utf8")).toBe("1.0.0");
-    const next = await promptly(managed.install(adapter.id, { version: "2.0.0" }));
+    const next = await managed.install(adapter.id, { version: "2.0.0" });
     expect(next.version).toBe("2.0.0");
     expect(managed.installationStatus(adapter.id)).toBe(null);
     expect(fs.readFileSync(payloadPath(), "utf8")).toBe("2.0.0");
@@ -458,7 +461,9 @@ describe("managed installation ownership", () => {
     const old = outcome(managed.install(retired.id));
     await entered.promise;
     await manager.unregisterAdapter(retired);
-    const replacement = register();
+    const replacement = register(
+      jasmine.createSpy("replacement install").and.callFake(writePayload),
+    );
     const next = outcome(managed.install(replacement.id, { version: "2.0.0" }));
     try {
       expect((await promptly(old)).error?.name).toBe("AbortError");
@@ -467,8 +472,10 @@ describe("managed installation ownership", () => {
       expect(() => oldApi.setServerInstallationStatus("failed")).toThrowMatching(
         (error) => error.name === "AbortError",
       );
+      expect(replacement.installServer).not.toHaveBeenCalled();
       release.resolve();
-      expect((await promptly(next)).error).toBeUndefined();
+      expect((await next).error).toBeUndefined();
+      expect(replacement.installServer).toHaveBeenCalledTimes(1);
       const settledEvents = events.slice();
       await conditionPromise(() => transientPaths().length === 0);
       await flush();
