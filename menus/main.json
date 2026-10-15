@@ -51,6 +51,22 @@
       ]
     },
     {
+      "label": "File",
+      "submenu": [
+        {
+          "label": "Configuration Files",
+          "submenu": [
+            {
+              "label": "IDE Server Configuration",
+              "command": "ide:open-custom-servers-file",
+              "group": "packages",
+              "order": 10
+            }
+          ]
+        }
+      ]
+    },
+    {
       "label": "Packages",
       "submenu": [
         {
