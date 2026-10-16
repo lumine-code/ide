@@ -67,6 +67,33 @@ describe("session document ownership", () => {
   const messages = (method) =>
     session.connection.notify.calls.allArgs().filter(([name]) => name === method);
 
+  it("does not retain an editor destroyed before document attachment", async () => {
+    editor.destroy();
+    await documents.openEditor(editor);
+    expect(documents.items.size).toBe(0);
+    expect(session.connection.notify).not.toHaveBeenCalled();
+
+    const replacement = buildEditor();
+    await documents.openEditor(replacement);
+    expect(documents.items.get(C.uriKey(uri)).editor).toBe(replacement);
+    expect(messages("textDocument/didOpen").length).toBe(1);
+  });
+
+  it("reopens a URI left behind by an obsolete editor", async () => {
+    await documents.openEditor(editor);
+    const obsolete = documents.items.get(C.uriKey(uri));
+    // Model a delayed attachment from before the destroyed-editor guard: its
+    // subscription was installed after the editor's destroy event had fired.
+    obsolete.subscriptions.dispose();
+    editor.destroy();
+    const replacement = buildEditor();
+    await documents.openEditor(replacement);
+
+    expect(documents.items.get(C.uriKey(uri)).editor).toBe(replacement);
+    expect(messages("textDocument/didOpen").length).toBe(2);
+    expect(messages("textDocument/didClose").length).toBe(1);
+  });
+
   it("rejects change, save and destroy callbacks from a retired URI generation", async () => {
     await documents.openEditor(editor);
     const previous = documents.items.get(C.uriKey(uri));
