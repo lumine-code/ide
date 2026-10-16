@@ -205,17 +205,28 @@ describe("ide package", () => {
     });
   });
 
-  it("registers its workspace commands", () => {
+  it("keeps document operations out of its workspace command surface", () => {
     const commands = lumine.commands.findCommands({
       target: lumine.views.getView(lumine.workspace),
     });
     expect(commands.map(({ name }) => name)).toContain("ide:toggle-problems");
     expect(commands.map(({ name }) => name)).toContain("ide:restart");
     expect(commands.map(({ name }) => name)).toContain("ide:servers");
-    expect(commands.map(({ name }) => name)).toContain("ide:fold-server-ranges");
-    expect(commands.map(({ name }) => name)).toContain("ide:expand-selection-range");
-    expect(commands.map(({ name }) => name)).toContain("ide:select-linked-ranges");
-    expect(commands.map(({ name }) => name)).toContain("ide:color-presentation");
+    const editor = lumine.workspace.buildTextEditor();
+    try {
+      for (const name of [
+        "ide:format",
+        "ide:fold-server-ranges",
+        "ide:expand-selection-range",
+        "ide:select-linked-ranges",
+        "ide:color-presentation",
+      ]) {
+        expect(commands.map(({ name }) => name)).not.toContain(name);
+        expect(lumine.commands.canDispatch(editor.getElement(), name)).toBe(true);
+      }
+    } finally {
+      editor.destroy();
+    }
   });
 
   it("satisfies the autocomplete provider contract", () => {
