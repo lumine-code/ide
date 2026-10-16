@@ -2410,7 +2410,12 @@ describe("ServerSession against a fake server", () => {
     const targetFile = path.join(targetDirectory, "nested", "file.txt");
     fs.mkdirSync(path.dirname(sourceFile), { recursive: true });
     fs.writeFileSync(sourceFile, "before");
+    // Arm the containing project before opening its file so the shared root
+    // watcher covers descendants without Windows handles inside the moved tree.
+    lumine.project.setPaths([tempDir]);
+    await lumine.project.getWatcherPromise(tempDir);
     const editor = await lumine.workspace.open(sourceFile);
+    await editor.getBuffer().getFileWatchStartPromise();
     spyOn(lumine.window, "confirm").and.resolveTo(0);
 
     const result = await manager.applyWorkspaceEditDetailed({
