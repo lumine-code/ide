@@ -301,6 +301,8 @@ export interface LanguageServerAdapter {
     context: { editor: TextEditor; filePath: string | null },
   ): string | undefined;
   grammarScopes: string[];
+  /** False merges file URI/path aliases regardless of case; omitted/true preserves case. Non-file URIs remain distinct. */
+  caseSensitiveFileNames?: boolean;
   /** Whole-document symbol ownership; defaults to grammarScopes. A subset, or [] to expose no document source. Other features and workspace symbols remain independent. */
   documentSymbolScopes?: string[];
   documentSelector?: Array<{ language?: string; scheme?: string; pattern?: string }>;
@@ -461,6 +463,8 @@ export interface LanguageServerAdapter {
 export interface RequestOptions {
   /** Aborting settles the request locally, whatever the server does next. */
   signal?: AbortSignal;
+  /** Intended source owner when document URI aliases share one wire document. Defaults to the editor matching the request URI. */
+  editor?: TextEditor;
   /**
    * Send `$/cancelRequest` when the signal aborts. Defaults to `true`; pass
    * `false` to abandon the request without telling the server about it.

@@ -57,6 +57,7 @@ Preparation hooks must honor their cancellation signal. The hub applies its shar
 ## What the adapter owns
 
 - `id`, `displayName` and `grammarScopes` identify the adapter and the editors it serves.
+- Set `caseSensitiveFileNames: false` when the server treats file names as case-insensitive. The hub then shares one wire document across file URI aliases; omitted or `true` preserves case distinctions. Other URI schemes retain their exact identities.
 - `resolveServer(context)` returns a validated launch or `null` after reporting how to install a missing server. Use `context.resolver` for path selection and launch construction, and put every command argument in `args`. Native selection rejects Windows `.cmd` and `.bat` wrappers by default; an adapter deliberately handling a wrapper opts into `allowShellWrapper`, while custom-server commands retain the client's explicit Windows wrapper route.
 - `languageIdForScope(scopeName, {editor, filePath})`, initialization options, settings, protocol-extension hooks and document transforms are optional; use only the hooks the server needs. The editor context lets one grammar scope distinguish file variants such as `.js` and `.jsx`.
 - `getInitializedNotifications({session, rootPath, rootUri})` may return `{method, params}` notifications that must follow the initial settings push, such as `css/customDataChanged`.

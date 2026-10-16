@@ -14,6 +14,8 @@ describe("language-server adapter contract", () => {
       ["displayName", " "],
       ["grammarScopes", ["source.example", null]],
       ["grammarScopes", [""]],
+      ["caseSensitiveFileNames", "false"],
+      ["caseSensitiveFileNames", null],
       ["sessionScope", "root"],
       ["settingsKeyPaths", "example"],
       ["restartKeyPaths", [""]],
@@ -40,6 +42,14 @@ describe("language-server adapter contract", () => {
     };
     expect(() => validateAdapter(value)).not.toThrow();
     expect(value.documentSymbolScopes).toEqual([]);
+  });
+
+  it("accepts either file-name case policy without changing its declaration", () => {
+    for (const caseSensitiveFileNames of [undefined, true, false]) {
+      const value = { ...adapter(), caseSensitiveFileNames };
+      expect(() => validateAdapter(value)).not.toThrow();
+      expect(value.caseSensitiveFileNames).toBe(caseSensitiveFileNames);
+    }
   });
 
   it("rejects malformed managed installs before installation or path handling", () => {

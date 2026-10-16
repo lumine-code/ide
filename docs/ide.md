@@ -17,6 +17,8 @@ Document symbol sources are enumerated from adapters applicable to the current e
 
 `documentSymbolScopes` declares whole-document ownership as a subset of `grammarScopes`. It defaults to `grammarScopes`; `[]` disables document symbol sources for the adapter. Each entry must be a nonempty scope already in `grammarScopes`. A server that handles foreign embedded fragments keeps their scopes in `grammarScopes` for completion, hover and navigation, but excludes them from `documentSymbolScopes`. Sources for those host buffers are omitted, and an exact request for such a source returns `null` before waiting for a session or opening a document. Eligibility uses the editor's root grammar, including a notebook cell's own grammar. This declaration does not change protocol capabilities, feature switches or workspace symbols.
 
+`caseSensitiveFileNames: false` declares that the server treats file names as case-insensitive. The session then uses one document identity for file URI aliases and their decoded paths, preserving the URI spelling used to open the wire document. Omitted or `true` keeps the existing case-sensitive identity rules. Non-file URI schemes, including notebook cells and untitled documents, preserve their identities under either policy.
+
 Hover and completion documentation fences use their own declared language, which may differ from the file being edited: JavaScript documentation can describe TypeScript types. The client supplies the presentation services' optional code-block renderers for display signatures that are not valid source, including descriptive labels, overload counts, omitted parameters and callable type notation. Both surfaces share one renderer, which parses private declarations with the editor's grammar and maps scopes back to the original text; the displayed and copied signature stays unchanged. Unsupported forms, failed parses and ordinary source use the normal renderer. An adapter can supply `getDocumentationCodeBlockProjection(block)` for its own server's documentation conventions; unlabelled blocks are never offered to an unrelated adapter.
 
 The full types are `lib/main.d.ts` in this package.
@@ -44,6 +46,7 @@ interface LanguageServerAdapter {
   id: string;
   displayName: string;
   grammarScopes: string[];
+  caseSensitiveFileNames?: boolean;
   documentSymbolScopes?: string[];
   resolveServer(context: ServerResolutionContext): Promise<ServerLaunch | null>;
 

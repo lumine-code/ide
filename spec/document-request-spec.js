@@ -60,7 +60,7 @@ describe("synchronized document requests", () => {
         command: "expand",
         arguments: [{ uri: "untitled:current", version: 4 }],
       },
-      { signal: undefined },
+      { signal: undefined, editor },
     );
     expect(response.document).toEqual({ uri: "untitled:current", version: 4, text: "current" });
     expect(response.isCurrent()).toBeTrue();
@@ -72,6 +72,15 @@ describe("synchronized document requests", () => {
     manager.activeSessionsForEditor.and.resolveTo([{ adapter: { id: "other" } }]);
     expect(await request()).toBeNull();
     expect(session.request).not.toHaveBeenCalled();
+  });
+
+  it("finds a retained source owner through its canonical wire URI", async () => {
+    document.editor = {};
+    document.editors = new Map([[editor, {}]]);
+    manager.uriForEditor = () => document.uri;
+
+    expect((await request()).document.uri).toBe(document.uri);
+    expect(session.request.calls.mostRecent().args[2]).toEqual({ signal: undefined, editor });
   });
 
   it("rejects a source or path replacement while startup is pending", async () => {

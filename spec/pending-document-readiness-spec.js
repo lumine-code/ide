@@ -25,6 +25,7 @@ describe("Pending editor document readiness", () => {
       displayName: "Pending Readiness",
       grammarScopes: [editor.getGrammar().scopeName, "source.other"],
       languageId: "typescript",
+      caseSensitiveFileNames: false,
       resolveServer: async () => null,
     };
     manager.adapters.set(adapter.id, adapter);
@@ -121,5 +122,17 @@ describe("Pending editor document readiness", () => {
 
     expect(await request).toEqual([]);
     expect(session.documents.size).toBe(0);
+  });
+
+  it("does not expose an alias whose distinct buffer lost source ownership while opening", async () => {
+    const alias = buildEditor(path.join(root, "Preview.ts"));
+    const first = manager.activeSessionsForEditor(editor);
+    const second = manager.activeSessionsForEditor(alias);
+    finishStartup();
+
+    expect(await first).toEqual([]);
+    expect(await second).toEqual([session]);
+    expect(session.documents.size).toBe(1);
+    expect(session.documents.values().next().value.editor).toBe(alias);
   });
 });
