@@ -27,18 +27,24 @@ Install the separate `file-operations` package if language servers should be all
 
 Commands available in `lumine-workspace`:
 
-Document commands act on the editor that invoked them, including notebook cells and editors in additional windows. Application-menu commands retain that window's document context.
+Workspace commands use the invoking window's document when they need one. Editor commands act on the focused editor, including notebook cells and editors in additional windows.
 
 - `ide:servers`: list the running language servers and act on one of them,
 - `ide:manage-servers`: list the language servers the editor can install and act on one of them,
 - `ide:restart`: restart the language servers for the active editor,
 - `ide:toggle-problems`: open the linter panel with the server diagnostics,
-- `ide:format`: format the active document through `code-format`, choosing its language-server provider,
 - `ide:show-log`: open the active server's log in a new editor,
-- `ide:open-custom-servers-file`: open the custom servers configuration file,
+- `ide:open-custom-servers-file`: open the custom servers configuration file.
+
+Commands available in `lumine-text-editor:not([mini])`:
+
 - `ide:fold-server-ranges`: fold every range the active file's language server reports,
 - `ide:expand-selection-range`: expand each selection to the next parent range from the language server,
-- `ide:select-linked-ranges`: select every range linked to the symbol under the cursor,
+- `ide:select-linked-ranges`: select every range linked to the symbol under the cursor.
+
+Commands available in `lumine-text-editor:not([mini]):not([readonly])`:
+
+- `ide:format`: format the focused document through `code-format`, choosing its language-server provider,
 - `ide:color-presentation`: choose and apply a language-server spelling for the color under the cursor.
 
 Commands available in `.ide-session-menu`:

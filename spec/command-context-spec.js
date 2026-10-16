@@ -30,7 +30,7 @@ describe("IDE document commands in captured presentation contexts", () => {
     main = first = second = extra = firstPane = notebook = expand = null;
   });
 
-  it("uses the invoking additional window when the workspace active editor is elsewhere", async () => {
+  it("requires editor focus rather than forwarding an auxiliary surface to its document", async () => {
     extra = await lumine.workspace.openEditorWindow({ show: false });
     extra.getEditorContainer().getActivePane().activateItem(second, { activatePane: true });
     firstPane.activate();
@@ -41,11 +41,14 @@ describe("IDE document commands in captured presentation contexts", () => {
 
     await lumine.commands.dispatch(button, "ide:expand-selection-range");
 
+    expect(lumine.commands.canDispatch(button, "ide:expand-selection-range")).toBe(false);
+    expect(expand).not.toHaveBeenCalled();
+    await lumine.commands.dispatch(second.getElement(), "ide:expand-selection-range");
     expect(expand).toHaveBeenCalledOnceWith(second);
     expect(lumine.workspace.getActiveTextEditor()).toBe(first);
   });
 
-  it("uses the active notebook cell captured from a non-editor menu target", async () => {
+  it("does not route a notebook button's selection action into its embedded editor", async () => {
     const element = document.createElement("div");
     const button = document.createElement("button");
     element.appendChild(button);
@@ -65,7 +68,8 @@ describe("IDE document commands in captured presentation contexts", () => {
 
     await lumine.commands.dispatch(button, "ide:expand-selection-range");
 
-    expect(expand).toHaveBeenCalledOnceWith(second);
+    expect(lumine.commands.canDispatch(button, "ide:expand-selection-range")).toBe(false);
+    expect(expand).not.toHaveBeenCalled();
   });
 
   it("keeps a direct non-mini editor ahead of captured fallback editors", () => {
