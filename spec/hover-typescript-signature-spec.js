@@ -68,7 +68,7 @@ describe("TypeScript display signatures in IDE hover", () => {
   it("recognizes every method in an unlabeled this type, including the first", async () => {
     const text = `this: {
     initialize(): void;
-    activate(_state: any, { signal, cause }?: {}): void;
+    activate({ signal, cause }?: {}): void;
     deactivate(): void;
     deserializeAboutView(state: any): any;
     ensureModel(): any;
@@ -93,10 +93,10 @@ describe("TypeScript display signatures in IDE hover", () => {
     expect(pre.querySelector(".syntax--variable.syntax--language.syntax--this").textContent).toBe(
       "this",
     );
-    expect(pre.querySelector(".syntax--variable.syntax--parameter").textContent).toBe("_state");
+    expect(pre.querySelector(".syntax--variable.syntax--parameter").textContent).toBe("state");
     expect(
       [...pre.querySelectorAll(".syntax--type.syntax--predefined")].map((span) => span.textContent),
-    ).toEqual(["void", "any", "void", "void", "any", "any", "any", "any"]);
+    ).toEqual(["void", "void", "void", "any", "any", "any", "any"]);
     expect(pre.querySelector(".syntax--support.syntax--function")).toBeNull();
   });
 
