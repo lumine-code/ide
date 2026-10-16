@@ -13,7 +13,7 @@ Module._load = function(specifier, ...args) {
 const subscribe = () => new api.Disposable();
 global.lumine = {
   config: { get: () => undefined, onDidChange: subscribe, onDidChangeConfiguration: subscribe },
-  commands: { add: subscribe },
+  commands: { add: subscribe, invalidateAvailability() {} },
   grammars: { onDidAddGrammar: subscribe, onDidUpdateGrammar: subscribe, onDidRemoveGrammar: subscribe },
   project: { getPaths: () => [], onDidChangePaths: subscribe, onDidChangeFiles: subscribe, onDidInvalidateFiles: subscribe },
   workspace: { getTextEditors: () => [], observeTextEditors: subscribe },
