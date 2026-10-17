@@ -2645,12 +2645,47 @@ describe("LanguageServerManager teardown", () => {
     // `prepareToUnloadEditorWindow`, and `will-destroy` as the window goes. The
     // second must not undo the graceful shutdown the first performed.
     const session = add("a:/project", stubSession("a"));
+    const fallback = spyOn(manager, "killAllSessions").and.callThrough();
 
     await manager.deactivate();
     lumine.emitter.emit("will-destroy");
 
     expect(session.stop).toHaveBeenCalled();
     expect(session.kill).not.toHaveBeenCalled();
+    expect(fallback).not.toHaveBeenCalled();
+  });
+
+  it("keeps the window fallback until a pending graceful stop finishes", async () => {
+    const stopped = deferred();
+    const session = add("a:/project", {
+      ...stubSession("a"),
+      process: { exitCode: null, signalCode: null },
+      processExited: false,
+    });
+    session.stop.and.returnValue(stopped.promise);
+    session.kill.and.callFake(() => {
+      session.processExited = true;
+      manager.didExitProcess(session);
+    });
+
+    const deactivating = manager.deactivate();
+    try {
+      expect(session.stop).toHaveBeenCalledTimes(1);
+      expect(session.kill).not.toHaveBeenCalled();
+
+      // The editor may stop awaiting deactivation before the server has left.
+      lumine.emitter.emit("will-destroy");
+      lumine.emitter.emit("will-destroy");
+
+      expect(session.kill).toHaveBeenCalledTimes(1);
+      expect(manager.sessions.size).toBe(0);
+    } finally {
+      stopped.resolve();
+      await deactivating;
+    }
+
+    expect(session.stop).toHaveBeenCalledTimes(1);
+    expect(session.kill).toHaveBeenCalledTimes(1);
   });
 
   it("keeps ownership of a logically stopped live child until its real exit", async () => {
