@@ -22,7 +22,8 @@
     "lib",
     "menus",
     "spec",
-    "styles"
+    "styles",
+    "THIRD_PARTY_NOTICES"
   ],
   "types": "./lib/main.d.ts",
   "engines": {
