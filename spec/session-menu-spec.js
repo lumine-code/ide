@@ -220,6 +220,36 @@ describe("ide session menu", () => {
       ]);
     });
 
+    for (const phase of ["setItems", "setInfoMessage"]) {
+      for (const abort of ["cancel", "destroy"]) {
+        it(`does not reopen details after ${abort} while ${phase} is pending`, async () => {
+          await menu.toggle();
+          const update = menu.detailsList[phase].bind(menu.detailsList);
+          let release;
+          const blocked = spyOn(menu.detailsList, phase).and.callFake(async (...args) => {
+            await update(...args);
+            await new Promise((resolve) => {
+              release = resolve;
+            });
+          });
+          const show = spyOn(menu.detailsListHost, "show").and.callThrough();
+          const opening = menu.showDetails(session);
+          await conditionPromise(() => release != null);
+          if (abort === "destroy") await menu.destroy();
+          else menu.serverListHost.cancel();
+          release();
+          await expectAsync(opening).toBeResolvedTo(false);
+          expect(show).not.toHaveBeenCalled();
+          if (abort === "cancel") {
+            blocked.and.callFake(update);
+            await menu.toggle();
+            await menu.showDetails(session);
+            expect(menu.detailsListHost.isVisible()).toBe(true);
+          }
+        });
+      }
+    }
+
     it("reports what the session knows about itself", () => {
       const values = new Map(menu.detailItems(session).map((item) => [item.label, item.value]));
 
