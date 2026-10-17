@@ -336,6 +336,7 @@ describe("DocumentFeatures", () => {
     const item = model.update.calls.mostRecent().args[0].items[0];
     expect(item.presentation).toBe(presentation);
     expect(host.show).toHaveBeenCalled();
+    expect(listOptions.actions[0].disposition).toBe("complete");
     await listOptions.commands["ide:apply-color-presentation"].didDispatch({
       detail: { item },
     });

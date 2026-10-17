@@ -38,6 +38,8 @@ describe("ide item actions", () => {
     await list.selectIndex(0);
     const actions = list.getAvailableActions();
     const byCommand = new Map(actions.map((action) => [action.command, action]));
+    expect(list.supportsKeepOpen()).toBe(false);
+    expect(byCommand.has("select-list:toggle-keep-open")).toBe(false);
 
     const restart = byCommand.get("ide:restart-server");
     expect(restart.name).toBe("Restart Server");
