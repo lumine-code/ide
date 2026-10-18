@@ -1,9 +1,9 @@
 {
   "title": "ide",
   "description": "Inspect the active TypeScript language-server session.",
-  "recordedOn": "2026-10-14",
-  "sourceRevision": "812c09829d25abb79f6292280d1eb54fc80b6c82",
-  "themeSourceRevision": "7fbd047a87ecf1367c896b19ff270cdc28d319f7",
+  "recordedOn": "2026-10-18",
+  "sourceRevision": "b305df1d2af026cba795700e29e284b90959a968",
+  "themeSourceRevision": "45b22049e87256e9327beb0b350e67fe81d7fc81",
   "mode": "normal",
   "fontSettings": "default",
   "scenario": "demo.js",
@@ -11,8 +11,8 @@
   "environment": {
     "platform": "win32",
     "arch": "x64",
-    "electron": "44.7.0",
-    "chrome": "152.0.7977.130",
+    "electron": "44.9.0",
+    "chrome": "152.0.7977.167",
     "devicePixelRatio": 1,
     "locale": "en-GB",
     "fontFamily": "Fira Code, Menlo, DejaVu Sans Mono, Consolas, monospace",
@@ -21,59 +21,60 @@
   },
   "viewport": { "width": 1150, "height": 600 },
   "cornerRadius": 10,
+  "privacy": { "version": 1, "location": "neutral", "textChecked": true },
   "sources": {
     "editor": {
-      "revision": "8be8f86075ad93df038610d82b3ac6d99329957d",
-      "dirty": true,
-      "workingTreeHash": "0a9458f6e3959fe7a52b2fec76abef27dcbaa9792f192b81ac1e3f6b2be82009"
+      "revision": "10950c83cb6d964aadbcf4036af67c6484c1341d",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
     },
     "package": {
-      "revision": "812c09829d25abb79f6292280d1eb54fc80b6c82",
-      "dirty": true,
-      "workingTreeHash": "621e6855f75f1585be31afa484047d4a9ce6a07fb26a1cf14a842af78dd7c037"
+      "revision": "b305df1d2af026cba795700e29e284b90959a968",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
     },
     "ide": {
-      "revision": "812c09829d25abb79f6292280d1eb54fc80b6c82",
-      "dirty": true,
-      "workingTreeHash": "621e6855f75f1585be31afa484047d4a9ce6a07fb26a1cf14a842af78dd7c037"
+      "revision": "b305df1d2af026cba795700e29e284b90959a968",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
     },
     "documentation-view": {
-      "revision": "eedd6f69e19677399ddd9617858da255bb8f189c",
-      "dirty": true,
-      "workingTreeHash": "070afa5c708e3223333074671734968384f9f9554ddfb2633afc5de10cc754fe"
+      "revision": "b3cd21aa39d0385c4c045d0ea7f7cea38ed3bd4d",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
     },
     "hover": {
-      "revision": "4db1205d5c41405ba1d5c0d741eeaf3399e3693f",
-      "dirty": true,
-      "workingTreeHash": "a395c209f899af107515f7fdfbf4f05caacf0852fe6e2fd7c81e01a3f62916f6"
+      "revision": "ebffd6e9b8580bff5337e08dc0279f24ea9b7bd9",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
     },
     "ide-typescript": {
-      "revision": "a6fc886a96b18620cca73393d9dc1baec3342963",
+      "revision": "ff92384775b31c6ca6ccaa1d73d18a15229cac99",
       "dirty": false,
       "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
     },
     "language-typescript": {
-      "revision": "b2c0f69d529ec600f3ff5baf2635a27560b318c8",
+      "revision": "e067dc6e5dd0f63223c9792a87e63f7a86153472",
       "dirty": false,
       "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
     },
     "linter": {
-      "revision": "adec0e9d64ffe64f9e041df825324efc0795601b",
-      "dirty": true,
-      "workingTreeHash": "bc72c0afefb416d396eb209e3ef758b6ef4cb17d5a24d3d4af95b1b4fbdb8e75"
+      "revision": "5030b5a3981cf9f5f04bdbc4e0d2d3fa7dbb2e1f",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
     },
     "linter-panel": {
-      "revision": "52b4727794bf840757d2c6ec818329f954ecfb25",
-      "dirty": true,
-      "workingTreeHash": "2241dd689405cc52970f9f0be515276ed372a29e9bfa068e89f434bbcac245f6"
+      "revision": "49eb7742b992eb0a3aa89be840740309d324b0ad",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
     },
     "marker": {
-      "revision": "bb4fc8fec8c9d09fe59db9b0d70352ff33cde8f8",
+      "revision": "56b7b100f9b8b1e532645399f14fe662795d0861",
       "dirty": false,
       "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
     },
     "one-theme": {
-      "revision": "7fbd047a87ecf1367c896b19ff270cdc28d319f7",
+      "revision": "45b22049e87256e9327beb0b350e67fe81d7fc81",
       "dirty": false,
       "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
     }
@@ -90,7 +91,7 @@
       "label": "Inspect the active TypeScript language-server session.",
       "width": 1150,
       "height": 600,
-      "sha256": "9ba840665f30e3a9f2eb667c9aa463a9d2790f1bb59f2232d4318bb52691ca5c"
+      "sha256": "5c61a38de5a1e95d1384761ce2c1c291f7adfe7b6ba2e13ca3ad8e62ad7b2c50"
     }
   ]
 }
