@@ -441,4 +441,111 @@ describe("symbol services", () => {
     await Promise.resolve();
     expect(changed).toHaveBeenCalledWith({ editor });
   });
+
+  it("resolves a repeated document URI once while preserving navigation and structural ranges", async () => {
+    const uri = C.pathToUri(path.join(root, "source.js"));
+    const range = { start: { line: 0, character: 0 }, end: { line: 5000, character: 0 } };
+    const selectionRange = { start: { line: 0, character: 7 }, end: { line: 0, character: 11 } };
+    const tree = [
+      {
+        name: "parent",
+        kind: 2,
+        range,
+        selectionRange,
+        children: Array.from({ length: 4096 }, (_value, line) => ({
+          name: `child${line}`,
+          kind: 6,
+          range: { start: { line: line + 1, character: 0 }, end: { line: line + 1, character: 8 } },
+          selectionRange: {
+            start: { line: line + 1, character: 2 },
+            end: { line: line + 1, character: 5 },
+          },
+        })),
+      },
+    ];
+    spyOn(manager, "resolveUri").and.callThrough();
+    const converted = await provider.convert(tree, uri);
+    expect(manager.resolveUri.calls.count()).toBe(1);
+    expect(converted.length).toBe(4097);
+    expect(converted[0].position).toEqual([0, 7]);
+    expect(converted[0].range).toEqual([
+      [0, 0],
+      [5000, 0],
+    ]);
+    expect(converted[4096].context).toBe("parent");
+    expect(converted[4096].position).toEqual([4096, 2]);
+  });
+
+  it("allows input cancellation to overtake conversion of a large ordinary LSP result", async () => {
+    jasmine.useRealClock();
+    const uri = C.pathToUri(path.join(root, "source.js"));
+    const rows = Array.from({ length: 50000 }, (_value, i) => symbol(`symbol${i}`));
+    const controller = new AbortController();
+    setImmediate(() => controller.abort(new Error("superseded")));
+    await expectAsync(
+      provider.convert(rows, uri, { signal: controller.signal }),
+    ).toBeRejectedWithError("superseded");
+  });
+
+  it("converts negotiated compact packets into exactly the ordinary flat provider symbols", async () => {
+    const session = addSession("chunks", [], {
+      capabilities: {
+        documentSymbolProvider: true,
+        experimental: { lumineDocumentSymbolChunks: 1 },
+      },
+    });
+    const editor = {
+      getGrammar: () => ({ scopeName: "source.js" }),
+      getPath: () => path.join(root, "source.js"),
+    };
+    const uri = C.pathToUri(editor.getPath());
+    spyOn(manager, "activeSessionsForEditor").and.resolveTo([session]);
+    session.request.and.callFake(async (_method, _params, { onPartialResult }) => {
+      onPartialResult({
+        version: 1,
+        offset: 0,
+        symbols: [["program", 2, [0, 0, 20, 0], [0, 6, 0, 9], -1]],
+      });
+      onPartialResult({
+        version: 1,
+        offset: 1,
+        symbols: [["command", 6, [1, 0, 2, 0], [1, 2, 1, 5], 0]],
+      });
+      return null;
+    });
+    const actual = await provider.getDocumentSymbols(editor, { sourceId: "ide:chunks" });
+    const expected = await provider.convert(
+      [
+        {
+          name: "program",
+          kind: 2,
+          range: { start: { line: 0, character: 0 }, end: { line: 20, character: 0 } },
+          selectionRange: { start: { line: 0, character: 6 }, end: { line: 0, character: 9 } },
+          children: [
+            {
+              name: "command",
+              kind: 6,
+              range: { start: { line: 1, character: 0 }, end: { line: 2, character: 0 } },
+              selectionRange: { start: { line: 1, character: 2 }, end: { line: 1, character: 5 } },
+            },
+          ],
+        },
+      ],
+      uri,
+    );
+    expect(actual).toEqual(expected);
+  });
+
+  it("rejects invalid compact packet offsets and parent references", async () => {
+    const { DocumentSymbolChunks } = require("../lib/document-symbol-chunks");
+    for (const packet of [
+      { version: 2, offset: 0, symbols: [["bad", 6, [0, 0, 1, 0], [0, 0, 0, 1], -1]] },
+      { version: 1, offset: 1, symbols: [["bad", 6, [0, 0, 1, 0], [0, 0, 0, 1], -1]] },
+      { version: 1, offset: 0, symbols: [["bad", 6, [0, 0, 1, 0], [0, 0, 0, 1], 0]] },
+      { version: 1, offset: 0, symbols: [["bad", 6, [1, 0, 0, 0], [0, 0, 0, 1], -1]] },
+    ]) {
+      const decoder = new DocumentSymbolChunks({ path: null }, C.symbolKind);
+      expect(() => decoder.accept(packet)).toThrow();
+    }
+  });
 });

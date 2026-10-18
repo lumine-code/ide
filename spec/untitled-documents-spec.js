@@ -229,14 +229,14 @@ describe("Unsaved language-server documents", () => {
     expect(editor.getText()).toBe("<div></div>");
   });
 
-  it("keeps local scratch symbols and omits pathless cross-document navigation", () => {
+  it("keeps local scratch symbols and omits pathless cross-document navigation", async () => {
     const uri = manager.uriForEditor(editor);
     const provider = new SymbolProvider(manager);
     const range = { start: { line: 0, character: 0 }, end: { line: 0, character: 3 } };
     const symbol = { name: "section", kind: 8, range, selectionRange: range };
     try {
-      expect(provider.convert([symbol], uri)[0].name).toBe("section");
-      expect(provider.convert([{ ...symbol, location: { uri, range } }])).toEqual([]);
+      expect((await provider.convert([symbol], uri))[0].name).toBe("section");
+      expect(await provider.convert([{ ...symbol, location: { uri, range } }])).toEqual([]);
       expect(provider.locations([{ uri, range }])).toEqual([]);
       const fileUri = C.pathToUri(path.join(tempDir, "saved.html"));
       expect(provider.locations([{ uri: fileUri, range }])[0].path).toBe(

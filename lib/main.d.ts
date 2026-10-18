@@ -470,6 +470,8 @@ export interface RequestOptions {
    * `false` to abandon the request without telling the server about it.
    */
   cancelOnServer?: boolean;
+  /** Consume raw LSP partial results in wire order; the request awaits asynchronous consumers. */
+  onPartialResult?(value: unknown): void | Promise<void>;
 }
 export interface NavigationSymbol {
   name: string;
