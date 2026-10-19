@@ -26,9 +26,11 @@ describe("ide diagnostics presentation", () => {
   it("opens the supplied project view without dispatching another package's command", () => {
     const hub = provider();
     connect(hub);
+    spyOn(lumine.commands, "dispatch").and.callThrough();
     expect(lumine.commands.canDispatch(target(), "ide:show-problems")).toBe(true);
     expect(main.showProblems()).toBe(true);
     expect(hub.showProjectView).toHaveBeenCalledTimes(1);
+    expect(lumine.commands.dispatch).not.toHaveBeenCalled();
     hub.canShowProjectView.and.returnValue(false);
     expect(lumine.commands.canDispatch(target(), "ide:show-problems")).toBe(false);
     expect(main.showProblems()).toBe(false);
