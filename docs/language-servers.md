@@ -209,7 +209,7 @@ The status-bar item opens the same list and reports failures; disable it with th
 
 - `ide:restart` restarts every server for the active editor.
 - `ide:format` formats the active document through a server.
-- `ide:toggle-problems` reveals the project views supplied by active `linter.ui` services through `linter.hub`. It is disabled while no project view is available.
+- `ide:show-problems` reveals the project views supplied by active `linter.ui` services through `linter.hub`. It is disabled while no project view is available.
 
 ## Troubleshooting
 

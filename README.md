@@ -32,7 +32,7 @@ Workspace commands use the invoking window's document when they need one. Editor
 - `ide:servers`: list the running language servers and act on one of them,
 - `ide:manage-servers`: list the language servers the editor can install and act on one of them,
 - `ide:restart`: restart the language servers for the active editor,
-- `ide:toggle-problems`: open the linter panel with the server diagnostics,
+- `ide:show-problems`: reveal the available project diagnostics views,
 - `ide:show-log`: open the active server's log in a new editor,
 - `ide:open-custom-servers-file`: open the custom servers configuration file.
 
@@ -52,8 +52,7 @@ Commands available in `.ide-session-menu`:
 - `ide:show-details`: show what the selected server reports about itself,
 - `ide:restart-server`: restart the selected server without leaving the list,
 - `ide:stop-server`: stop the selected server until a matching editor opens again,
-- `ide:show-server-log`: open the selected server's log in a new editor,
-- `ide:show-problems`: open the linter panel with the diagnostics of every server.
+- `ide:show-server-log`: open the selected server's log in a new editor.
 
 Commands available in `.ide-managed-servers`:
 

@@ -77,8 +77,8 @@
               "command": "ide:format"
             },
             {
-              "label": "Toggle Problems",
-              "command": "ide:toggle-problems"
+              "label": "Show Problems",
+              "command": "ide:show-problems"
             },
             {
               "type": "separator"
@@ -134,7 +134,7 @@
         { "type": "separator" },
         { "label": "Servers…", "command": "ide:servers" },
         { "label": "Manage Servers…", "command": "ide:manage-servers" },
-        { "label": "Toggle Problems", "command": "ide:toggle-problems" },
+        { "label": "Show Problems", "command": "ide:show-problems" },
         { "type": "separator" }
       ]
     }

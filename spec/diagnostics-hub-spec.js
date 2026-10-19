@@ -26,11 +26,11 @@ describe("ide diagnostics presentation", () => {
   it("opens the supplied project view without dispatching another package's command", () => {
     const hub = provider();
     connect(hub);
-    expect(lumine.commands.canDispatch(target(), "ide:toggle-problems")).toBe(true);
+    expect(lumine.commands.canDispatch(target(), "ide:show-problems")).toBe(true);
     expect(main.showProblems()).toBe(true);
     expect(hub.showProjectView).toHaveBeenCalledTimes(1);
     hub.canShowProjectView.and.returnValue(false);
-    expect(lumine.commands.canDispatch(target(), "ide:toggle-problems")).toBe(false);
+    expect(lumine.commands.canDispatch(target(), "ide:show-problems")).toBe(false);
     expect(main.showProblems()).toBe(false);
     expect(hub.showProjectView).toHaveBeenCalledTimes(1);
   });
@@ -41,7 +41,7 @@ describe("ide diagnostics presentation", () => {
     spyOn(lumine.commands, "invalidateAvailability").and.callThrough();
     edge.dispose();
     expect(lumine.commands.invalidateAvailability).toHaveBeenCalled();
-    expect(lumine.commands.canDispatch(target(), "ide:toggle-problems")).toBe(false);
+    expect(lumine.commands.canDispatch(target(), "ide:show-problems")).toBe(false);
     expect(main.showProblems()).toBe(false);
     expect(lumine.notifications.addInfo).not.toHaveBeenCalled();
   });

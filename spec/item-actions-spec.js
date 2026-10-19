@@ -58,14 +58,13 @@ describe("ide item actions", () => {
       expect(action.description).toBeTruthy();
     }
 
-    // Chrome and the window-wide commands stay out — the latter is why the
-    // in-list names are not `restart`, `show-log` and `toggle-problems`.
+    // Server-local actions use their own command registrations. The project
+    // diagnostics action reuses the workspace command.
     expect(byCommand.has("core:confirm")).toBe(false);
     expect(byCommand.has("select-list:actions")).toBe(false);
     expect(byCommand.has("ide:servers")).toBe(false);
     expect(byCommand.has("ide:restart")).toBe(false);
     expect(byCommand.has("ide:show-log")).toBe(false);
-    expect(byCommand.has("ide:toggle-problems")).toBe(false);
   });
 
   it("keeps only the session-wide action when no server is selected", async () => {
@@ -74,6 +73,22 @@ describe("ide item actions", () => {
     expect(list.getAvailableActions().map((action) => action.command)).toEqual([
       "ide:show-problems",
     ]);
+  });
+
+  it("dispatches the shared project diagnostics action once through the workspace", async () => {
+    const show = jasmine.createSpy("show project diagnostics").and.returnValue(true);
+    const edge = main.consumeLinterHub({ canShowProjectView: () => true, showProjectView: show });
+    try {
+      await main.sessionMenu.serverListHost.show();
+      await list.setItems([]);
+      expect((await list.runAction("ide:show-problems")).status).toBe("success");
+      expect(show).toHaveBeenCalledTimes(1);
+      edge.dispose();
+      expect((await list.runAction("ide:show-problems")).status).not.toBe("success");
+      expect(show).toHaveBeenCalledTimes(1);
+    } finally {
+      edge.dispose();
+    }
   });
 
   it("switches the managed-server primary action between install and update", async () => {

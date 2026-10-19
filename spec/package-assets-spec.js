@@ -16,7 +16,7 @@ describe("ide package assets", () => {
       else groups.at(-1).push(item.command);
     }
     expect(groups).toEqual([
-      ["ide:format", "ide:toggle-problems"],
+      ["ide:format", "ide:show-problems"],
       [
         "ide:fold-server-ranges",
         "ide:expand-selection-range",

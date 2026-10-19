@@ -23,7 +23,7 @@ describe("IDE status action menu", () => {
   });
   it("includes the primary server picker and related management actions", () => {
     expect(lumine.contextMenu.templateForElement(view.element).map((item) => item.command)).toEqual(
-      ["ide:servers", "ide:manage-servers", "ide:toggle-problems"],
+      ["ide:servers", "ide:manage-servers", "ide:show-problems"],
     );
     const dispatch = spyOn(lumine.commands, "dispatch");
     view.element.dispatchEvent(new MouseEvent("click", { button: 2 }));

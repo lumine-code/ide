@@ -209,7 +209,7 @@ describe("ide package", () => {
     const commands = lumine.commands.findCommands({
       target: lumine.views.getView(lumine.workspace),
     });
-    expect(commands.map(({ name }) => name)).toContain("ide:toggle-problems");
+    expect(commands.map(({ name }) => name)).toContain("ide:show-problems");
     expect(commands.map(({ name }) => name)).toContain("ide:restart");
     expect(commands.map(({ name }) => name)).toContain("ide:servers");
     const editor = lumine.workspace.buildTextEditor();
