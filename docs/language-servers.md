@@ -155,7 +155,7 @@ Each adapter's **Features** group exposes the capabilities that can be switched 
 
 `ide-html` serves HTML, EJS, ERB, and Mustache, including CSS and JavaScript embedded in HTML. In PHP, Blade, and Markdown, it sends only the grammar's HTML fragments to the server while preserving their document positions. HTML formatting is unavailable for those three host languages even when the Format setting is enabled; their own formatters handle the complete document. Vue documents use `ide-vue`. CSS in JavaScript template strings, such as styled-components, remains outside `ide-css`'s scope.
 
-Document diagnostics and workspace diagnostics use the same route into `linter`: open buffers update as you type, while a server that implements `workspace/diagnostic` can also report files that are not open. Install `linter-panel` to browse the combined project result.
+Document diagnostics and workspace diagnostics use the same route into `linter`: open buffers update as you type, while a server that implements `workspace/diagnostic` can also report files that are not open. Install `diagnostics` to browse the combined project result.
 
 Stopping a server removes its diagnostics immediately, including notebook-cell results, while preserving reports owned by another running session. Late shutdown notifications and invalidated hint or semantic-token replies cannot restore old results.
 
@@ -209,7 +209,7 @@ The status-bar item opens the same list and reports failures; disable it with th
 
 - `ide:restart` restarts every server for the active editor.
 - `ide:format` formats the active document through a server.
-- `ide:toggle-problems` opens `linter-panel` when it is installed.
+- `ide:toggle-problems` reveals the project views supplied by active `linter.ui` services through `linter.hub`. It is disabled while no project view is available.
 
 ## Troubleshooting
 

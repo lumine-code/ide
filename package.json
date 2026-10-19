@@ -194,6 +194,11 @@
     }
   },
   "consumedServices": {
+    "linter.hub": {
+      "versions": {
+        "^1.0.0": "consumeLinterHub"
+      }
+    },
     "code-format.executor": {
       "versions": {
         "^1.0.0": "consumeCodeFormatExecutor"

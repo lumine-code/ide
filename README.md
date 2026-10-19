@@ -118,6 +118,7 @@ Tweak the server list, its details step, and the status-bar item from your style
 - `code-format.executor`: consumed to run `ide:format` through the same guarded editor formatting path as the hub's commands and save hook. Install and enable `code-format` to use this command.
 - `file-operations.executor`: consumed to preflight and execute the create, rename and delete steps in a server `WorkspaceEdit`.
 - `linter.registry`: consumed to push server diagnostics into the linter UI, one delegate per server.
+- `linter.hub`: consumed to reveal available project diagnostic views without depending on a UI package.
 - `busy-signal`: consumed to surface server startup, slow requests and server work-done progress on the busy indicator.
 - `status-bar`: consumed to show the running servers in an item that opens the server list.
 - `tree-view.file-operations`: consumed to stage create and delete preparations and explicitly requested reference updates, then report completed file operations.
