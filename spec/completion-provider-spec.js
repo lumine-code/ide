@@ -55,6 +55,7 @@ const itemWithEdit = (label, endColumn) => ({
 });
 
 describe("CompletionProvider request ownership", () => {
+  beforeEach(() => jasmine.useRealClock());
   let provider, emitter;
   const deferred = () => {
     let resolve;
@@ -124,6 +125,74 @@ describe("CompletionProvider request ownership", () => {
     reply.resolve({ items: [{ label: "stale" }] });
     expect(await result).toEqual([]);
     expect(provider.cache).toBeNull();
+  });
+
+  it("cancels an outstanding lookup only once across edits and replacement", async () => {
+    emitter = new Emitter();
+    const startup = deferred();
+    const session = sessionWith(() => ({ items: [{ label: "console" }] }));
+    const manager = managerWith(session);
+    manager.activeSessionsForEditor = () => startup.promise;
+    provider = new CompletionProvider(manager);
+    const editor = stubEditor();
+    editor.getBuffer = () => ({ onDidChange: (callback) => emitter.on("change", callback) });
+    const first = provider.getSuggestions(requestFor(editor));
+    const abort = spyOn(provider.abortController, "abort").and.callThrough();
+    emitter.emit("change");
+    emitter.emit("change");
+    const second = provider.getSuggestions(requestFor(editor));
+    expect(abort.calls.count()).toBe(1);
+    startup.resolve([session]);
+    expect(await first).toEqual([]);
+    expect((await second).length).toBe(1);
+    expect(session.requests.length).toBe(1);
+  });
+
+  it("sends the latest automatic lookup after a bounded slot, not after a typing pause", async () => {
+    const started = deferred(),
+      reply = deferred();
+    const session = sessionWith((_method, _params, { signal }) => {
+      started.resolve(signal);
+      return reply.promise;
+    });
+    provider = new CompletionProvider(managerWith(session));
+    const editor = stubEditor();
+    const request = { ...requestFor(editor), activatedManually: false };
+    const first = provider.getSuggestions(request);
+    await started.promise;
+    const second = provider.getSuggestions({ ...request, bufferPosition: { row: 0, column: 3 } });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(session.requests.length).toBe(1);
+    const third = provider.getSuggestions({ ...request, bufferPosition: { row: 0, column: 4 } });
+    expect(await second).toEqual([]);
+    await new Promise((resolve) => setTimeout(resolve, 70));
+    expect(session.requests.map(({ params }) => params.position.character)).toEqual([2, 4]);
+    reply.resolve({ items: [{ label: "console" }] });
+    expect(await first).toEqual([]);
+    expect((await third).length).toBe(1);
+  });
+
+  it("does not delay manual invocation, trigger characters or complete cached results", async () => {
+    const session = sessionWith(() => ({ items: [{ label: "console" }] }), {
+      completionProvider: { triggerCharacters: ["."] },
+    });
+    provider = new CompletionProvider(managerWith(session));
+    const wait = spyOn(provider, "waitForAutomaticRequest").and.callThrough();
+    const editor = stubEditor("co.");
+    await provider.getSuggestions(requestFor(editor));
+    expect(wait).not.toHaveBeenCalled();
+    await provider.getSuggestions({ ...requestFor(editor), activatedManually: false });
+    expect(session.requests.length).toBe(1);
+    expect(wait).not.toHaveBeenCalled();
+    provider.cache = null;
+    await provider.getSuggestions({
+      ...requestFor(editor, 3),
+      prefix: "",
+      activatedManually: false,
+    });
+    expect(session.requests.length).toBe(2);
+    expect(wait).not.toHaveBeenCalled();
   });
 
   it("cancels startup and releases a cached editor when disposed", async () => {
@@ -694,6 +763,7 @@ describe("CompletionProvider duplicate server data", () => {
 });
 
 describe("CompletionProvider caching", () => {
+  beforeEach(() => jasmine.useRealClock());
   it("retains resolved documentation and the original row label when an identity cache is renewed", async () => {
     let source = "co";
     const grammar = { scopeName: "source.ts", name: "TypeScript" };
