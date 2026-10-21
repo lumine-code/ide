@@ -228,8 +228,8 @@ export interface DocumentProjection {
   /** True only when text is the exact original source, with original UTF-16 coordinates. */
   readonly isIdentity?: boolean;
   isCurrent(): boolean;
-  isPythonPosition(point: Point | [number, number]): boolean;
-  isPythonRange?(range: LumineRange | [[number, number], [number, number]]): boolean;
+  ownsPosition(point: Point | [number, number]): boolean;
+  ownsRange?(range: LumineRange | [[number, number], [number, number]]): boolean;
   toServerPosition(point: Point | [number, number]): Point | null;
   fromServerPosition(point: Point | [number, number]): Point | null;
   toServerRange(range: LumineRange | [[number, number], [number, number]]): LumineRange | null;

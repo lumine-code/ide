@@ -459,7 +459,7 @@ describe("independent diagnostic providers", () => {
                 [range.start.row, range.start.column + 2],
                 [range.end.row, range.end.column + 2],
               ),
-            isPythonRange: () => true,
+            ownsRange: () => true,
           };
         },
         transformDiagnostics(items, context) {

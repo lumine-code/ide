@@ -350,20 +350,55 @@ describe("AST document projections", () => {
       1,
     );
   });
-  it("tags a stale projection before RPC without sending its coordinates", async () => {
+  it("refreshes stale projection mappings before RPC without resending identical wire text", async () => {
+    await start();
+    await session.openEditor(editor);
+    const document = session.documents.get(C.uriKey(C.pathToUri(editor.getPath())));
+    const current = document.projection;
+    document.projection = {
+      ...current,
+      isCurrent: () => false,
+      toServerPosition() {
+        throw new Error("Obsolete coordinates were used");
+      },
+    };
+    const refresh = spyOn(session.adapter, "getDocumentProjection").and.callThrough();
+    const request = spyOn(session.connection, "request").and.resolveTo([]);
+    await session.request("textDocument/references", params(1, 2));
+    expect(refresh).toHaveBeenCalled();
+    expect(document.projection).toBe(current);
+    expect(document.wireProjection).toBe(current);
+    expect(document.version).toBe(1);
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(request.calls.mostRecent().args[1].position).toEqual({ line: 1, character: 2 });
+  });
+  it("refuses RPC when an obsolete projection cannot be replaced", async () => {
     await start();
     await session.openEditor(editor);
     const document = session.documents.get(C.uriKey(C.pathToUri(editor.getPath())));
     document.projection = { ...document.projection, isCurrent: () => false };
+    spyOn(session.adapter, "getDocumentProjection").and.resolveTo(null);
     const request = spyOn(session.connection, "request").and.resolveTo([]);
-    let error;
-    try {
-      await session.request("textDocument/references", params(1, 2));
-    } catch (value) {
-      error = value;
-    }
-    expect(error?.code).toBe("PROJECTION_STALE");
+    await expectAsync(
+      session.request("textDocument/references", params(1, 2)),
+    ).toBeRejectedWithError(/projection is unavailable/);
     expect(request).not.toHaveBeenCalled();
+  });
+  it("sends a new wire version when a syntax generation changes projected text without a source edit", async () => {
+    await start();
+    await session.openEditor(editor);
+    const document = session.documents.get(C.uriKey(C.pathToUri(editor.getPath())));
+    const current = document.projection;
+    document.projection = { ...current, isCurrent: () => false };
+    const replacement = { ...current, text: current.text.replace("value", "other") };
+    spyOn(session.adapter, "getDocumentProjection").and.resolveTo(replacement);
+    await session.documentSync.waitForDocumentSync(document);
+    const changes = (await messages()).filter((item) => item.method === "textDocument/didChange");
+    expect(changes.length).toBe(1);
+    expect(changes[0].params.textDocument.version).toBe(2);
+    expect(changes[0].params.contentChanges).toEqual([{ text: replacement.text }]);
+    expect(document.wireProjection).toBe(replacement);
+    expect(editor.getText()).toBe(text);
   });
   it("tags an edited source after RPC rather than mapping an old response through new coordinates", async () => {
     await start();
@@ -914,7 +949,7 @@ describe("AST document projections", () => {
       Projections.fromServerRange(
         projection,
         { start: { line: 0, character: 0 }, end: { line: 0, character: 16 } },
-        { requirePython: false },
+        { requireOwned: false },
       ).end.character,
     ).toBe(10);
   });
@@ -956,19 +991,21 @@ describe("AST document projections", () => {
     );
   });
   it("cancels a pending projection when its editor closes", async () => {
-    let release;
+    let release, entered;
+    const started = new Promise((resolve) => (entered = resolve));
     const waiting = new Promise((resolve) => {
       release = resolve;
     });
     await start({
       getDocumentProjection: async (item, options) => {
+        entered();
         await waiting;
         return source.project(item, options);
       },
     });
     const opened = session.openEditor(editor);
     const rejected = expectAsync(opened).toBeRejected();
-    await new Promise((resolve) => setImmediate(resolve));
+    await started;
     editor.destroy();
     release();
     await rejected;
