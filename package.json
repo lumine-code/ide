@@ -37,7 +37,8 @@
     "format:check": "prettier --check .",
     "check:zip": "node scripts/check-zip.js",
     "check:xz": "node scripts/check-xz.js",
-    "check:fetch": "node scripts/check-fetch.js"
+    "check:fetch": "node scripts/check-fetch.js",
+    "check:node-launch": "node --test scripts/node-launch.test.js"
   },
   "specPackages": [
     "language-ipython",

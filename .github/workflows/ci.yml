@@ -50,6 +50,8 @@ jobs:
         run: npm run check:xz
       - name: Validate bounded installer downloads
         run: npm run check:fetch
+      - name: Validate scoped Node process arguments
+        run: npm run check:node-launch
       - name: Audit package dependencies
         run: npm audit --audit-level=moderate
       - name: Check package contents

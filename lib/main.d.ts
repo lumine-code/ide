@@ -4,6 +4,8 @@ export type ServerTransport = "stdio" | "ipc" | "socket";
 export interface ServerLaunch {
   command: string;
   args?: string[];
+  /** Node runtime arguments for IPC launches; script arguments remain in args. */
+  execArgv?: string[];
   cwd?: string;
   /** Undefined values remove an inherited environment variable. */
   env?: Record<string, string | undefined>;

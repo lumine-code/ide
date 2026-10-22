@@ -179,6 +179,8 @@ Filesystem validation requires readable files or directories, and executable acc
 
 Node selections and `nodeEntry` use the editor's executable with `ELECTRON_RUN_AS_NODE=1`, preserving that setting even when caller environment overrides are supplied. For `transport: "ipc"`, the entry itself becomes `command` for the client's Node fork. A `"file"` or `"directory"` selection needs an adapter-owned launcher: for example, select a JAR and a validated Java executable separately, then call `launch` on the Java selection with `-jar` arguments. The selection's managed version is preserved by `launch` unless the adapter supplies a launch version explicitly.
 
+The resolver adds the core's required Node preloads for every Node transport. Script arguments remain in `args`. The optional `execArgv` array is only for additional Node runtime arguments on `transport: "ipc"` forks, after the core preloads; supplying it for stdio or socket launches rejects rather than ignoring it.
+
 The startup signal aborts when the attempt is cancelled or superseded. Its resolver also checks ownership around asynchronous waits and before constructing a launch, so retained helpers reject after the attempt loses ownership. Forward the callback's `signal` to asynchronous SDK probes and subprocesses so their own work stops as well; cancellation settles helper waits even when a callback ignores the signal. Launch validation checks commands, arguments, environments, transports, socket ports and file-cancellation paths before a process is started.
 
 ### Configuration and adapter hooks
