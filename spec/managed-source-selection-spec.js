@@ -111,7 +111,8 @@ describe("managed server selection through actual startup", () => {
       const session = await start();
       const messages = await session.request("test/getReceived");
       expect(session.state).toBe("running");
-      expect(session.launch.args).toEqual([FIXTURE, "{}"]);
+      const runtime = require("lumine").BufferedNodeProcess.getNodeExecArguments();
+      expect(session.launch.args).toEqual([...runtime, FIXTURE, "{}"]);
       expect(messages.some(({ method }) => method === "initialize")).toBe(true);
       expect(read).not.toHaveBeenCalled();
       expect(bundledPath).not.toHaveBeenCalled();
