@@ -234,17 +234,17 @@
     "picomatch": "^4.0.7",
     "semver": "^7.8.5",
     "tar": "^7.5.22",
-    "vscode-jsonrpc": "^9.0.3",
+    "vscode-jsonrpc": "^10.0.0",
     "xz-decompress": "^0.2.3",
     "yauzl": "^3.4.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "eslint": "^10.12.0",
+    "eslint": "^10.13.0",
     "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-n": "^18.4.1",
+    "eslint-plugin-n": "^18.5.0",
     "globals": "^17.13.0",
-    "prettier": "^3.9.9",
+    "prettier": "^3.9.10",
     "yazl": "^3.3.1"
   }
 }
