@@ -129,6 +129,7 @@ test("ServerSession forwards IPC runtime arguments through fork options, never s
   const requireModule = (name) => {
     if (name === "lumine") return {};
     if (name === "crypto") return require("node:crypto");
+    if (name === "./clone-diagnostic") return require("../lib/clone-diagnostic");
     if (name === "./server-resolver") return require("../lib/server-resolver");
     if (name === "./rpc-connection") return { ipc: () => ({}) };
     if (name === "child_process")
