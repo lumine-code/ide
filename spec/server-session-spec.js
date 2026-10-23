@@ -2783,6 +2783,7 @@ describe("ServerSession against a fake server", () => {
   it("keeps an editor path after a private move rolls back without effects", async () => {
     const source = path.join(tempDir, "rolled-back-source.txt");
     const recovery = path.join(tempDir, ".lumine-move-rolled-back");
+    const target = `${source}.new`;
     fs.writeFileSync(source, "source");
     const editor = await lumine.workspace.open(source);
     manager.watchEditor(editor);
@@ -2802,16 +2803,47 @@ describe("ServerSession against a fake server", () => {
     });
     spyOn(lumine.window, "confirm").and.resolveTo(0);
 
+    let completeMove;
+    const beginMove = lumine.workspace.beginFileMove.bind(lumine.workspace);
+    spyOn(lumine.workspace, "beginFileMove").and.callFake((...args) => {
+      const transaction = beginMove(...args);
+      completeMove = spyOn(transaction, "complete").and.callThrough();
+      return transaction;
+    });
+
     const result = await manager.applyWorkspaceEditDetailed({
       documentChanges: [
-        { kind: "rename", oldUri: C.pathToUri(source), newUri: C.pathToUri(`${source}.new`) },
+        { kind: "rename", oldUri: C.pathToUri(source), newUri: C.pathToUri(target) },
       ],
     });
 
+    expect(completeMove.calls.count()).toBe(1);
+    const completionErrors = await completeMove.calls.mostRecent().returnValue.then(
+      () => [],
+      (error) =>
+        Array.from(error.errors || [error])
+          .slice(0, 4)
+          .map((failure) => ({
+            message: failure.message?.slice(0, 1024),
+            errors: Array.from(failure.errors || [])
+              .slice(0, 4)
+              .map(({ name, message, code }) => ({
+                name,
+                message: message?.slice(0, 1024),
+                code,
+              })),
+          })),
+    );
+    expect(completionErrors).toEqual([]);
     expect(result.applied).toBe(false);
+    expect(result.failedChange).toBe(0);
     expect(result.failureReason).toBe("copy failed and rolled back");
     expect(editor.getPath()).toBe(source);
     expect(reattach.calls.count()).toBe(0);
+    expect(plan.executeNext.calls.count()).toBe(1);
+    expect(fs.readFileSync(source, "utf8")).toBe("source");
+    expect(fs.existsSync(recovery)).toBe(false);
+    expect(fs.existsSync(target)).toBe(false);
   });
 
   it("rechecks an overwrite target immediately before the resource step", async () => {
