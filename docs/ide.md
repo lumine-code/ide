@@ -498,7 +498,7 @@ A completed installation expires its signal after delivering the operation's res
 | `signal`                                           | the current operation's lifetime signal                                                                                                        |
 | `latestGithubRelease(repository, { preRelease })`  | `{ version, tag, assets: [{ name, url, size, digest? }] }`; throws with the status rather than resolving empty                                 |
 | `githubReleaseByTag(repository, tag)`              | the same shape                                                                                                                                 |
-| `npmPackageLatestVersion(name)`                    |                                                                                                                                                |
+| `npmPackageLatestVersion(name, { tag })`           | version selected by an npm dist-tag; `tag` defaults to `latest`, and may select a supported prerelease channel such as `rc`                    |
 | `npmPackageInstalledVersion(name, directory)`      | `null` when absent                                                                                                                             |
 | `npmInstallPackage(name, version, directory)`      | installs the package and its tree; `--omit=dev --ignore-scripts`                                                                               |
 | `downloadFile(url, destination, { type, digest })` | verifies an optional `algorithm:hex` digest before writing or extracting; `type` ∈ `uncompressed` \| `gzip` \| `gzip-tar` \| `xz-tar` \| `zip` |

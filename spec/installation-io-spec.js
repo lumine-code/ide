@@ -99,6 +99,29 @@ describe("Installation I/O ownership", () => {
     await Promise.resolve();
   });
 
+  it("selects an explicit npm release channel without changing the default", async () => {
+    const requests = [];
+    sources.fetchUrl = async (url) => {
+      requests.push(url);
+      return response({ version: url.endsWith("/rc") ? "4.0.0-rc.2" : "3.5.0" });
+    };
+    expect(await api.npmPackageLatestVersion("graphql-language-service-cli", { tag: "rc" })).toBe(
+      "4.0.0-rc.2",
+    );
+    expect(await api.npmPackageLatestVersion("graphql-language-service-cli")).toBe("3.5.0");
+    expect(requests[0]).toMatch(/graphql-language-service-cli\/rc$/);
+    expect(requests[1]).toMatch(/graphql-language-service-cli\/latest$/);
+  });
+
+  it("rejects invalid npm release channels before requesting metadata", async () => {
+    sources.fetchUrl = jasmine.createSpy("fetch");
+    for (const tag of ["", "../latest", "next tag", null, {}])
+      await expectAsync(api.npmPackageLatestVersion("server", { tag })).toBeRejectedWithError(
+        /dist-tag/,
+      );
+    expect(sources.fetchUrl).not.toHaveBeenCalled();
+  });
+
   it("cancels a stalled download body and consumes its late rejection", async () => {
     const body = deferred();
     const entered = deferred();
