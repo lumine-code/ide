@@ -92,6 +92,33 @@ describe("CompletionProvider request ownership", () => {
     expect(provider.cache.items[0].displayText).toBe("console");
   });
 
+  for (const event of ["grammar", "path"]) {
+    it(`releases settled source caches and resolve work on ${event} retirement`, async () => {
+      emitter = new Emitter();
+      const session = sessionWith(() => ({ items: [{ label: "console" }] }));
+      provider = new CompletionProvider(managerWith(session));
+      const editor = stubEditor();
+      editor.getText = () => "co";
+      editor.onDidChangeGrammar = (callback) => emitter.on("grammar", callback);
+      editor.onDidChangePath = (callback) => emitter.on("path", callback);
+      const real = editor.getGrammar();
+      await provider.getSuggestions(requestFor(editor));
+      expect(provider.cache.source).toBe("co");
+      const resolving = (provider.resolveController = new AbortController());
+      provider.cacheRenewal = {};
+      editor.getGrammar = () => lumine.grammars.nullGrammar;
+      emitter.emit(event);
+      expect(provider.cache).toBeNull();
+      expect(provider.cacheRenewal).toBeNull();
+      expect(provider.cacheSubscription).toBeNull();
+      expect(resolving.signal.aborted).toBeTrue();
+      editor.getGrammar = () => real;
+      emitter.emit(event);
+      expect((await provider.getSuggestions(requestFor(editor))).length).toBe(1);
+      expect(session.requests.length).toBe(2);
+    });
+  }
+
   it("copies the invocation point and tolerates an omitted prefix", async () => {
     const startup = deferred();
     const session = sessionWith(() => ({ items: [{ label: "console" }] }));
