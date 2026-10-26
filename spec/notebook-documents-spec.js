@@ -180,6 +180,69 @@ describe("NotebookDocuments against a fake server", () => {
     await manager.deactivate();
   });
 
+  it("never transfers None cells and closes or reopens them after grammar selection", async () => {
+    registerFakeAdapter({ capabilities: { notebookDocumentSync: RUFF_SYNC } });
+    const active = buildCellEditor("active = 1\n");
+    const suspended = buildCellEditor("suspended = 2\n");
+    const grammar = suspended.getGrammar();
+    suspended.setGrammar(lumine.grammars.nullGrammar);
+    const read = spyOn(suspended, "getText").and.callThrough();
+    const bridge = notebooks.open({
+      filePath: notebookPath,
+      cells: [
+        { id: "active", kind: "code", editor: active, scopeName: "text.plain" },
+        { id: "suspended", kind: "code", editor: suspended, scopeName: "text.plain" },
+      ],
+    });
+    await bridge.attached;
+    const key = C.uriKey(bridge.uriForCell("suspended"));
+    expect(theSession().documents.has(key)).toBeFalse();
+    expect(read).not.toHaveBeenCalled();
+    suspended.setGrammar(grammar);
+    await until(() => theSession().documents.has(key));
+    expect(read).toHaveBeenCalled();
+    suspended.setGrammar(lumine.grammars.nullGrammar);
+    await until(() => !theSession().documents.has(key));
+    const changes = await ofMethod("notebookDocument/didChange");
+    expect(
+      changes.some((message) =>
+        message.params.change.cells?.structure?.didClose?.some(
+          (document) => document.uri === bridge.uriForCell("suspended"),
+        ),
+      ),
+    ).toBeTrue();
+  });
+
+  it("retires a pending notebook projection immediately when None is selected", async () => {
+    let finish, signal;
+    const editor = buildCellEditor("waiting = 1\n");
+    const grammar = editor.getGrammar();
+    const sourceProjection = () => ({ text: editor.getText(), isCurrent: () => true });
+    const projection = jasmine.createSpy("project cell").and.callFake((_editor, options) => {
+      signal = options.signal;
+      return new Promise((resolve) => {
+        finish = resolve;
+      });
+    });
+    registerFakeAdapter(
+      { capabilities: { notebookDocumentSync: RUFF_SYNC } },
+      { getDocumentProjection: projection },
+    );
+    const bridge = notebooks.open({
+      filePath: notebookPath,
+      cells: [{ id: "waiting", kind: "code", editor, scopeName: "text.plain" }],
+    });
+    await until(() => finish);
+    editor.setGrammar(lumine.grammars.nullGrammar);
+    expect(signal.aborted).toBeTrue();
+    await bridge.attached;
+    expect(theSession().documents.size).toBe(0);
+    finish(sourceProjection());
+    projection.and.callFake(sourceProjection);
+    editor.setGrammar(grammar);
+    await until(() => theSession().documents.has(C.uriKey(bridge.uriForCell("waiting"))));
+  });
+
   it("forgets a failed initial session so a later notebook attach can start fresh", async () => {
     let attempts = 0;
     let failedSession;

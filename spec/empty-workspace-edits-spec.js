@@ -20,7 +20,9 @@ describe("Workspace edits with empty targets", () => {
     });
   };
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    const textGrammarPackage = await lumine.packages.activatePackage("language-text");
+    await textGrammarPackage.resourceLoadPromise;
     jasmine.useRealClock();
     manager = new LanguageServerManager();
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "ide-empty-edits-"));

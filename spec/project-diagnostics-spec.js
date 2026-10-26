@@ -4,7 +4,17 @@ const ProjectDiagnostics = require("../lib/project-diagnostics");
 const C = require("../lib/converters");
 
 describe("manual project diagnostics", () => {
-  let manager, emitter, delegate, coordinator, session, editor, reports, enabled, filePath, uri;
+  let manager,
+    emitter,
+    delegate,
+    coordinator,
+    session,
+    editor,
+    reports,
+    enabled,
+    filePath,
+    uri,
+    grammar;
   const message = (file, cell) => ({
     severity: "warning",
     excerpt: "Unused name",
@@ -28,10 +38,14 @@ describe("manual project diagnostics", () => {
     filePath = path.resolve("scan-project", "main.py");
     uri = C.pathToUri(filePath);
     emitter = new Emitter();
+    grammar = { scopeName: "source.python" };
     editor = {
+      getPath: () => filePath,
+      getGrammar: () => grammar,
       isDestroyed: () => false,
       onDidDestroy: (fn) => emitter.on("editor-destroyed", fn),
       onDidChangePath: (fn) => emitter.on("editor-path", fn),
+      onDidChangeGrammar: (fn) => emitter.on("editor-grammar", fn),
     };
     const adapter = { id: "ide-scan" };
     session = {
@@ -57,6 +71,7 @@ describe("manual project diagnostics", () => {
       fn(editor);
       return emitter.on("editor-added", fn);
     });
+    spyOn(lumine.workspace, "getTextEditors").and.returnValue([editor]);
     delegate = { setAllMessages: jasmine.createSpy("setAllMessages") };
     coordinator = new ProjectDiagnostics(manager, "ide-scan", delegate);
   });
@@ -70,6 +85,20 @@ describe("manual project diagnostics", () => {
     const findings = [message(filePath)];
     coordinator.setAllMessages(findings, { showProjectView: true });
     expect(delegate.setAllMessages).toHaveBeenCalledWith(findings, { showProjectView: true });
+  });
+
+  it("withdraws cached scan results for None and restores them when its grammar returns", async () => {
+    const findings = [message(filePath)];
+    coordinator.setAllMessages(findings);
+    const previous = grammar;
+    grammar = lumine.grammars.nullGrammar;
+    emitter.emit("editor-grammar");
+    await Promise.resolve();
+    expect(delegate.setAllMessages.calls.mostRecent().args[0]).toEqual([]);
+    grammar = previous;
+    emitter.emit("editor-grammar");
+    await Promise.resolve();
+    expect(delegate.setAllMessages.calls.mostRecent().args[0]).toEqual(findings);
   });
 
   it("yields only the reported document, including a clean server result", async () => {

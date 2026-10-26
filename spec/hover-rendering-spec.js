@@ -4,6 +4,8 @@ describe("IDE context-help rendering through the tooltip", () => {
   let editor, registration, documentationPackage;
 
   beforeEach(async () => {
+    const textGrammarPackage = await lumine.packages.activatePackage("language-text");
+    await textGrammarPackage.resourceLoadPromise;
     jasmine.useRealClock();
     jasmine.attachToDOM(lumine.views.getView(lumine.workspace));
     await lumine.packages.activatePackage("language-javascript");

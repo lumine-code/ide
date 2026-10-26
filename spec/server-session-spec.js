@@ -203,7 +203,9 @@ describe("ServerSession against a fake server", () => {
     return executor;
   };
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    const textGrammarPackage = await lumine.packages.activatePackage("language-text");
+    await textGrammarPackage.resourceLoadPromise;
     // Real timers and Date.now: these specs wait on child-process I/O.
     jasmine.useRealClock();
     manager = new LanguageServerManager();

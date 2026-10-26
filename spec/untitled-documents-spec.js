@@ -21,6 +21,8 @@ describe("Unsaved language-server documents", () => {
   let manager, editor, tempDir;
 
   beforeEach(async () => {
+    const textGrammarPackage = await lumine.packages.activatePackage("language-text");
+    await textGrammarPackage.resourceLoadPromise;
     jasmine.useRealClock();
     manager = new LanguageServerManager();
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-untitled-"));
@@ -51,6 +53,7 @@ describe("Unsaved language-server documents", () => {
       displayName: "Untitled Test Server",
       grammarScopes: [editor.getGrammar().scopeName, "text.html.basic"],
       languageId: "html",
+      languageIdForScope: () => "html",
       resolveServer: () => ({
         command: process.execPath,
         args: [

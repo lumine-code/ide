@@ -2,6 +2,8 @@ describe("IDE completion documentation through autocomplete", () => {
   let editor, registration, watchRegistration, autocompletePackage, CompletionProvider;
 
   beforeEach(async () => {
+    const textGrammarPackage = await lumine.packages.activatePackage("language-text");
+    await textGrammarPackage.resourceLoadPromise;
     jasmine.useRealClock();
     jasmine.attachToDOM(lumine.views.getView(lumine.workspace));
     await lumine.packages.activatePackage("language-javascript");

@@ -39,7 +39,9 @@ describe("Workspace edit target lifetimes", () => {
     uri: C.pathToUri(path.join(tempDir, "unrelated.txt")),
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    const textGrammarPackage = await lumine.packages.activatePackage("language-text");
+    await textGrammarPackage.resourceLoadPromise;
     jasmine.useRealClock();
     manager = new LanguageServerManager();
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "ide-workspace-lifetimes-"));

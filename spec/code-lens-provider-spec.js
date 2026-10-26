@@ -52,6 +52,8 @@ describe("CodeLensProvider", () => {
   let editor, provider;
 
   beforeEach(async () => {
+    const textGrammarPackage = await lumine.packages.activatePackage("language-text");
+    await textGrammarPackage.resourceLoadPromise;
     editor = await lumine.workspace.open(path.join(os.tmpdir(), "code-lens-provider-example.js"));
     editor.setText("function one() {}\nfunction two() {}\n");
   });

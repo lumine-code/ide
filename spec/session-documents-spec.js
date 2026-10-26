@@ -25,7 +25,9 @@ describe("session document ownership", () => {
     ],
   };
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    const textGrammarPackage = await lumine.packages.activatePackage("language-text");
+    await textGrammarPackage.resourceLoadPromise;
     editors = [];
     session = {
       state: "running",
@@ -66,6 +68,29 @@ describe("session document ownership", () => {
 
   const messages = (method) =>
     session.connection.notify.calls.allArgs().filter(([name]) => name === method);
+
+  it("does not transfer null-grammar text and closes a live document when None is selected", async () => {
+    const grammar = editor.getGrammar();
+    expect(grammar).not.toBe(lumine.grammars.nullGrammar);
+    editor.setGrammar(lumine.grammars.nullGrammar);
+    const read = spyOn(editor, "getText").and.callThrough();
+    await documents.openEditor(editor);
+    expect(read).not.toHaveBeenCalled();
+    expect(session.connection.notify).not.toHaveBeenCalled();
+    editor.setGrammar(grammar);
+    await documents.openEditor(editor);
+    expect(messages("textDocument/didOpen").length).toBe(1);
+    editor.setGrammar(lumine.grammars.nullGrammar);
+    expect(documents.items.size).toBe(0);
+    expect(messages("textDocument/didClose").length).toBe(1);
+    session.connection.notify.calls.reset();
+    editor.insertText("changed");
+    await Promise.resolve();
+    expect(session.connection.notify).not.toHaveBeenCalled();
+    editor.setGrammar(grammar);
+    await documents.openEditor(editor);
+    expect(messages("textDocument/didOpen").length).toBe(1);
+  });
 
   it("does not retain an editor destroyed before document attachment", async () => {
     editor.destroy();

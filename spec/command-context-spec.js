@@ -5,6 +5,8 @@ describe("IDE document commands in captured presentation contexts", () => {
   let main, first, second, extra, firstPane, notebook, expand;
 
   beforeEach(async () => {
+    const textGrammarPackage = await lumine.packages.activatePackage("language-text");
+    await textGrammarPackage.resourceLoadPromise;
     jasmine.useRealClock();
     for (const method of ["openExternal", "openPath", "showItemInFolder", "openApplication"])
       if (!jasmine.isSpy(lumine.shell[method])) spyOn(lumine.shell, method).and.resolveTo();

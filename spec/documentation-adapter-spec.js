@@ -3,6 +3,11 @@ const CompletionProvider = require("../lib/completion-provider");
 const { createDocumentationCodeBlockRenderer } = require("../lib/documentation-code-block");
 
 describe("adapter-owned documentation code blocks", () => {
+  beforeEach(async () => {
+    const textGrammarPackage = await lumine.packages.activatePackage("language-text");
+    await textGrammarPackage.resourceLoadPromise;
+  });
+
   beforeEach(() => jasmine.useRealClock());
 
   const fence = (text, language = "") => `\`\`\`${language}\n${text}\n\`\`\``;

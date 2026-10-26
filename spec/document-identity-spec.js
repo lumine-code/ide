@@ -45,7 +45,9 @@ describe("shared language-server document ownership", () => {
   let session, editors, first, second;
   const root = path.resolve("document-ownership");
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    const textGrammarPackage = await lumine.packages.activatePackage("language-text");
+    await textGrammarPackage.resourceLoadPromise;
     editors = [];
     first = buildEditor("source.ts");
     second = buildEditor("Source.ts");

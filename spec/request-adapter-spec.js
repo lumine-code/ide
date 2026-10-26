@@ -8,6 +8,8 @@ const Session = require("../lib/server-session");
 describe("adapter request and response normalization", () => {
   let root, manager, session, editor, uri;
   beforeEach(async () => {
+    const textGrammarPackage = await lumine.packages.activatePackage("language-text");
+    await textGrammarPackage.resourceLoadPromise;
     jasmine.useRealClock();
     root = fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), "ide-request-adapter-"));
     const file = path.join(root, "main.js");

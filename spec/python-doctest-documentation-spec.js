@@ -2,6 +2,8 @@ describe("Python doctest documentation blocks", () => {
   let renderDocumentationCodeBlock, adapter;
 
   beforeEach(async () => {
+    const textGrammarPackage = await lumine.packages.activatePackage("language-text");
+    await textGrammarPackage.resourceLoadPromise;
     jasmine.useRealClock();
     await lumine.packages.activatePackage("language-python");
     ({ renderDocumentationCodeBlock } = require("../lib/documentation-code-block"));

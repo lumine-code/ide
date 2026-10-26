@@ -452,7 +452,9 @@ describe("LanguageServerManager external documents", () => {
     getRootScopeDescriptor: () => null,
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    const textGrammarPackage = await lumine.packages.activatePackage("language-text");
+    await textGrammarPackage.resourceLoadPromise;
     manager = new LanguageServerManager();
   });
   afterEach(async () => manager.deactivate());
@@ -677,7 +679,9 @@ describe("LanguageServerManager session lifetime", () => {
     return session;
   };
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    const textGrammarPackage = await lumine.packages.activatePackage("language-text");
+    await textGrammarPackage.resourceLoadPromise;
     manager = new LanguageServerManager();
   });
   afterEach(async () => manager.deactivate());
@@ -898,7 +902,9 @@ describe("LanguageServerManager multi-root servers", () => {
     return session;
   };
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    const textGrammarPackage = await lumine.packages.activatePackage("language-text");
+    await textGrammarPackage.resourceLoadPromise;
     manager = new LanguageServerManager();
     notifications = [];
     adapter = { id: "test", displayName: "Test", grammarScopes: ["source.test"] };
@@ -1020,7 +1026,9 @@ describe("LanguageServerManager multi-root servers", () => {
 
 describe("LanguageServerManager capabilities", () => {
   let manager;
-  beforeEach(() => {
+  beforeEach(async () => {
+    const textGrammarPackage = await lumine.packages.activatePackage("language-text");
+    await textGrammarPackage.resourceLoadPromise;
     manager = new LanguageServerManager();
   });
   afterEach(async () => manager.deactivate());

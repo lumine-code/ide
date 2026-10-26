@@ -61,6 +61,8 @@ describe("SemanticTokensProvider", () => {
   let editor, provider;
 
   beforeEach(async () => {
+    const textGrammarPackage = await lumine.packages.activatePackage("language-text");
+    await textGrammarPackage.resourceLoadPromise;
     editor = await lumine.workspace.open(
       path.join(os.tmpdir(), "semantic-tokens-provider-example.js"),
     );

@@ -4,6 +4,8 @@ describe("TypeScript display signatures in IDE hover", () => {
     "(method) Array<string>.filter(predicate: (value: string, index: number, array: string[]) => unknown, thisArg?: any): string[] (+1 overload)";
 
   beforeEach(async () => {
+    const textGrammarPackage = await lumine.packages.activatePackage("language-text");
+    await textGrammarPackage.resourceLoadPromise;
     jasmine.useRealClock();
     await lumine.packages.activatePackage("language-typescript");
     ({ renderDocumentationCodeBlock } = require("../lib/documentation-code-block"));

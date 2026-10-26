@@ -3,7 +3,9 @@ const LanguageServerManager = require("../lib/language-server-manager");
 describe("language-server document reveals", () => {
   let manager, editor, requests, subscription;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    const textGrammarPackage = await lumine.packages.activatePackage("language-text");
+    await textGrammarPackage.resourceLoadPromise;
     manager = Object.create(LanguageServerManager.prototype);
     editor = lumine.workspace.buildTextEditor();
     editor.setText("first\nsecond\nthird");

@@ -35,7 +35,9 @@ describe("independent diagnostic providers", () => {
   afterAll(() => {
     jasmine.DEFAULT_TIMEOUT_INTERVAL = timeout;
   });
-  beforeEach(() => {
+  beforeEach(async () => {
+    const textGrammarPackage = await lumine.packages.activatePackage("language-text");
+    await textGrammarPackage.resourceLoadPromise;
     jasmine.useRealClock();
     manager = new Manager();
     directory = fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), "ide-multiple-"));
@@ -78,6 +80,7 @@ describe("independent diagnostic providers", () => {
         displayName: "Diagnostic test",
         grammarScopes: ["text.plain"],
         languageId: "example",
+        languageIdForScope: () => "example",
         resolveServer: () => launch,
         ...extra,
       },

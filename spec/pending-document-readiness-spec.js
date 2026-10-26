@@ -15,7 +15,9 @@ describe("Pending editor document readiness", () => {
   const root = path.resolve("pending-document-readiness");
   const filePath = path.join(root, "preview.ts");
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    const textGrammarPackage = await lumine.packages.activatePackage("language-text");
+    await textGrammarPackage.resourceLoadPromise;
     manager = new Manager();
     editors = [];
     editor = buildEditor(filePath);
@@ -25,6 +27,7 @@ describe("Pending editor document readiness", () => {
       displayName: "Pending Readiness",
       grammarScopes: [editor.getGrammar().scopeName, "source.other"],
       languageId: "typescript",
+      languageIdForScope: () => "typescript",
       caseSensitiveFileNames: false,
       resolveServer: async () => null,
     };

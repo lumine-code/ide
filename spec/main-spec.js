@@ -19,6 +19,8 @@ const { publishSession } = require("./helpers/session-fixtures");
 
 describe("ide package", () => {
   beforeEach(async () => {
+    const textGrammarPackage = await lumine.packages.activatePackage("language-text");
+    await textGrammarPackage.resourceLoadPromise;
     await lumine.packages.activatePackage("ide");
   });
 

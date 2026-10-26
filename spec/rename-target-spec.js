@@ -8,6 +8,8 @@ const Session = require("../lib/server-session");
 describe("canonical language-server rename targets", () => {
   let root, manager, session, editor, uri;
   beforeEach(async () => {
+    const textGrammarPackage = await lumine.packages.activatePackage("language-text");
+    await textGrammarPackage.resourceLoadPromise;
     jasmine.useRealClock();
     root = fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), "ide-rename-target-"));
     const file = path.join(root, "main.js");

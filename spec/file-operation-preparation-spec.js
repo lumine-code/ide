@@ -17,7 +17,9 @@ const flush = async () => {
 describe("Staged file operation preparations", () => {
   let manager, directory, editors;
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    const textGrammarPackage = await lumine.packages.activatePackage("language-text");
+    await textGrammarPackage.resourceLoadPromise;
     manager = new Manager();
     directory = fs.mkdtempSync(path.join(os.tmpdir(), "ide-file-preparation-"));
     editors = [];

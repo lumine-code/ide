@@ -1,4 +1,9 @@
 describe("IDE session command availability", () => {
+  beforeEach(async () => {
+    const textGrammarPackage = await lumine.packages.activatePackage("language-text");
+    await textGrammarPackage.resourceLoadPromise;
+  });
+
   it("does not initialize a cold routing graph for presentation", async () => {
     const Manager = require("../lib/language-server-manager");
     const manager = new Manager();

@@ -37,6 +37,8 @@ describe("IDE document command ownership in the workspace", () => {
   };
 
   beforeEach(async () => {
+    const textGrammarPackage = await lumine.packages.activatePackage("language-text");
+    await textGrammarPackage.resourceLoadPromise;
     // Every native shell path is intercepted before package activation.
     for (const name of ["openPath", "openExternal", "openApplication", "showItemInFolder"])
       spyOn(lumine.shell, name).and.resolveTo();
@@ -46,7 +48,7 @@ describe("IDE document command ownership in the workspace", () => {
     const adapter = {
       id: "command-ownership-test",
       displayName: "Command Ownership Test",
-      grammarScopes: ["text.plain.null-grammar"],
+      grammarScopes: ["text.plain"],
       resolveServer: async () => null,
     };
     main.provideIde().registerAdapter(adapter);

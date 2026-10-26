@@ -74,6 +74,15 @@ describe("synchronized document requests", () => {
     expect(session.request).not.toHaveBeenCalled();
   });
 
+  it("does not read or send a document with no grammar", async () => {
+    spyOn(editor, "getGrammar").and.returnValue(lumine.grammars.nullGrammar);
+    spyOn(editor, "getText");
+    expect(await request()).toBeNull();
+    expect(editor.getText).not.toHaveBeenCalled();
+    expect(manager.activeSessionsForEditor).not.toHaveBeenCalled();
+    expect(session.request).not.toHaveBeenCalled();
+  });
+
   it("finds a retained source owner through its canonical wire URI", async () => {
     document.editor = {};
     document.editors = new Map([[editor, {}]]);

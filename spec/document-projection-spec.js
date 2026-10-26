@@ -15,6 +15,8 @@ describe("AST document projections", () => {
     "value = %p\nnext_name = value\n# %% [markdown]\n# literal Markdown\n# %% [raw]\nraw payload\n# %%\nresult: int = 'wrong'\n";
 
   beforeEach(async () => {
+    const textGrammarPackage = await lumine.packages.activatePackage("language-text");
+    await textGrammarPackage.resourceLoadPromise;
     jasmine.useRealClock();
     directory = fs.mkdtempSync(path.join(os.tmpdir(), "ide-projection-"));
     lumine.project.setPaths([directory]);

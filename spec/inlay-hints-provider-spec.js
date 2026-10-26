@@ -52,6 +52,8 @@ describe("InlayHintsProvider", () => {
   let editor, provider;
 
   beforeEach(async () => {
+    const textGrammarPackage = await lumine.packages.activatePackage("language-text");
+    await textGrammarPackage.resourceLoadPromise;
     editor = await lumine.workspace.open(path.join(os.tmpdir(), "inlay-hints-provider-example.js"));
     editor.setText("const sum = add(first, second);\n\nlet x = 5;\n");
   });

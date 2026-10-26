@@ -9,6 +9,8 @@ describe("ide command scopes", () => {
   let editor, mini, button;
 
   beforeEach(async () => {
+    const textGrammarPackage = await lumine.packages.activatePackage("language-text");
+    await textGrammarPackage.resourceLoadPromise;
     jasmine.attachToDOM(lumine.workspace.getElement());
     await lumine.packages.activatePackage("ide");
     editor = await lumine.workspace.open();

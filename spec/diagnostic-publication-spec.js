@@ -11,7 +11,9 @@ describe("Diagnostic report publication", () => {
     data: { nested: { value: "original" } },
   });
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    const textGrammarPackage = await lumine.packages.activatePackage("language-text");
+    await textGrammarPackage.resourceLoadPromise;
     events = [];
     session = Object.assign(Object.create(Session.prototype), {
       documentSync: {

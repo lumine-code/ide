@@ -12,9 +12,12 @@ describe("Cooperative diagnostic presentation", () => {
       severity: 2,
       range: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } },
     }));
-  beforeEach(() => {
+  beforeEach(async () => {
+    const textGrammarPackage = await lumine.packages.activatePackage("language-text");
+    await textGrammarPackage.resourceLoadPromise;
     pending = [];
     editor = new TextEditor({ text: "value\n" });
+    editor.setGrammar(lumine.grammars.grammarForScopeName("text.plain"));
     editor.getBuffer().setPath(path.resolve("cooperative-diagnostics.py"));
     uri = C.pathToUri(editor.getPath());
     const adapter = { id: "test:cooperative" };

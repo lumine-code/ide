@@ -2,6 +2,8 @@ describe("Python signatures in hover documentation", () => {
   let items, renderDocumentationCodeBlock;
 
   beforeEach(async () => {
+    const textGrammarPackage = await lumine.packages.activatePackage("language-text");
+    await textGrammarPackage.resourceLoadPromise;
     jasmine.useRealClock();
     await lumine.packages.activatePackage("language-python");
     ({ renderDocumentationCodeBlock } = require("../lib/documentation-code-block"));
