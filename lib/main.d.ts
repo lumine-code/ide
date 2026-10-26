@@ -761,6 +761,7 @@ export interface LanguageServerService {
    * The bridge is path-immutable: dispose and reopen on a save-as.
    */
   openNotebookDocument(descriptor: NotebookDocumentDescriptor): NotebookBridge | null;
+  readonly supportsNotebookTextSources?: true;
   /**
    * The adapters serving an open notebook, for a consumer deciding whether to
    * stand down. Empty when no bridge is open or its sessions are stopped or
@@ -791,6 +792,8 @@ export interface NotebookCellDescriptor {
   scopeName?: string;
   /** Fallback text for a cell whose editor has not been built yet. */
   text?: string;
+  /** Immutable TextBuffer.getTextSnapshot() fallback; checked by length before materialization. */
+  textSource?: Readonly<{ length: number; toString(): string }>;
 }
 export interface NotebookDocumentDescriptor {
   filePath: string;

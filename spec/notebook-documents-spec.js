@@ -279,6 +279,36 @@ describe("NotebookDocuments against a fake server", () => {
     ).toBe(false);
   });
 
+  it("budgets unmounted source snapshots before reading and resumes after replacement", async () => {
+    lumine.config.set("ide.maxDocumentSize", 1);
+    registerFakeAdapter({ capabilities: { notebookDocumentSync: RUFF_SYNC } });
+    const active = { id: "active", kind: "code", editor: buildCellEditor("active\n") };
+    const large = {
+      length: 2 * 1024 * 1024,
+      toString: jasmine.createSpy("oversized source").and.throwError("must not read"),
+    };
+    const limited = { id: "hidden", kind: "code", scopeName: "text.plain", textSource: large };
+    const bridge = notebooks.open({ filePath: notebookPath, cells: [active, limited] });
+    await bridge.attached;
+    expect(large.toString).not.toHaveBeenCalled();
+    const small = { length: 5, toString: () => "a😀\r\n" };
+    await bridge.updateCells([active, { ...limited, textSource: small }]);
+    let changes = await ofMethod("notebookDocument/didChange");
+    expect(changes.at(-1).params.change.cells.structure.didOpen[0].text).toBe("a😀\r\n");
+    await bridge.updateCells([
+      active,
+      { ...limited, textSource: { length: 4, toString: () => "next" } },
+    ]);
+    changes = await ofMethod("notebookDocument/didChange");
+    expect(changes.at(-1).params.change.cells.textContent[0].changes).toEqual([{ text: "next" }]);
+    await bridge.updateCells([active, limited]);
+    changes = await ofMethod("notebookDocument/didChange");
+    expect(changes.at(-1).params.change.cells.structure.didClose[0].uri).toBe(
+      bridge.uriForCell("hidden"),
+    );
+    expect(large.toString).not.toHaveBeenCalled();
+  });
+
   it("aborts pending cell projection when growth exceeds the synchronization budget", async () => {
     lumine.config.set("ide.maxDocumentSize", 1);
     let signal;
