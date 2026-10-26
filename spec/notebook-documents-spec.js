@@ -243,6 +243,214 @@ describe("NotebookDocuments against a fake server", () => {
     await until(() => theSession().documents.has(C.uriKey(bridge.uriForCell("waiting"))));
   });
 
+  it("removes oversized cells through notebook structure and resumes after shrinking", async () => {
+    lumine.config.set("ide.maxDocumentSize", 1);
+    registerFakeAdapter({ capabilities: { notebookDocumentSync: RUFF_SYNC } });
+    const active = buildCellEditor("active\n");
+    const limited = buildCellEditor("x".repeat(1024 * 1024 + 1));
+    const read = spyOn(limited, "getText").and.callThrough();
+    const bridge = notebooks.open({
+      filePath: notebookPath,
+      cells: [
+        { id: "active", kind: "code", editor: active, scopeName: "text.plain" },
+        { id: "limited", kind: "code", editor: limited, scopeName: "text.plain" },
+      ],
+    });
+    await bridge.attached;
+    const uri = bridge.uriForCell("limited");
+    const key = C.uriKey(uri);
+    expect(read).not.toHaveBeenCalled();
+    expect(theSession().documents.has(key)).toBe(false);
+    limited.setText("recovered\n");
+    await until(() => theSession().documents.has(key));
+    expect(read).toHaveBeenCalled();
+    limited.setText("x".repeat(1024 * 1024 + 1));
+    await until(() => !theSession().documents.has(key));
+    const changes = await ofMethod("notebookDocument/didChange");
+    expect(
+      changes.some((message) =>
+        message.params.change.cells?.structure?.didClose?.some((document) => document.uri === uri),
+      ),
+    ).toBe(true);
+    expect(
+      (await ofMethod("textDocument/didClose")).some(
+        (message) => message.params.textDocument.uri === uri,
+      ),
+    ).toBe(false);
+  });
+
+  it("aborts pending cell projection when growth exceeds the synchronization budget", async () => {
+    lumine.config.set("ide.maxDocumentSize", 1);
+    let signal;
+    const editor = buildCellEditor("waiting\n");
+    const projection = jasmine
+      .createSpy("project limited cell")
+      .and.callFake((_editor, options) => {
+        signal = options.signal;
+        return new Promise(() => {});
+      });
+    registerFakeAdapter(
+      { capabilities: { notebookDocumentSync: RUFF_SYNC } },
+      { getDocumentProjection: projection },
+    );
+    const bridge = notebooks.open({
+      filePath: notebookPath,
+      cells: [{ id: "limited", kind: "code", editor, scopeName: "text.plain" }],
+    });
+    await until(() => signal);
+    editor.setText("x".repeat(1024 * 1024 + 1));
+    expect(signal.aborted).toBe(true);
+    await bridge.attached;
+    expect(theSession().documents.size).toBe(0);
+  });
+
+  it("keeps eligible cells attached when another cell's projected payload exceeds the budget", async () => {
+    lumine.config.set("ide.maxDocumentSize", 1);
+    const active = buildCellEditor("active\n");
+    const limited = buildCellEditor("limited\n");
+    registerFakeAdapter(
+      { capabilities: { notebookDocumentSync: RUFF_SYNC } },
+      {
+        getDocumentProjection: (editor) => ({
+          text: editor === limited ? "x".repeat(1024 * 1024 + 1) : editor.getText(),
+          isCurrent: () => true,
+        }),
+      },
+    );
+    const bridge = notebooks.open({
+      filePath: notebookPath,
+      cells: [
+        { id: "active", kind: "code", editor: active, scopeName: "text.plain" },
+        { id: "limited", kind: "code", editor: limited, scopeName: "text.plain" },
+      ],
+    });
+    await bridge.attached;
+    await until(() => theSession().documents.has(C.uriKey(bridge.uriForCell("active"))));
+    expect(theSession().documents.has(C.uriKey(bridge.uriForCell("limited")))).toBe(false);
+    expect(theSession().state).toBe("running");
+    lumine.config.set("ide.maxDocumentSize", 2);
+    await until(() => theSession().documents.has(C.uriKey(bridge.uriForCell("limited"))));
+    expect(theSession().state).toBe("running");
+  });
+
+  it("suspends and reopens the whole notebook when combined eligible cells exceed its frame budget", async () => {
+    notebooks.dispose();
+    notebooks = new NotebookDocuments(manager, { maxUnits: 20000 });
+    manager.setNotebookDocuments(notebooks);
+    registerFakeAdapter({ capabilities: { notebookDocumentSync: RUFF_SYNC } });
+    const first = buildCellEditor("a".repeat(100));
+    const second = buildCellEditor("b".repeat(100));
+    const bridge = notebooks.open({
+      filePath: notebookPath,
+      cells: [
+        { id: "first", kind: "code", editor: first, scopeName: "text.plain" },
+        { id: "second", kind: "code", editor: second, scopeName: "text.plain" },
+      ],
+    });
+    await bridge.attached;
+    expect(theSession().documents.size).toBe(2);
+    first.setText("a".repeat(2000));
+    const readFirst = spyOn(first, "getText").and.callThrough();
+    const readSecond = spyOn(second, "getText").and.callThrough();
+    second.setText("b".repeat(2000));
+    expect(theSession().documents.size).toBe(0);
+    expect(manager.documentAvailabilityForEditor(first).reason).toBe("transport-limit");
+    expect(manager.documentAvailabilityForEditor(second).reason).toBe("transport-limit");
+    expect(readFirst).not.toHaveBeenCalled();
+    expect(readSecond).not.toHaveBeenCalled();
+    expect((await ofMethod("notebookDocument/didClose")).length).toBe(1);
+    first.setText("small");
+    await until(() => theSession()?.documents.size === 2);
+    expect((await ofMethod("notebookDocument/didOpen")).length).toBe(2);
+    expect(manager.documentAvailabilityForEditor(first).available).toBe(true);
+  });
+
+  it("does not start or partially open an initially oversized notebook group", async () => {
+    notebooks.dispose();
+    notebooks = new NotebookDocuments(manager, { maxUnits: 20000 });
+    manager.setNotebookDocuments(notebooks);
+    registerFakeAdapter({ capabilities: { notebookDocumentSync: RUFF_SYNC } });
+    const first = buildCellEditor("a".repeat(2000));
+    const second = buildCellEditor("b".repeat(2000));
+    const read = spyOn(first, "getText").and.callThrough();
+    const bridge = notebooks.open({
+      filePath: notebookPath,
+      cells: [
+        { id: "first", kind: "code", editor: first, scopeName: "text.plain" },
+        { id: "second", kind: "code", editor: second, scopeName: "text.plain" },
+      ],
+    });
+    await bridge.attached;
+    expect(manager.allSessions().length).toBe(0);
+    expect(read).not.toHaveBeenCalled();
+    expect(manager.documentAvailabilityForEditor(first).reason).toBe("transport-limit");
+    first.setText("small");
+    await until(() => theSession()?.documents.size === 2);
+  });
+
+  it("preflights newly projected cells before publishing a structural change", async () => {
+    notebooks.dispose();
+    notebooks = new NotebookDocuments(manager, { maxUnits: 20000 });
+    manager.setNotebookDocuments(notebooks);
+    const active = buildCellEditor("active");
+    const first = buildCellEditor("first");
+    const second = buildCellEditor("second");
+    registerFakeAdapter(
+      { capabilities: { notebookDocumentSync: RUFF_SYNC } },
+      {
+        getDocumentProjection: (editor) => ({
+          text: editor === active ? editor.getText() : "x".repeat(2000),
+          isCurrent: () => true,
+        }),
+      },
+    );
+    const base = { id: "active", kind: "code", editor: active, scopeName: "text.plain" };
+    const bridge = notebooks.open({ filePath: notebookPath, cells: [base] });
+    await bridge.attached;
+    await bridge.updateCells([
+      base,
+      { id: "first", kind: "code", editor: first, scopeName: "text.plain" },
+      { id: "second", kind: "code", editor: second, scopeName: "text.plain" },
+    ]);
+    expect(theSession().documents.size).toBe(0);
+    expect(manager.documentAvailabilityForEditor(active).reason).toBe("transport-limit");
+    expect((await ofMethod("notebookDocument/didChange")).length).toBe(0);
+    expect((await ofMethod("notebookDocument/didClose")).length).toBe(1);
+  });
+
+  it("checks combined projected lengths before each cell text publication", async () => {
+    notebooks.dispose();
+    notebooks = new NotebookDocuments(manager, { maxUnits: 20000 });
+    manager.setNotebookDocuments(notebooks);
+    const first = buildCellEditor("small");
+    const second = buildCellEditor("small");
+    registerFakeAdapter(
+      { capabilities: { notebookDocumentSync: RUFF_SYNC } },
+      {
+        getDocumentProjection: (editor) => ({
+          text: "x".repeat(editor.getText() === "big" ? 2000 : 100),
+          isCurrent: () => true,
+        }),
+      },
+    );
+    const bridge = notebooks.open({
+      filePath: notebookPath,
+      cells: [
+        { id: "first", kind: "code", editor: first, scopeName: "text.plain" },
+        { id: "second", kind: "code", editor: second, scopeName: "text.plain" },
+      ],
+    });
+    await bridge.attached;
+    first.setText("big");
+    await until(async () => (await ofMethod("notebookDocument/didChange")).length === 1);
+    second.setText("big");
+    await until(() => theSession()?.documents.size === 0);
+    expect((await ofMethod("notebookDocument/didChange")).length).toBe(1);
+    expect(manager.documentAvailabilityForEditor(first).reason).toBe("transport-limit");
+    second.setText("small");
+    await until(() => theSession()?.documents.size === 2);
+  });
+
   it("forgets a failed initial session so a later notebook attach can start fresh", async () => {
     let attempts = 0;
     let failedSession;

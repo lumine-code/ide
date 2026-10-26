@@ -130,6 +130,24 @@ describe("session document ownership", () => {
     expect(messages("textDocument/didChange").length).toBe(1);
   });
 
+  it("retains a valid URI alias when a new owner's projected text exceeds its budget", async () => {
+    lumine.config.set("ide.maxDocumentSize", 1);
+    const bad = buildEditor();
+    spyOn(editor, "whenGrammarSettled").and.resolveTo(true);
+    spyOn(bad, "whenGrammarSettled").and.resolveTo(true);
+    session.adapter.getDocumentProjection = (item) => ({
+      text: item === bad ? "x".repeat(1024 * 1024 + 1) : item.getText(),
+      isCurrent: () => true,
+    });
+    await documents.openEditor(editor);
+    await documents.openEditor(bad);
+    for (let index = 0; index < 60; index++) await Promise.resolve();
+    expect(documents.items.size).toBe(1);
+    expect(documents.items.get(C.uriKey(uri)).editor).toBe(editor);
+    expect(messages("textDocument/didClose").length).toBe(0);
+    expect(documents.isCurrentDocument(documents.items.get(C.uriKey(uri)))).toBe(true);
+  });
+
   it("refuses an unattached None edit projection before asking an adapter about its source", async () => {
     session.adapter.needsDocumentTransform = jasmine
       .createSpy("needs transform")

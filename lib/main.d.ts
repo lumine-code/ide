@@ -605,6 +605,23 @@ export interface RenameFileOperationPayload {
   signal?: AbortSignal;
 }
 export interface LanguageServerService {
+  /** Metadata-only availability; limit and length count UTF-16 units, not file bytes. */
+  getDocumentAvailability(editor: TextEditor): Readonly<{
+    available: boolean;
+    reason: "closed" | "no-grammar" | "size-limit" | "transport-limit" | null;
+    length: number | null;
+    limit: number;
+  }>;
+  /** Invalidates document features when grammar or synchronization eligibility changes. */
+  onDidChangeDocumentAvailability(
+    callback: (event: {
+      editor: TextEditor;
+      available: boolean;
+      reason: "closed" | "no-grammar" | "size-limit" | "transport-limit" | null;
+      length: number | null;
+      limit: number;
+    }) => void,
+  ): Disposable;
   registerAdapter(adapter: LanguageServerAdapter): Disposable;
   /** Shared resolution helpers for work outside a startup attempt. */
   getServerResolver(): ServerResolver;

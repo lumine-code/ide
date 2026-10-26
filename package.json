@@ -48,6 +48,13 @@
     "autocomplete"
   ],
   "configSchema": {
+    "maxDocumentSize": {
+      "title": "Maximum Synchronized Document Size",
+      "description": "Maximum document size in Mi UTF-16 units sent to language servers, independently of the selected grammar. Larger documents remain editable; synchronization resumes after they shrink or this limit increases. A conservative JSON transport ceiling always applies.",
+      "type": "integer",
+      "minimum": 1,
+      "default": 32
+    },
     "preferredServers": {
       "title": "Preferred Servers",
       "description": "Ordered adapter IDs to prefer when several applicable servers declare the same exclusive group. Other servers continue to run together.",
