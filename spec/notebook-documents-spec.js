@@ -213,6 +213,24 @@ describe("NotebookDocuments against a fake server", () => {
     ).toBeTrue();
   });
 
+  it("exposes authoritative cell snapshots independently of the string transport budget", async () => {
+    const editor = buildCellEditor("seed");
+    let source = require("lumine").TextBuffer.createTextSnapshot("x".repeat(65536));
+    for (let index = 0; index < 14; index++)
+      source = source.replace(source.length, source.length, source);
+    editor.getBuffer().setTextInRange(editor.getBuffer().getRange(), source);
+    const text = spyOn(editor, "getText").and.throwError("Do not materialize a huge cell");
+    const bridge = notebooks.open({
+      filePath: notebookPath,
+      cells: [{ id: "large", kind: "code", editor, scopeName: "text.plain" }],
+    });
+    await bridge.attached;
+    const record = [...notebooks.records][0];
+    expect(record.cellSource(record.cells[0]).equals(source)).toBe(true);
+    expect(record.cellSource({ id: "stored", textSource: source })).toBe(source);
+    expect(text).not.toHaveBeenCalled();
+  });
+
   it("retires a pending notebook projection immediately when None is selected", async () => {
     let finish, signal;
     const editor = buildCellEditor("waiting = 1\n");

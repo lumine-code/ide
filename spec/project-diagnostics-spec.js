@@ -1,5 +1,5 @@
 const path = require("path");
-const { Emitter } = require("lumine");
+const { Emitter, TextBuffer } = require("lumine");
 const ProjectDiagnostics = require("../lib/project-diagnostics");
 const C = require("../lib/converters");
 
@@ -257,6 +257,135 @@ describe("manual project diagnostics", () => {
     await publish();
     expect(delegate.setAllMessages.calls.mostRecent().args[0]).toEqual([]);
     expect(coordinator.getMessages()).toEqual(findings);
+  });
+
+  it("tracks immutable giant cell sources without legacy strings or JSON signatures", () => {
+    let source = TextBuffer.createTextSnapshot("x".repeat(65536));
+    for (let i = 0; i < 14; i++) source = source.replace(source.length, source.length, source);
+    const cell = {
+      id: "large",
+      kind: "code",
+      textSource: source,
+      get text() {
+        throw new Error("Legacy cell text");
+      },
+    };
+    const record = notebook([cell]);
+    spyOn(record, "cellText").and.throwError("Full cell materialization");
+    const findings = [message(filePath, 1)];
+    coordinator.setAllMessages(findings);
+    cell.textSource = source.replace(0, 1, "x");
+    expect(coordinator.getMessages()).toEqual(findings);
+    cell.textSource = source.replace(0, 1, "y");
+    expect(coordinator.getMessages()).toEqual([]);
+    expect(record.cellText).not.toHaveBeenCalled();
+    expect(coordinator.notebookRecords.size).toBe(0);
+  });
+
+  it("invalidates a small saved cell after its mounted buffer grows beyond string limits", () => {
+    const cellBuffer = new TextBuffer("small");
+    let source = TextBuffer.createTextSnapshot("x".repeat(65536));
+    for (let i = 0; i < 14; i++) source = source.replace(source.length, source.length, source);
+    const cellEditor = {
+      getBuffer: () => cellBuffer,
+      getGrammar: () => grammar,
+      getText: jasmine.createSpy("getText").and.throwError("Whole mounted cell"),
+    };
+    const cells = [{ id: "mounted", kind: "code", editor: cellEditor, text: "obsolete" }];
+    const record = notebook(cells);
+    spyOn(record, "cellText").and.throwError("Legacy cell getter");
+    const saved = notebookSource([{ id: "mounted", kind: "code", text: "small" }]);
+    try {
+      coordinator.setAllMessages([message(filePath, 1)], undefined, new Map([[filePath, saved]]));
+      expect(coordinator.getMessages().length).toBe(1);
+      cellBuffer.setTextInRange(cellBuffer.getRange(), source);
+      expect(coordinator.getMessages()).toEqual([]);
+      expect(cellEditor.getText).not.toHaveBeenCalled();
+      expect(record.cellText).not.toHaveBeenCalled();
+      expect(coordinator.parsedNotebookSnapshots.size).toBe(0);
+    } finally {
+      cellBuffer.destroy();
+    }
+  });
+
+  it("parses each saved JSON once and compares array sources without joining them", () => {
+    const text = "a\r\n😀";
+    notebook([
+      { id: "a", kind: "code", textSource: TextBuffer.createTextSnapshot(text) },
+      { id: "empty", kind: "markup", text: "" },
+    ]);
+    const saved = JSON.stringify({
+      cells: [
+        { id: "a", cell_type: "code", source: ["a\r", "\n", "\ud83d", "\ude00"] },
+        { id: "empty", cell_type: "markdown", source: [] },
+      ],
+    });
+    const parsed = JSON.parse(saved);
+    parsed.cells[0].source.join = () => {
+      throw new Error("Never join complete saved cells");
+    };
+    const parse = JSON.parse;
+    let calls = 0;
+    spyOn(JSON, "parse").and.callFake((value, ...args) => {
+      if (value === saved) {
+        calls++;
+        return parsed;
+      }
+      return parse(value, ...args);
+    });
+    const findings = [message(filePath, 1)];
+    coordinator.setAllMessages(findings, undefined, new Map([[filePath, saved]]));
+    expect(coordinator.getMessages()).toEqual(findings);
+    expect(coordinator.getMessages()).toEqual(findings);
+    expect(calls).toBe(1);
+  });
+
+  it("keeps identity, kind, order and count in source-backed freshness checks", () => {
+    const source = TextBuffer.createTextSnapshot("same");
+    const original = [
+      { id: "a", kind: "code", textSource: source },
+      { id: "b", kind: "markup", textSource: source },
+    ];
+    const record = notebook(original);
+    for (const changed of [
+      [...original, { id: "c", kind: "code", textSource: source }],
+      original.toReversed(),
+      [{ ...original[0], id: "other" }, original[1]],
+      [{ ...original[0], kind: "markup" }, original[1]],
+    ]) {
+      record.cells = original;
+      coordinator.setAllMessages([message(filePath, 1)]);
+      record.cells = changed;
+      expect(coordinator.getMessages()).toEqual([]);
+    }
+  });
+
+  it("does not stringify changed opaque sources beyond their legacy comparison budget", () => {
+    const toString = jasmine.createSpy("toString").and.throwError("Opaque huge source");
+    const cell = {
+      id: "opaque",
+      kind: "code",
+      textSource: Object.freeze({ length: 1024 * 1024 * 1024, toString }),
+    };
+    notebook([cell]);
+    const findings = [message(filePath, 1)];
+    coordinator.setAllMessages(findings);
+    expect(coordinator.getMessages()).toEqual(findings);
+    cell.textSource = Object.freeze({ length: 1024 * 1024 * 1024, toString });
+    expect(coordinator.getMessages()).toEqual([]);
+    expect(toString).not.toHaveBeenCalled();
+  });
+
+  it("releases cached roots when a notebook record disappears", () => {
+    const record = notebook([
+      { id: "a", kind: "code", textSource: TextBuffer.createTextSnapshot("same") },
+    ]);
+    const findings = [message(filePath, 1)];
+    coordinator.setAllMessages(findings);
+    expect(coordinator.notebookRecords.has(record)).toBe(true);
+    manager.notebookDocuments.records.clear();
+    expect(coordinator.getMessages()).toEqual(findings);
+    expect(coordinator.notebookRecords.size).toBe(0);
   });
 
   it("leaves the caller's delegate alive and cancels queued refreshes on disposal", async () => {
