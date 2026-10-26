@@ -126,6 +126,61 @@ describe("SemanticTokensProvider", () => {
     );
   });
 
+  it("drops its document delta base when None closes the document", async () => {
+    const session = makeSession(() => ({ data: [0, 0, 5, 0, 0], resultId: "previous" }));
+    provider = new SemanticTokensProvider(makeManager(session));
+    await provider.semanticTokens(editor);
+    const grammar = editor.getGrammar();
+    editor.setGrammar(lumine.grammars.nullGrammar);
+    expect(provider.caches.has(editor)).toBeFalse();
+    editor.setGrammar(grammar);
+    await provider.semanticTokens(editor);
+    expect(session.requests.map(({ method }) => method)).toEqual([
+      "textDocument/semanticTokens/full",
+      "textDocument/semanticTokens/full",
+    ]);
+  });
+
+  it("keeps the resumed request current when a consumer observes grammar changes first", async () => {
+    const resumed = [];
+    const subscription = editor.onDidChangeGrammar(() => {
+      if (editor.getGrammar() !== lumine.grammars.nullGrammar)
+        resumed.push(provider.semanticTokens(editor));
+    });
+    try {
+      const session = makeSession(() => ({ data: [0, 0, 5, 0, 0], resultId: "result" }));
+      provider = new SemanticTokensProvider(makeManager(session));
+      await provider.semanticTokens(editor);
+      const grammar = editor.getGrammar();
+      editor.setGrammar(lumine.grammars.nullGrammar);
+      editor.setGrammar(grammar);
+      expect((await resumed[0])?.length).toBe(1);
+    } finally {
+      subscription.dispose();
+    }
+  });
+
+  it("rejects an old classification when restore completes before the old RPC", async () => {
+    const previous = deferred();
+    let first = true;
+    const session = makeSession(() => {
+      if (first) {
+        first = false;
+        return previous.promise;
+      }
+      return { data: [0, 0, 5, 0, 0], resultId: "fresh" };
+    });
+    provider = new SemanticTokensProvider(makeManager(session));
+    const pending = provider.semanticTokens(editor);
+    await flush();
+    const grammar = editor.getGrammar();
+    editor.setGrammar(lumine.grammars.nullGrammar);
+    editor.setGrammar(grammar);
+    expect((await provider.semanticTokens(editor)).length).toBe(1);
+    previous.resolve({ data: [0, 0, 5, 2, 0], resultId: "obsolete" });
+    expect(await pending).toBeNull();
+  });
+
   it("leaves a type the legend does not name unclassified", async () => {
     const session = makeSession((method) =>
       method === "textDocument/semanticTokens/full" ? { data: [0, 0, 5, 9, 0] } : null,

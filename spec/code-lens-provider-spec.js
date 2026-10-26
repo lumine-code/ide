@@ -122,6 +122,25 @@ describe("CodeLensProvider", () => {
     expect(executed.params).toEqual({ command: "test.command", arguments: [0] });
   });
 
+  it("retires cached lenses and their callbacks across None and the same grammar", async () => {
+    let failing = false;
+    const session = makeSession(() => {
+      if (failing) throw new Error("server reindexing");
+      return [lspLens(0, "old action")];
+    });
+    provider = new CodeLensProvider(makeManager(session));
+    const [previous] = await provider.codeLenses(editor);
+    const grammar = editor.getGrammar();
+    editor.setGrammar(lumine.grammars.nullGrammar);
+    expect(await previous.execute()).toBeNull();
+    expect(
+      session.requests.some(({ method }) => method === "workspace/executeCommand"),
+    ).toBeFalse();
+    editor.setGrammar(grammar);
+    failing = true;
+    expect(await provider.codeLenses(editor)).toBeNull();
+  });
+
   it("omits client-only commands while retaining advertised server actions", async () => {
     const session = makeSession(
       () => [
