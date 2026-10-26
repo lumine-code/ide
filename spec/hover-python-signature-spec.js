@@ -193,11 +193,22 @@ describe("Python signatures in hover documentation", () => {
       ),
     ).toEqual(["callback", "α", "β", "value", "name", "item"]);
     expect(signature.querySelectorAll(".syntax--function-annotation").length).toBe(3);
-    expect(
-      [...signature.querySelectorAll(".syntax--string.syntax--quoted")].map((span) =>
-        span.textContent.trimEnd(),
-      ),
-    ).toEqual(['"(..., ->)"', '"..."', '"(value: Broken) -> Fake"']);
+    // Token boundaries may split a quote from its contents. Assert the exact
+    // contiguous source covered by the string scope, independent of spans.
+    const leaves = document.createTreeWalker(signature, NodeFilter.SHOW_TEXT);
+    const strings = [];
+    let leaf;
+    let current = "";
+    while ((leaf = leaves.nextNode())) {
+      if (leaf.parentElement.closest(".syntax--string.syntax--quoted")) {
+        current += leaf.textContent;
+      } else if (current) {
+        strings.push(current.trimEnd());
+        current = "";
+      }
+    }
+    if (current) strings.push(current.trimEnd());
+    expect(strings).toEqual(['"(..., ->)"', '"..."', '"(value: Broken) -> Fake"']);
   });
 
   it("rejects malformed callable displays rather than assigning guessed scopes", async () => {
