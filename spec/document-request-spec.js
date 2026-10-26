@@ -54,13 +54,16 @@ describe("synchronized document requests", () => {
     synchronized();
     const response = await pending;
     expect(manager.activeSessionsForEditor).toHaveBeenCalledWith(editor, { adapterId: "selected" });
+    const signal = session.request.calls.mostRecent().args[2].signal;
+    expect(signal.aborted).toBeFalse();
+    expect(typeof signal.addEventListener).toBe("function");
     expect(session.request).toHaveBeenCalledWith(
       "workspace/executeCommand",
       {
         command: "expand",
         arguments: [{ uri: "untitled:current", version: 4 }],
       },
-      { signal: undefined, editor },
+      { signal, editor },
     );
     expect(response.document).toEqual({ uri: "untitled:current", version: 4, text: "current" });
     expect(response.isCurrent()).toBeTrue();
@@ -83,13 +86,87 @@ describe("synchronized document requests", () => {
     expect(session.request).not.toHaveBeenCalled();
   });
 
+  it("retires startup requests across None and the same restored grammar", async () => {
+    const pack = await lumine.packages.activatePackage("language-text");
+    await pack.resourceLoadPromise;
+    editor = lumine.workspace.buildTextEditor();
+    editor.setText("current");
+    document.editor = editor;
+    const grammar = editor.getGrammar();
+    let finishStartup;
+    manager.activeSessionsForEditor.and.returnValues(
+      new Promise((resolve) => (finishStartup = resolve)),
+      Promise.resolve([session]),
+    );
+    const previous = request().then(
+      (response) => ({ response }),
+      (error) => ({ error }),
+    );
+    editor.setGrammar(lumine.grammars.nullGrammar);
+    editor.setGrammar(grammar);
+    const resumed = await request();
+    expect(resumed.result).toEqual({ text: "expanded" });
+    finishStartup([session]);
+    const outcome = await previous;
+    expect(outcome.error?.name).toBe("AbortError");
+    expect(session.request.calls.count()).toBe(1);
+    editor.destroy();
+  });
+
+  it("cancels an uncooperative sync wait as soon as the editor selects None", async () => {
+    const pack = await lumine.packages.activatePackage("language-text");
+    await pack.resourceLoadPromise;
+    editor = lumine.workspace.buildTextEditor();
+    editor.setText("current");
+    document.editor = editor;
+    session.waitForDocumentSync.and.returnValue(new Promise(() => {}));
+    const previous = request().catch((error) => error);
+    for (let index = 0; index < 10; index++) await Promise.resolve();
+    expect(session.waitForDocumentSync).toHaveBeenCalled();
+    editor.setGrammar(lumine.grammars.nullGrammar);
+    expect((await previous).code).toBe("IDE_DOCUMENT_CHANGED");
+    expect(session.request).not.toHaveBeenCalled();
+    editor.destroy();
+  });
+
+  it("rejects a late server result after None and allows a fresh invocation", async () => {
+    const pack = await lumine.packages.activatePackage("language-text");
+    await pack.resourceLoadPromise;
+    editor = lumine.workspace.buildTextEditor();
+    editor.setText("current");
+    document.editor = editor;
+    const grammar = editor.getGrammar();
+    let finishPrevious;
+    session.request.and.returnValues(
+      new Promise((resolve) => (finishPrevious = resolve)),
+      Promise.resolve({ text: "fresh" }),
+    );
+    const previous = request().catch((error) => error);
+    for (let index = 0; index < 20; index++) await Promise.resolve();
+    expect(session.request.calls.count()).toBe(1);
+    const previousSignal = session.request.calls.first().args[2].signal;
+    editor.setGrammar(lumine.grammars.nullGrammar);
+    editor.setGrammar(grammar);
+    expect(previousSignal.aborted).toBeTrue();
+    expect((await request()).result).toEqual({ text: "fresh" });
+    finishPrevious({ text: "late" });
+    expect((await previous).code).toBe("IDE_DOCUMENT_CHANGED");
+    expect(session.request.calls.count()).toBe(2);
+    editor.destroy();
+  });
+
   it("finds a retained source owner through its canonical wire URI", async () => {
     document.editor = {};
     document.editors = new Map([[editor, {}]]);
     manager.uriForEditor = () => document.uri;
 
     expect((await request()).document.uri).toBe(document.uri);
-    expect(session.request.calls.mostRecent().args[2]).toEqual({ signal: undefined, editor });
+    const signal = session.request.calls.mostRecent().args[2].signal;
+    expect(signal.aborted).toBeFalse();
+    expect(session.request.calls.mostRecent().args[2]).toEqual({
+      signal,
+      editor,
+    });
   });
 
   it("rejects a source or path replacement while startup is pending", async () => {

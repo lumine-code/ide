@@ -104,6 +104,96 @@ describe("session document ownership", () => {
     expect(messages("textDocument/didOpen").length).toBe(1);
   });
 
+  it("does not read a suspended split view while retiring a shared buffer", async () => {
+    const split = lumine.workspace.buildTextEditor({ buffer: editor.getBuffer() });
+    editors.push(split);
+    const grammar = editor.getGrammar();
+    await documents.openEditor(editor);
+    await documents.openEditor(split);
+    await documents.openEditor(editor);
+    const firstRead = spyOn(editor, "getText").and.callThrough();
+    const splitRead = spyOn(split, "getText").and.callThrough();
+    session.connection.notify.calls.reset();
+    editor.setGrammar(lumine.grammars.nullGrammar);
+    expect(split.getGrammar()).toBe(lumine.grammars.nullGrammar);
+    expect(firstRead).not.toHaveBeenCalled();
+    expect(splitRead).not.toHaveBeenCalled();
+    expect(documents.items.size).toBe(0);
+    expect(messages("textDocument/didClose").length).toBe(1);
+    editor.setGrammar(grammar);
+    await documents.openEditor(editor);
+    await documents.openEditor(split);
+    expect(messages("textDocument/didOpen").length).toBe(1);
+    session.connection.notify.calls.reset();
+    editor.insertText("changed");
+    for (let index = 0; index < 20; index++) await Promise.resolve();
+    expect(messages("textDocument/didChange").length).toBe(1);
+  });
+
+  it("refuses an unattached None edit projection before asking an adapter about its source", async () => {
+    session.adapter.needsDocumentTransform = jasmine
+      .createSpy("needs transform")
+      .and.callFake(() => {
+        editor.getText();
+        return true;
+      });
+    session.adapter.getDocumentProjection = jasmine.createSpy("projection");
+    editor.setGrammar(lumine.grammars.nullGrammar);
+    const read = spyOn(editor, "getText").and.callThrough();
+    await expectAsync(documents.projectionForEdits(editor, uri)).toBeRejected();
+    expect(session.adapter.needsDocumentTransform).not.toHaveBeenCalled();
+    expect(session.adapter.getDocumentProjection).not.toHaveBeenCalled();
+    expect(read).not.toHaveBeenCalled();
+  });
+
+  it("cancels an unattached edit projection across None and resumes independently", async () => {
+    const grammar = editor.getGrammar();
+    const previousProjection = deferred();
+    spyOn(editor, "whenGrammarSettled").and.resolveTo(true);
+    const fresh = { text: "fresh", isCurrent: () => true };
+    session.adapter.getDocumentProjection = jasmine
+      .createSpy("projection")
+      .and.returnValues(previousProjection.promise, fresh);
+    const previous = documents.projectionForEdits(editor, uri).catch((error) => error);
+    for (let index = 0; index < 10; index++) await Promise.resolve();
+    expect(session.adapter.getDocumentProjection.calls.count()).toBe(1);
+    editor.setGrammar(lumine.grammars.nullGrammar);
+    editor.setGrammar(grammar);
+    expect(await documents.projectionForEdits(editor, uri)).toBe(fresh);
+    previousProjection.resolve({ text: "obsolete", isCurrent: () => true });
+    expect((await previous).code).toBe("PROJECTION_STALE");
+    expect(session.adapter.getDocumentProjection.calls.count()).toBe(2);
+    expect(session.connection.notify).not.toHaveBeenCalled();
+  });
+
+  it("discards an old projection after None and an immediate grammar restore", async () => {
+    const grammar = editor.getGrammar();
+    const previousProjection = deferred();
+    spyOn(editor, "whenGrammarSettled").and.resolveTo(true);
+    session.adapter.getDocumentProjection = jasmine
+      .createSpy("projection")
+      .and.returnValues(previousProjection.promise, {
+        text: "fresh projection",
+        isCurrent: () => true,
+      });
+    const previous = documents.openEditor(editor).then(
+      () => ({}),
+      (error) => ({ error }),
+    );
+    for (let index = 0; index < 10; index++) await Promise.resolve();
+    expect(session.adapter.getDocumentProjection.calls.count()).toBe(1);
+    editor.setGrammar(lumine.grammars.nullGrammar);
+    editor.setGrammar(grammar);
+    await documents.openEditor(editor);
+    expect((await previous).error?.name).toBe("AbortError");
+    const current = documents.items.get(C.uriKey(uri));
+    expect(current.projection.text).toBe("fresh projection");
+    previousProjection.resolve({ text: "old projection", isCurrent: () => true });
+    for (let index = 0; index < 10; index++) await Promise.resolve();
+    expect(documents.items.get(C.uriKey(uri))).toBe(current);
+    expect(messages("textDocument/didOpen").length).toBe(1);
+  });
+
   it("reopens a URI left behind by an obsolete editor", async () => {
     await documents.openEditor(editor);
     const obsolete = documents.items.get(C.uriKey(uri));
