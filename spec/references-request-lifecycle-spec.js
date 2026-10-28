@@ -1,6 +1,8 @@
 const { Emitter, Point } = require("lumine");
 const ReferencesProvider = require("../lib/references-provider");
 const Projections = require("../lib/document-projections");
+const RpcConnection = require("../lib/rpc-connection");
+const { PassThrough } = require("stream");
 
 describe("References request lifecycle", () => {
   let emitter, provider, editor;
@@ -143,13 +145,95 @@ describe("References request lifecycle", () => {
       }),
     ]);
     expect(await provider.findReferences(editor, new Point(0, 2))).toBeNull();
-    for (const error of [new Error("Language server projection is stale"), "server failed", null]) {
+    for (const error of [
+      new Error("Language server projection is stale"),
+      Object.assign(new Error("Pending response rejected since connection got disposed"), {
+        code: -32097,
+      }),
+      "server failed",
+      null,
+    ]) {
       provider = createProvider(async () => [
         session(async () => {
           throw error;
         }),
       ]);
       await expectAsync(provider.findReferences(editor, new Point(0, 2))).toBeRejectedWith(error);
+    }
+  });
+
+  for (const state of ["stopping", "stopped", "failed"]) {
+    it(`abandons a ${state} server before JSON-RPC disposal rejects its pending response`, async () => {
+      const reader = new PassThrough();
+      const writer = new PassThrough();
+      writer.resume();
+      const connection = new RpcConnection(reader, writer);
+      const lifecycle = new Emitter();
+      const started = deferred();
+      let signal;
+      const server = {
+        state: "running",
+        supports: () => true,
+        onDidChangeState: (callback) => lifecycle.on("state", callback),
+        request(method, params, options) {
+          signal = options.signal;
+          const pending = connection.request(method, params, options);
+          started.resolve();
+          return pending;
+        },
+      };
+      connection.listen();
+      provider = createProvider(async () => [server]);
+      try {
+        const pending = provider.findReferences(editor, new Point(0, 2));
+        await started.promise;
+        if (state === "failed") connection.dispose();
+        server.state = state;
+        lifecycle.emit("state", { session: server, state });
+        connection.dispose();
+        expect(await pending).toBeNull();
+        expect(signal.aborted).toBe(true);
+        expect(provider.abortController).toBeNull();
+        expect(provider.requestSubscriptions).toBeNull();
+      } finally {
+        connection.dispose();
+        lifecycle.dispose();
+      }
+    });
+  }
+
+  it("does not send references to a session retired during readiness", async () => {
+    const request = jasmine.createSpy("request").and.resolveTo([location]);
+    provider = createProvider(async () => [{ ...session(request), state: "stopping" }]);
+    expect(await provider.findReferences(editor, new Point(0, 2))).toBeNull();
+    expect(request).not.toHaveBeenCalled();
+  });
+
+  it("releases server listeners after successful lookups and uses a replacement session", async () => {
+    const lifecycle = new Emitter();
+    const subscriptions = [];
+    const server = {
+      ...session(async () => [location]),
+      state: "running",
+      onDidChangeState(callback) {
+        const subscription = lifecycle.on("state", callback);
+        spyOn(subscription, "dispose").and.callThrough();
+        subscriptions.push(subscription);
+        return subscription;
+      },
+    };
+    provider = createProvider(async () => [server]);
+    try {
+      expect((await provider.findReferences(editor, new Point(0, 2))).references.length).toBe(1);
+      expect(subscriptions.length).toBe(1);
+      expect(subscriptions[0].dispose).toHaveBeenCalled();
+      server.state = "stopped";
+      lifecycle.emit("state", { session: server, state: "stopped" });
+      const replacement = { ...session(async () => [location]), state: "running" };
+      provider.manager.activeSessionsForEditor = async () => [replacement];
+      expect((await provider.findReferences(editor, new Point(0, 2))).references.length).toBe(1);
+    } finally {
+      lifecycle.dispose();
     }
   });
 });
