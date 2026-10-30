@@ -1,18 +1,18 @@
 {
   "title": "ide",
   "description": "Inspect the active TypeScript language-server session.",
-  "recordedOn": "2026-10-18",
-  "sourceRevision": "b305df1d2af026cba795700e29e284b90959a968",
-  "themeSourceRevision": "45b22049e87256e9327beb0b350e67fe81d7fc81",
+  "recordedOn": "2026-10-30",
+  "sourceRevision": "ecc4be18fd24f23c42d61cbb400a95e183fa8817",
+  "themeSourceRevision": "130cea8d32452c7348a9f6f378cfe7d73e70b0fe",
   "mode": "normal",
   "fontSettings": "default",
   "scenario": "demo.js",
-  "recipeHash": "8e081e7a4000389b41428f9d6c18f978dc45c98a36f35bc7e15d67f201d49ec3",
+  "recipeHash": "71fc1feef9c00d4bc0be6b85bf47d11635a28fd8f36d9fb3d678f20a4978f076",
   "environment": {
     "platform": "win32",
     "arch": "x64",
-    "electron": "44.9.0",
-    "chrome": "152.0.7977.167",
+    "electron": "45.0.0",
+    "chrome": "156.0.8078.48",
     "devicePixelRatio": 1,
     "locale": "en-GB",
     "fontFamily": "Fira Code, Menlo, DejaVu Sans Mono, Consolas, monospace",
@@ -24,57 +24,312 @@
   "privacy": { "version": 1, "location": "neutral", "textChecked": true },
   "sources": {
     "editor": {
-      "revision": "10950c83cb6d964aadbcf4036af67c6484c1341d",
+      "revision": "760329498d85e1294191a073d8a34a1706f4d14b",
       "dirty": false,
       "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
     },
     "package": {
-      "revision": "b305df1d2af026cba795700e29e284b90959a968",
+      "revision": "ecc4be18fd24f23c42d61cbb400a95e183fa8817",
       "dirty": false,
       "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
     },
     "ide": {
-      "revision": "b305df1d2af026cba795700e29e284b90959a968",
+      "revision": "ecc4be18fd24f23c42d61cbb400a95e183fa8817",
       "dirty": false,
       "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
     },
-    "documentation-view": {
-      "revision": "b3cd21aa39d0385c4c045d0ea7f7cea38ed3bd4d",
+    "about": {
+      "revision": "f02e12094c7f7f7503be7c6b124f544c79263a9b",
       "dirty": false,
       "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
     },
-    "hover": {
-      "revision": "ebffd6e9b8580bff5337e08dc0279f24ea9b7bd9",
+    "background-tips": {
+      "revision": "5b826c4678154fefd7c0a5f673d7523e457af0b7",
       "dirty": false,
       "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
     },
-    "ide-typescript": {
-      "revision": "ff92384775b31c6ca6ccaa1d73d18a15229cac99",
+    "breadcrumbs": {
+      "revision": "ca95e0c1f366a7dd70616f436c17c9481f1bd31f",
       "dirty": false,
       "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
     },
-    "language-typescript": {
-      "revision": "e067dc6e5dd0f63223c9792a87e63f7a86153472",
+    "command-palette": {
+      "revision": "e4092eebd64f71b934ad48a9bbe543e6f6adf884",
       "dirty": false,
       "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
     },
-    "linter": {
-      "revision": "5030b5a3981cf9f5f04bdbc4e0d2d3fa7dbb2e1f",
+    "deprecation-cop": {
+      "revision": "8b91d7e5e872a71f7509992b60c1a92701d13d51",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "dev-live-reload": {
+      "revision": "02d1ec178f6a3ddcbe84ec6a4841e40b0359e849",
       "dirty": false,
       "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
     },
     "diagnostics": {
-      "revision": "49eb7742b992eb0a3aa89be840740309d324b0ad",
+      "revision": "0203e6dc2a801e45777c440b152aff6335882692",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "documentation-view": {
+      "revision": "e87a04ef9219ff9c1c949d0e110c8cd4a8e9a23b",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "encoding-selector": {
+      "revision": "cd3aa038a7e3a0c463a9190f71a4abc1beb539b3",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "git-diff": {
+      "revision": "0bf61b6661ba27e0f90ed1f5dd2094e35249bfce",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "go-to-line": {
+      "revision": "7d0a125d9630c3c7a12fbb20ec0979d973fc7c4a",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "grammar-selector": {
+      "revision": "4f7ba124a7b55d55d17d479cae2d752d1cfe9d78",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "hover": {
+      "revision": "dd4def92ce1682d1be07c3fc597116f540baf980",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "ide-typescript": {
+      "revision": "7a95a2b41c49916dcf5b0a4d3fd23b71cf68f282",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "incompatible-packages": {
+      "revision": "b68b8f71c4cd89ab3a569c66cf388731bc3631a8",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "keybinding-resolver": {
+      "revision": "cd43e9ca86f8d62f2db8f711911a42c97ada65c1",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "language-c": {
+      "revision": "2d09ea283c5cb1cfd9fa04f23d4c0b1205b091ee",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "language-css": {
+      "revision": "6b7b89e632119fc602f0757081c4f078d06328d0",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "language-csv": {
+      "revision": "7abdc6f06aeab61da125ffac2d3880acd864296f",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "language-diff": {
+      "revision": "7c413668916cb14cb46e91fe465c2457218bbcc5",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "language-gfm": {
+      "revision": "e2eca2b15d854161c670e5b8815ad48e636957b7",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "language-git": {
+      "revision": "3d3a639abf06fcd9574a75057ce109e63210ef8b",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "language-html": {
+      "revision": "a7e620a517668d8e46a39fbced344bbb304e12a7",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "language-hyperlink": {
+      "revision": "03ec30fd38ee531aa41a90130d8eece322ba0963",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "language-ipython": {
+      "revision": "aa582a52b51fa32240d36412abcca60fd0629583",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "language-javascript": {
+      "revision": "bf635d04bbf9cf42239552df5455644c59b64b06",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "language-json": {
+      "revision": "e5e1da96992248d41fad70d2667da4e57aa6fa9d",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "language-log": {
+      "revision": "326ef9201581d76efba5d05a160c6ecc654e294d",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "language-powershell": {
+      "revision": "6ed31a595716b3fe64fad9b31caedb77a99ce20e",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "language-python": {
+      "revision": "413b30e96e3bb63714958c3e3edeca338b0551aa",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "language-regex": {
+      "revision": "3b69da21fc49671442998bc95a0050672694c9d7",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "language-shellscript": {
+      "revision": "d640fa9c50340b1ce2d7d67b75fd0c1a6e59cc2e",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "language-source": {
+      "revision": "7fb4dd62a41aaec6a5122c6e51339e60c6b2b032",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "language-sql": {
+      "revision": "e54209763701ec8cbc6f4eb508de9069d743af0e",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "language-text": {
+      "revision": "d64e4a2f0dd6f177148513f927fddec588d37669",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "language-todo": {
+      "revision": "1dbc7d8be27b0b273c7aa46b73d6d463757c7c31",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "language-toml": {
+      "revision": "6e29e4ac7ec35301e161765aa2d7cba844fa3f79",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "language-typescript": {
+      "revision": "1270c17404d5f6fd43a86ad760c2102e0dff6226",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "language-xml": {
+      "revision": "0dc470ea089dc0ccc0e844fdae289cf2dee32b09",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "language-yaml": {
+      "revision": "952460e4fe892d8361c9b236d4bf1be27105a5fa",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "launcher": {
+      "revision": "052dc2786b548598028164567929a7818995fa74",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "line-ending": {
+      "revision": "b18de17984092836aa30930fc760a6d35f06785d",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "linter": {
+      "revision": "94dab1ff4036df93ee3bb7199d3de190e41c3acc",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "lumine-updater": {
+      "revision": "8af3ccec532efe64f064c0a38edb4c7f3a5c6b75",
       "dirty": false,
       "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
     },
     "marker": {
-      "revision": "56b7b100f9b8b1e532645399f14fe662795d0861",
+      "revision": "7f788e69e72ce8c3eefd8b3ef251e43c18a61018",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "metadata": {
+      "revision": "709dcaa0f28995f6d14ae9a3c09fc8147093ac50",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "notifications": {
+      "revision": "b3f6288191f15153e2c53b33152abe45f5b657bc",
       "dirty": false,
       "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
     },
     "one-theme": {
-      "revision": "45b22049e87256e9327beb0b350e67fe81d7fc81",
+      "revision": "130cea8d32452c7348a9f6f378cfe7d73e70b0fe",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "search-panel": {
+      "revision": "b8766bf32d8b171ca903b053473e3eede8d5c4e3",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "settings-view": {
+      "revision": "89d1f6e16befae710f2467c011299edc5b259092",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "snippets": {
+      "revision": "04a034092a1a94a5fa633ea27deb6d6f2a60a42f",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "status-bar": {
+      "revision": "b72fc1d7c451a76052102e3182c1a467ebc0cdc1",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "styleguide": {
+      "revision": "68fdb9d0137acc4250a1e3f012d41652ae01c2ad",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "tabs": {
+      "revision": "8877a6c31eab7c6406aad7509372b7a16f4508bf",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "timecop": {
+      "revision": "91a82e0e7c0994768be61ccb109ada274332976e",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "title-bar": {
+      "revision": "ff2b867c23dce3ebc6b7229af2706bfa44cfe822",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "tree-view": {
+      "revision": "dbfcbfc0eeff05d18253e43b6610307facd32b04",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "whitespace": {
+      "revision": "52e0398553e630ef0bb8b6a4d57b71ce0aa418ad",
+      "dirty": false,
+      "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    "window-title": {
+      "revision": "55c79de0ce72a58afbc7484f32f4d685e902f22d",
       "dirty": false,
       "workingTreeHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
     }
@@ -91,7 +346,7 @@
       "label": "Inspect the active TypeScript language-server session.",
       "width": 1150,
       "height": 600,
-      "sha256": "5c61a38de5a1e95d1384761ce2c1c291f7adfe7b6ba2e13ca3ad8e62ad7b2c50"
+      "sha256": "ce8a801a094d9f595a11fb3e8a8382d9b24c70af326539dbefafb183eec782df"
     }
   ]
 }
