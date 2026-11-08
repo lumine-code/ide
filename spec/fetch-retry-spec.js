@@ -141,6 +141,28 @@ describe("Managed server bounded GET retries", () => {
     ).toBeRejected();
     expect(calls).toBe(3);
   });
+  it("recognizes Chromium's exact transport error without retrying arbitrary TypeErrors", async () => {
+    for (const [message, expectedCalls] of [
+      ["Failed to fetch", 3],
+      ["Cannot read properties of undefined", 1],
+    ]) {
+      const error = require("node:vm").runInNewContext(`new TypeError(${JSON.stringify(message)})`);
+      let calls = 0;
+      await expectAsync(
+        fetchWithRetry(
+          async () => {
+            calls++;
+            throw error;
+          },
+          "https://server",
+          {},
+          undefined,
+          { delay: async () => {} },
+        ),
+      ).toBeRejected();
+      expect(calls).toBe(expectedCalls);
+    }
+  });
   it("cancels retry backoff and never starts another request", async () => {
     const controller = new AbortController();
     let calls = 0;
