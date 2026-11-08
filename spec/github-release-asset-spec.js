@@ -11,6 +11,35 @@ describe("Exact GitHub release asset transfer", () => {
     digest: `sha256:${crypto.createHash("sha256").update(bytes).digest("hex")}`,
   };
   const token = "fixture-token-not-a-credential";
+  const controlledTiming = () => {
+    let now = 0;
+    let nextTimer = 0;
+    const pending = new Map();
+    const delays = [];
+    return {
+      delays,
+      now: () => now,
+      setTimeout(callback, delay) {
+        const id = ++nextTimer;
+        delays.push(delay);
+        pending.set(id, { callback, deadline: now + delay });
+        return id;
+      },
+      clearTimeout(id) {
+        pending.delete(id);
+      },
+      advance(elapsed) {
+        now += elapsed;
+        for (const [id, timer] of pending) {
+          if (timer.deadline <= now) {
+            pending.delete(id);
+            timer.callback();
+          }
+        }
+      },
+      pendingTimers: () => pending.size,
+    };
+  };
   let server;
   beforeEach(() => jasmine.useRealClock());
   afterEach(async () => {
@@ -111,12 +140,22 @@ describe("Exact GitHub release asset transfer", () => {
       expect(calls.length).toBe(1);
     });
   it("limits response headers while permitting an active body past that deadline", async () => {
-    const { request } = await fixture((_req, res) => {
+    const timing = controlledTiming();
+    let releaseBody;
+    const transport = await fixture((_req, res) => {
       res.writeHead(200);
       res.flushHeaders();
-      setTimeout(() => res.end(bytes), 75);
+      releaseBody = () => res.end(bytes);
     });
-    expect(await download(asset, { request, headerTimeoutMs: 50 })).toEqual(bytes);
+    const request = (url, options, callback) =>
+      transport.request(url, options, (reply) => {
+        callback(reply);
+        expect(timing.pendingTimers()).toBe(0);
+        timing.advance(75);
+        releaseBody();
+      });
+    expect(await download(asset, { request, headerTimeoutMs: 50, timing })).toEqual(bytes);
+    expect(timing.now()).toBe(75);
   });
   it("closes an unanswered request at the header deadline", async () => {
     const { request, calls } = await fixture(() => {});
@@ -126,18 +165,27 @@ describe("Exact GitHub release asset transfer", () => {
     expect(calls.length).toBe(1);
   });
   it("shares one header budget across the API and storage redirect", async () => {
-    const { request, calls } = await fixture((req, res) => {
-      setTimeout(() => {
-        if (req.url === "/api") {
-          res.writeHead(302, { Location: "https://release-assets.githubusercontent.com/archive" });
-          res.end();
-        } else res.end(bytes);
-      }, 70);
+    const timing = controlledTiming();
+    const transport = await fixture((req, res) => {
+      if (req.url === "/api") {
+        res.writeHead(302, { Location: "https://release-assets.githubusercontent.com/archive" });
+        res.end();
+      } else {
+        timing.advance(70);
+        res.end(bytes);
+      }
     });
-    await expectAsync(download(asset, { request, headerTimeoutMs: 100 })).toBeRejectedWithError(
-      /release asset headers/,
-    );
-    expect(calls.length).toBe(2);
+    const request = (url, options, callback) =>
+      transport.request(url, options, (reply) => {
+        if (new URL(url).hostname === "api.github.com") timing.advance(70);
+        callback(reply);
+      });
+    await expectAsync(
+      download(asset, { request, headerTimeoutMs: 100, timing }),
+    ).toBeRejectedWithError(/release asset headers/);
+    expect(transport.calls.length).toBe(2);
+    expect(timing.delays).toEqual([100, 30]);
+    expect(timing.now()).toBe(140);
   });
   it("honors caller cancellation both before requests and during a live body", async () => {
     const controller = new AbortController();
