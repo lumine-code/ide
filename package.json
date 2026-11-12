@@ -241,7 +241,7 @@
   "dependencies": {
     "picomatch": "^4.0.7",
     "semver": "^7.8.6",
-    "tar": "^7.5.22",
+    "tar": "^7.5.23",
     "vscode-jsonrpc": "^10.0.0",
     "xz-decompress": "^0.2.3",
     "yauzl": "^3.4.0"
@@ -252,15 +252,15 @@
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-n": "^18.5.0",
     "globals": "^17.14.0",
-    "prettier": "^3.9.10",
+    "prettier": "^3.10.0",
     "yazl": "^3.3.1"
   },
   "overrides": {
     "eslint@^10.14.0": {
-      "minimatch": "11.0.5"
+      "minimatch": "11.0.8"
     },
     "@eslint/config-array@0.23.5": {
-      "minimatch": "11.0.5"
+      "minimatch": "11.0.8"
     }
   }
 }
