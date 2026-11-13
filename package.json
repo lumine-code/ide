@@ -252,7 +252,7 @@
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-n": "^18.5.0",
     "globals": "^17.14.0",
-    "prettier": "^3.10.0",
+    "prettier": "^3.10.1",
     "yazl": "^3.3.1"
   },
   "overrides": {
