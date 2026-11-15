@@ -248,7 +248,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "eslint": "^10.14.0",
+    "eslint": "^10.15.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-n": "^18.5.0",
     "globals": "^17.14.0",
@@ -256,7 +256,7 @@
     "yazl": "^3.3.1"
   },
   "overrides": {
-    "eslint@^10.14.0": {
+    "eslint@^10.15.0": {
       "minimatch": "11.0.8"
     },
     "@eslint/config-array@0.23.5": {
