@@ -386,7 +386,7 @@ describe("AST document projections", () => {
     ).toBeRejectedWithError(/projection is unavailable/);
     expect(request).not.toHaveBeenCalled();
   });
-  it("sends a new wire version when a syntax generation changes projected text without a source edit", async () => {
+  it("requests symbols after synchronizing changed projection text without a source edit", async () => {
     await start();
     await session.openEditor(editor);
     const document = session.documents.get(C.uriKey(C.pathToUri(editor.getPath())));
@@ -394,13 +394,49 @@ describe("AST document projections", () => {
     document.projection = { ...current, isCurrent: () => false };
     const replacement = { ...current, text: current.text.replace("value", "other") };
     spyOn(session.adapter, "getDocumentProjection").and.resolveTo(replacement);
-    await session.documentSync.waitForDocumentSync(document);
-    const changes = (await messages()).filter((item) => item.method === "textDocument/didChange");
+    await session.request("textDocument/documentSymbol", {
+      textDocument: { uri: document.uri },
+    });
+    const traffic = await messages();
+    const changes = traffic.filter((item) => item.method === "textDocument/didChange");
     expect(changes.length).toBe(1);
     expect(changes[0].params.textDocument.version).toBe(2);
     expect(changes[0].params.contentChanges).toEqual([{ text: replacement.text }]);
     expect(document.wireProjection).toBe(replacement);
     expect(editor.getText()).toBe(text);
+    expect(traffic.indexOf(changes[0])).toBeLessThan(
+      traffic.findIndex((item) => item.method === "textDocument/documentSymbol"),
+    );
+  });
+  it("rejects source edits during the initial projection synchronization before RPC", async () => {
+    await start();
+    await session.openEditor(editor);
+    const document = session.documents.get(C.uriKey(C.pathToUri(editor.getPath())));
+    document.projection = { ...document.projection, isCurrent: () => false };
+    let entered, release;
+    const started = new Promise((resolve) => (entered = resolve));
+    const waiting = new Promise((resolve) => (release = resolve));
+    spyOn(session.adapter, "getDocumentProjection").and.callFake(async (item, options) => {
+      entered();
+      await waiting;
+      return source.project(item, options);
+    });
+    const request = spyOn(session.connection, "request").and.resolveTo([]);
+    const pending = session.request("textDocument/references", params(1, 2)).then(
+      () => null,
+      (error) => error,
+    );
+    await started;
+    editor.setTextInBufferRange(
+      [
+        [1, 0],
+        [1, 9],
+      ],
+      "other_one",
+    );
+    release();
+    expect((await pending)?.code).toBe("PROJECTION_STALE");
+    expect(request).not.toHaveBeenCalled();
   });
   it("tags an edited source after RPC rather than mapping an old response through new coordinates", async () => {
     await start();

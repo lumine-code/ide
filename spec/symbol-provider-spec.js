@@ -3,6 +3,7 @@ const SymbolProvider = require("../lib/symbol-provider");
 const LanguageServerManager = require("../lib/language-server-manager");
 const ServerSession = require("../lib/server-session");
 const C = require("../lib/converters");
+const { StaleProjectionError } = require("../lib/document-projections");
 const { publishSession } = require("./helpers/session-fixtures");
 
 const root = path.resolve(__dirname, "workspace");
@@ -216,6 +217,29 @@ describe("symbol services", () => {
     expect(await provider.getDefinitions(editor)).toBeNull();
     expect(session.request).not.toHaveBeenCalled();
   });
+
+  for (const kind of ["document symbols", "definitions"]) {
+    it(`abandons stale ${kind} without hiding language-server failures`, async () => {
+      const session = addSession("js", [], {
+        capabilities: { documentSymbolProvider: true, definitionProvider: true },
+      });
+      const editor = {
+        getGrammar: () => ({ scopeName: "source.js" }),
+        getPath: () => path.join(root, "source.js"),
+        getLastCursor: () => ({ getBufferPosition: () => ({ row: 0, column: 0 }) }),
+      };
+      spyOn(manager, "activeSessionsForEditor").and.resolveTo([session]);
+      const retrieve = () =>
+        kind === "document symbols"
+          ? provider.getDocumentSymbols(editor, { sourceId: "ide:js" })
+          : provider.getDefinitions(editor);
+      session.request.and.rejectWith(new StaleProjectionError());
+      expect(await retrieve()).toBeNull();
+      const failure = new Error("Language server transport failed");
+      session.request.and.rejectWith(failure);
+      await expectAsync(retrieve()).toBeRejectedWith(failure);
+    });
+  }
 
   it("invalidates workspace results when project roots or normal server availability change", async () => {
     const callback = jasmine.createSpy("invalidate");
