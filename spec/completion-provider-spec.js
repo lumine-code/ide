@@ -738,8 +738,9 @@ describe("CompletionProvider resolve and commands", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     const warning = lumine.notifications
       .getNotifications()
-      .find((n) => n.getMessage().includes("server.doThing"));
+      .find((n) => n.getMessage() === "Language server command failed");
     expect(warning).toBeDefined();
+    expect(warning.getDetail()).toBe("Command: server.doThing\n\nno such command");
   });
 });
 

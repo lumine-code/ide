@@ -2763,51 +2763,35 @@ describe("LanguageServerManager server messages", () => {
   });
   afterEach(async () => manager.deactivate());
 
-  it("names the server a message came from", () => {
+  it("keeps the server and its message in literal details", () => {
     manager.showMessage(2, "Configuration file reloaded.", session);
     const [message, options] = lumine.notifications.addWarning.calls.mostRecent().args;
-    expect(message).toBe("Test Language Server: Configuration file reloaded.");
-    // One line and nothing under it: a headline is the whole notification.
-    expect(options).toBeUndefined();
+    expect(message).toBe("Language server warning");
+    expect(options).toEqual({
+      detail: "Server: Test Language Server\n\nConfiguration file reloaded.",
+      dismissable: true,
+    });
   });
 
-  it("still names a server it has no session for", () => {
+  it("still identifies a server it has no session for", () => {
     manager.showMessage(1, "Something failed.", undefined);
-    const [message] = lumine.notifications.addError.calls.mostRecent().args;
-    expect(message).toBe("Language server: Something failed.");
+    const [message, options] = lumine.notifications.addError.calls.mostRecent().args;
+    expect(message).toBe("Language server error");
+    expect(options.detail).toBe("Server: Language server\n\nSomething failed.");
   });
 
-  it("describes a message that runs past its first line", () => {
-    manager.showMessage(
-      1,
-      [
-        "Enumeration of workspace source files is taking longer than 10 seconds.",
-        "This may be because:",
-        "* You have opened your home directory as a workspace",
-        "* Your workspace contains a very large number of files",
-        "To reduce this time, open a workspace directory with fewer files.",
-      ].join("\n"),
-      session,
-    );
+  it("preserves plain server output without treating paths or lists as Markdown", () => {
+    const output = [
+      String.raw`Unable to read C:\data\[project]\_source_\model.py`,
+      "* A server-supplied bullet",
+      "<b>literal diagnostic</b>",
+      "Closing sentence.",
+    ].join("\r\n");
+    manager.showMessage(1, output, session);
     const [message, options] = lumine.notifications.addError.calls.mostRecent().args;
-    expect(message).toBe(
-      "Test Language Server: Enumeration of workspace source files is taking longer than 10 seconds.",
-    );
-    // The closing sentence is a paragraph of its own. Without the blank line
-    // markdown reads it as a continuation of the bullet above it, and it
-    // renders inside that bullet.
-    expect(options.description).toBe(
-      [
-        "This may be because:",
-        "* You have opened your home directory as a workspace",
-        "* Your workspace contains a very large number of files",
-        "",
-        "To reduce this time, open a workspace directory with fewer files.",
-      ].join("\n"),
-    );
-    // Long enough to scroll, so long enough to outlast the five seconds an
-    // undismissable notification gets.
-    expect(options.dismissable).toBe(true);
+    expect(message).toBe("Language server error");
+    expect(options.detail).toBe(`Server: Test Language Server\n\n${output}`);
+    expect(options.description).toBeUndefined();
   });
 });
 
