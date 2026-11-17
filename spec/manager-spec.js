@@ -184,6 +184,28 @@ describe("LanguageServerManager adapters", () => {
     expect(manager.adaptersForEditor(editor)).toEqual([matching]);
     expect(manager.adaptersForEditor(untitled)).toEqual([wrongScheme]);
   });
+
+  it("preserves extended globs for local adapter selectors", () => {
+    const selector = [{ language: "powershell", scheme: "file", pattern: "**/!(*.ps1xml)" }];
+    const adapter = {
+      id: "power-shell",
+      displayName: "PowerShell",
+      grammarScopes: ["source.powershell"],
+      languageId: "powershell",
+      documentSelector: selector,
+      resolveServer: async () => null,
+    };
+    manager.registerAdapter(adapter);
+    const editorFor = (name) => ({
+      getGrammar: () => ({ scopeName: "source.powershell", name: "PowerShell" }),
+      getPath: () => path.join("project", name),
+    });
+
+    expect(manager.adaptersForEditor(editorFor("script.ps1"))).toEqual([adapter]);
+    expect(manager.adaptersForEditor(editorFor("format.ps1xml"))).toEqual([]);
+    expect(manager.selectorMatches(selector, { adapter }, editorFor("script.ps1"))).toBe(false);
+  });
+
   it("restarts instead of pushing settings when a changed key belongs to both lists", async () => {
     const adapter = {
       id: "test",

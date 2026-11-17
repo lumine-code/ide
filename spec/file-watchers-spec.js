@@ -16,7 +16,7 @@ describe("adapter-owned standard file watchers", () => {
     other = path.resolve("other-watch-root");
     notifications = [];
     session = {
-      adapter: { ...adapter, fileWatchers: [{ globPattern: "**/*.tf" }] },
+      adapter: { ...adapter, fileWatchers: [{ globPattern: "**/@(*.tf)" }] },
       rootPath: root,
       folders: new Set([root]),
       state: "running",
@@ -28,7 +28,7 @@ describe("adapter-owned standard file watchers", () => {
     publishSession(manager, session);
   });
   afterEach(async () => manager.deactivate());
-  it("routes static-only create, change and delete events within project folders and validates descriptors", () => {
+  it("routes adapter glob events within project folders and validates descriptors", () => {
     for (const invalid of [
       true,
       [{ globPattern: "" }],
@@ -87,7 +87,12 @@ describe("adapter-owned standard file watchers", () => {
       {
         id: "dynamic",
         method: "workspace/didChangeWatchedFiles",
-        registerOptions: { watchers: [{ globPattern: "**/*.tf", kind: 3 }] },
+        registerOptions: {
+          watchers: [
+            { globPattern: "**/*.tf", kind: 3 },
+            { globPattern: "**/@(*.md)", kind: 3 },
+          ],
+        },
       },
     ]);
     manager.fileOperations.routeEvents([
@@ -97,6 +102,7 @@ describe("adapter-owned standard file watchers", () => {
       { action: "deleted", path: file },
       { action: "created", path: file },
       { action: "updated", path: outside },
+      { action: "updated", path: path.join(other, "notes.md") },
     ]);
     expect(notifications[0].params.changes.map((value) => value.type)).toEqual([1, 2, 3, 1, 2]);
     expect(notifications[0].params.changes.at(-1).uri).toBe(pathToFileURL(outside).href); // Dynamic watchers retain their declared scope.
