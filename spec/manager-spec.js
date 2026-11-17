@@ -1103,6 +1103,18 @@ describe("LanguageServerManager capabilities", () => {
     expect(manager.globMatches(serverPattern, editorPath)).toBe(process.platform === "win32");
   });
 
+  it("uses LSP glob syntax for server-supplied capability and file operation filters", () => {
+    const notebookPath = path.join("project", "docs", "(guide)", "intro.md");
+    const glob = "docs/(guide)/intr?.{md,markdown}";
+    const filter = { scheme: "file", pattern: { glob } };
+
+    expect(manager.globMatches(glob, notebookPath)).toBe(true);
+    expect(manager.fileOperations.matches([filter], notebookPath, false)).toBe(true);
+    expect(manager.globMatches("**/+(intro).md", notebookPath)).toBe(false);
+    expect(manager.globMatches("**/intro.[!0-9]d", notebookPath)).toBe(true);
+    expect(manager.globMatches("**/intro.[!0-9]d", path.join("docs", "intro.3d"))).toBe(false);
+  });
+
   it("scopes dynamic registrations by document selector", () => {
     const session = { adapter: { grammarScopes: ["source.python"] } };
     manager.registerCapabilities(session, [

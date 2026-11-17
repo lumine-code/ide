@@ -80,6 +80,17 @@ describe("notebook sync selectors", () => {
       }),
     ).toBe(false);
   });
+  it("matches parentheses literally in notebook paths supplied to server filters", () => {
+    const options = {
+      notebookSelector: [{ notebook: { pattern: "**/(books)/*.ipynb" } }],
+    };
+    expect(
+      notebookSyncMatches(options, { ...jupyterPython, filePath: "work/(books)/one.ipynb" }),
+    ).toBe(true);
+    expect(
+      notebookSyncMatches(options, { ...jupyterPython, filePath: "work/books/one.ipynb" }),
+    ).toBe(false);
+  });
   it("unites cell languages only across selectors matching this notebook", () => {
     const options = {
       notebookSelector: [
