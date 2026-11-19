@@ -71,6 +71,48 @@ describe("symbol services", () => {
     await provider.searchWorkspaceSymbols("", { paths: [root], onStatus: status });
     expect(status.calls.mostRecent().args[0]).toEqual({ state: "ready" });
   });
+  it("resolves only the selected URI-only symbol and preserves its wire identity", async () => {
+    const located = symbol("overload", "source.js", 4);
+    const { uri } = located.location;
+    const first = { ...located, location: { uri }, data: { overload: 1 } };
+    const second = { ...first, data: { overload: 2 } };
+    const session = addSession("js", [], {
+      capabilities: { workspaceSymbolProvider: { resolveProvider: true } },
+    });
+    session.request.and.callFake(async (method, params) => {
+      if (method === "workspace/symbol") return [first, second];
+      expect(method).toBe("workspaceSymbol/resolve");
+      expect(params).toBe(second);
+      return { ...second, location: located.location };
+    });
+    expect(SymbolProvider.capabilities.workspace.symbol.resolveSupport.properties).toEqual([
+      "location.range",
+    ]);
+    const found = await provider.searchWorkspaceSymbols("overload", {
+      paths: [root],
+      deferLocations: true,
+    });
+    expect(found.length).toBe(2);
+    expect(found[0].position).toBeUndefined();
+    expect(session.request).toHaveBeenCalledTimes(1);
+    const resolved = await found[1].resolveLocation();
+    expect(resolved.position).toEqual([0, 4]);
+    expect(session.request).toHaveBeenCalledTimes(2);
+  });
+  it("fills locations before publishing for consumers that require complete symbols", async () => {
+    const located = symbol("location");
+    const session = addSession("js", [], {
+      capabilities: { workspaceSymbolProvider: { resolveProvider: true } },
+    });
+    session.request.and.callFake(async (method) =>
+      method === "workspace/symbol"
+        ? [{ ...located, location: { uri: located.location.uri } }]
+        : located,
+    );
+    const result = await provider.searchWorkspaceSymbols("location", { paths: [root] });
+    expect(result[0].position).toEqual([0, 0]);
+    expect(result[0].resolveLocation).toBeUndefined();
+  });
   it("preserves accumulated results and deduplicates overlapping server answers", async () => {
     addSession("first", [symbol("shared"), symbol("other", "source.js", 2)]);
     const failure = addSession("failure", []);

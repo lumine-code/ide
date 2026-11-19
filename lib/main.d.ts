@@ -491,6 +491,14 @@ export interface NavigationSymbol {
   cell?: number;
   uri?: string;
 }
+export type WorkspaceNavigationSymbol =
+  | NavigationSymbol
+  | (Omit<NavigationSymbol, "position" | "range"> & {
+      resolveLocation(options?: {
+        signal?: AbortSignal;
+        timeoutMs?: number;
+      }): Promise<NavigationSymbol | null>;
+    });
 export interface DocumentSymbolSource {
   id: string;
   name: string;
@@ -523,13 +531,14 @@ export interface WorkspaceSymbolProvider {
     options?: {
       paths?: string[];
       signal?: AbortSignal;
-      onSymbols?(symbols: NavigationSymbol[]): void;
+      deferLocations?: boolean;
+      onSymbols?(symbols: WorkspaceNavigationSymbol[]): void;
       onStatus?(status: {
         state: "ready" | "unavailable" | "starting" | "partial" | "error";
         message?: string;
       }): void;
     },
-  ): Promise<NavigationSymbol[]>;
+  ): Promise<WorkspaceNavigationSymbol[]>;
 }
 export interface DefinitionProvider {
   name: string;

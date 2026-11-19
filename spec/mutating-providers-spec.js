@@ -175,6 +175,70 @@ describe("CodeFormatProvider", () => {
       },
     ]);
   });
+  it("keeps the first range formatter when only a later server supports batch formatting", async () => {
+    const first = sessionWith(() => []);
+    first.supports = (method) => method === "textDocument/rangeFormatting";
+    const later = sessionWith(() => []);
+    spyOn(first, "request").and.callThrough();
+    spyOn(later, "request").and.callThrough();
+    const provider = new CodeFormatProvider(managerWith(first, later));
+    const editor = stubEditor(["const a = 1;", "const b = 2;"]);
+    const ranges = [
+      [
+        [0, 0],
+        [0, 5],
+      ],
+      [
+        [1, 0],
+        [1, 5],
+      ],
+    ];
+    expect(await provider.formatRanges(editor, ranges)).toBeUndefined();
+    expect(first.request).not.toHaveBeenCalled();
+    expect(later.request).not.toHaveBeenCalled();
+    expect(await provider.formatRange(editor, ranges[0])).toEqual([]);
+    expect(first.request.calls.mostRecent().args[0]).toBe("textDocument/rangeFormatting");
+    expect(later.request).not.toHaveBeenCalled();
+    first.supports = () => true;
+    first.request.and.rejectWith(Object.assign(new Error("Method not found"), { code: -32601 }));
+    expect(await provider.formatRanges(editor, ranges)).toBeUndefined();
+  });
+  it("guards a batch by revision without reading full text and forwards cancellation", async () => {
+    const controller = new AbortController();
+    let started, finish;
+    const requesting = new Promise((resolve) => (started = resolve));
+    const response = new Promise((resolve) => (finish = resolve));
+    const session = sessionWith(() => response);
+    const request = spyOn(session, "request").and.callFake((...args) => {
+      started(args[2].signal);
+      return response;
+    });
+    const provider = new CodeFormatProvider(managerWith(session));
+    let revision = 1;
+    const buffer = { getTextRevision: () => revision };
+    const editor = {
+      ...stubEditor(),
+      getBuffer: () => buffer,
+      getText: jasmine.createSpy("read full text").and.throwError("unexpected source read"),
+    };
+    const ranges = [
+      [
+        [0, 0],
+        [0, 5],
+      ],
+      [
+        [0, 6],
+        [0, 10],
+      ],
+    ];
+    const pending = provider.formatRanges(editor, ranges, { signal: controller.signal });
+    expect(await requesting).toBe(controller.signal);
+    expect(request.calls.mostRecent().args[0]).toBe("textDocument/rangesFormatting");
+    revision++;
+    finish([{ range: lspRange(0, 0, 5), newText: "let" }]);
+    expect(await pending).toBeNull();
+    expect(editor.getText).not.toHaveBeenCalled();
+  });
   it("restores adapter-transformed text in formatting edits", async () => {
     const session = {
       ...sessionWith(() => [{ range: lspRange(0, 0, 5), newText: "masked" }]),

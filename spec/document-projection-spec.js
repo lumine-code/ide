@@ -1,11 +1,13 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
+const { Range } = require("lumine");
 const C = require("../lib/converters");
 const ServerSession = require("../lib/server-session");
 const Manager = require("../lib/language-server-manager");
 const Projections = require("../lib/document-projections");
 const CompletionProvider = require("../lib/completion-provider");
+const CodeFormatProvider = require("../lib/code-format-provider");
 const { publishSession } = require("./helpers/session-fixtures");
 
 describe("AST document projections", () => {
@@ -41,13 +43,13 @@ describe("AST document projections", () => {
       retryDelay: 100,
     });
   });
-  async function start(extra = {}, responses = {}) {
+  async function start(extra = {}, responses = {}, capabilities = {}) {
     const launch = {
       command: process.execPath,
       args: [
         fixture,
         JSON.stringify({
-          capabilities: { textDocumentSync: 2, hoverProvider: true },
+          capabilities: { textDocumentSync: 2, hoverProvider: true, ...capabilities },
           responses,
         }),
       ],
@@ -991,6 +993,67 @@ describe("AST document projections", () => {
         { requireOwned: false },
       ).end.character,
     ).toBe(10);
+  });
+  it("negotiates one batch with a dynamic capability and maps projected ranges and edits once", async () => {
+    const format = new CodeFormatProvider(manager);
+    const input = [new Range([0, 0], [0, 5]), new Range([1, 0], [1, 9])];
+    const wireRanges = input.map((range) => C.rangeToLsp(range.translate([1, 0])));
+    await start(
+      {
+        languageIdForScope: () => "python",
+        async getDocumentProjection(item, options) {
+          const projection = await source.project(item, options);
+          return {
+            ...projection,
+            text: "\n" + projection.text,
+            toServerRange: (range) =>
+              range.start.row === 3 ? null : projection.toServerRange(range)?.translate([1, 0]),
+            mapEdits: (edits) =>
+              projection.mapEdits(
+                edits.map((edit) => ({
+                  ...edit,
+                  oldRange: Range.fromObject(edit.oldRange).translate([-1, 0]),
+                })),
+              ),
+          };
+        },
+      },
+      {
+        "textDocument/rangesFormatting": wireRanges.map((range) => ({ range, newText: "name" })),
+      },
+      { documentRangeFormattingProvider: true },
+    );
+    await session.openEditor(editor);
+    expect(session.supports("textDocument/rangeFormatting", editor)).toBeTrue();
+    expect(session.supports("textDocument/rangesFormatting", editor)).toBeFalse();
+    manager.registerCapabilities(session, [
+      {
+        id: "ranges",
+        method: "textDocument/rangeFormatting",
+        registerOptions: {
+          documentSelector: [{ language: "python" }],
+          rangesSupport: true,
+          workDoneProgress: true,
+        },
+      },
+    ]);
+    expect(session.supports("textDocument/rangesFormatting", editor)).toBeTrue();
+    spyOn(manager, "activeSessionForFeature").and.resolveTo(session);
+    const result = await format.rangeProvider().formatCodeRanges(editor, input);
+    expect(result.map(({ oldRange }) => C.rangeToLsp(Range.fromObject(oldRange)))).toEqual(
+      input.map(C.rangeToLsp),
+    );
+    expect(
+      await format.rangeProvider().formatCodeRanges(editor, [input[0], new Range([3, 0], [3, 5])]),
+    ).toBeUndefined();
+    const traffic = await messages();
+    const initialize = traffic.find(({ method }) => method === "initialize");
+    expect(initialize.params.capabilities.textDocument.rangeFormatting.rangesSupport).toBeTrue();
+    const requests = traffic.filter(({ method }) => method === "textDocument/rangesFormatting");
+    expect(requests.length).toBe(1);
+    expect(requests[0].params.ranges).toEqual(wireRanges);
+    expect(requests[0].params.workDoneToken).toEqual(jasmine.any(String));
+    expect(traffic.some(({ method }) => method === "textDocument/rangeFormatting")).toBeFalse();
   });
   it("coalesces edits during projection preparation and orders requests after the final change", async () => {
     await start();
