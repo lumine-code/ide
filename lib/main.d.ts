@@ -308,7 +308,7 @@ export interface LanguageServerAdapter {
   /** Whole-document symbol ownership; defaults to grammarScopes. A subset, or [] to expose no document source. Other features and workspace symbols remain independent. */
   documentSymbolScopes?: string[];
   documentSelector?: Array<{ language?: string; scheme?: string; pattern?: string }>;
-  sessionScope?: "project-root" | "workspace";
+  sessionScope?: "project-root" | "file-directory" | "workspace";
   /** Select one applicable adapter in this group without excluding unrelated servers. */
   exclusiveGroup?: string;
   /** Higher wins within an exclusive group after configured preferred adapter IDs. */

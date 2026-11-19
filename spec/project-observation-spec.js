@@ -297,4 +297,68 @@ describe("project observation before language server scans", () => {
     expect(notify).toHaveBeenCalledTimes(1);
     expect(restart).not.toHaveBeenCalled();
   });
+
+  it("routes files by directory and keeps each session when its project path is removed", async () => {
+    adapter.sessionScope = "file-directory";
+    const child = path.join(rootA, "sources");
+    const firstFile = path.join(rootA, "a.test");
+    const secondFile = path.join(child, "b.test");
+    const observe = spyOn(lumine.fileWatchClient, "watchDirectory").and.callFake(() => ({
+      ready: Promise.resolve(),
+      onDidChange() {},
+      onDidInvalidate() {},
+      onDidError() {},
+      dispose() {},
+    }));
+    ready(rootA);
+    expect(manager.rootForPath(firstFile, adapter)).toBe(rootA);
+    expect(manager.rootForPath(secondFile, adapter)).toBe(child);
+    expect(manager.rootForPath(path.join(child, "c.test"), adapter)).toBe(child);
+    const first = await manager.ensureSession(adapter, rootA);
+    const second = await manager.ensureSession(adapter, child);
+    await Promise.all([first.ready, second.ready]);
+    expect(second).not.toBe(first);
+    expect(manager.workspaceFolders(first)).toEqual([manager.folderOf(rootA)]);
+    expect(manager.workspaceFolders(second)).toEqual([manager.folderOf(child)]);
+    expect(observe).not.toHaveBeenCalled();
+
+    roots = [];
+    await manager.projectPathsChanged();
+    expect(manager.sessionForRoute(adapter, rootA)).toBe(first);
+    expect(manager.sessionForRoute(adapter, child)).toBe(second);
+    expect(observe.calls.allArgs()).toEqual([
+      [rootA, { recursive: false }],
+      [child, { recursive: false }],
+    ]);
+    expect(notify).not.toHaveBeenCalled();
+  });
+
+  it("arms and disposes shallow observation for a file directory outside any project", async () => {
+    adapter.sessionScope = "file-directory";
+    const ready = deferred();
+    const watcher = {
+      ready: ready.promise,
+      onDidChange: jasmine.createSpy("watch change"),
+      onDidInvalidate() {},
+      onDidError() {},
+      dispose: jasmine.createSpy("dispose watcher"),
+    };
+    spyOn(lumine.fileWatchClient, "watchDirectory").and.returnValue(watcher);
+    const starting = manager.ensureSession(adapter, rootB);
+    await flush();
+    expect(lumine.fileWatchClient.watchDirectory).toHaveBeenCalledOnceWith(rootB, {
+      recursive: false,
+    });
+    expect(start).not.toHaveBeenCalled();
+    ready.resolve();
+    const session = await starting;
+    await session.ready;
+
+    const events = [{ path: path.join(rootB, "a.test"), action: "created" }];
+    spyOn(manager.fileOperations, "routeEvents");
+    watcher.onDidChange.calls.mostRecent().args[0](events);
+    expect(manager.fileOperations.routeEvents).toHaveBeenCalledOnceWith(events);
+    await manager.reclaim(session);
+    expect(watcher.dispose).toHaveBeenCalledTimes(1);
+  });
 });

@@ -66,7 +66,7 @@ interface LanguageServerAdapter {
     context: { editor: TextEditor; filePath: string | null },
   ): string | undefined;
   documentSelector?: Array<{ language?: string; scheme?: string; pattern?: string }>;
-  sessionScope?: "project-root" | "workspace";
+  sessionScope?: "project-root" | "file-directory" | "workspace";
   exclusiveGroup?: string;
   selectionPriority?: number;
   fileWatchers?: Array<{
@@ -317,7 +317,7 @@ Adapters normally coexist. An optional `exclusiveGroup` selects one of that grou
 
 `resolveServer` returning `null` is the supported way to be a no-op: an adapter whose server is not installed should return `null` rather than throw, and nothing appears in the UI.
 
-Sessions are keyed by `sessionScope`. `"project-root"`, the default, gives each project folder its own server, because most servers resolve their configuration relative to a root and would answer for the wrong project otherwise. `"workspace"` gives the window a single server whose identity never moves, whichever folders come and go.
+Sessions are keyed by `sessionScope`. `"project-root"`, the default, routes a file through the deepest containing project folder and falls back to the file's directory. `"file-directory"` always uses the file's immediate directory as the session root. Files in the same directory share a server, and each directory is independent of the folders added to the window. An open directory-scoped session outside the project gets a shallow filesystem watch for its directory. `"workspace"` gives the window a single server whose identity never moves, whichever folders come and go.
 
 A `"project-root"` server that declares `workspace.workspaceFolders.supported` **and** `changeNotifications` does not pay for a second process per folder: the running session takes the new folder through `workspace/didChangeWorkspaceFolders` and is then reachable under both. Servers that declare neither get an instance each. Nothing has to be set on the adapter for this — the capabilities decide.
 
