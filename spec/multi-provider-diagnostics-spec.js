@@ -136,6 +136,7 @@ describe("independent diagnostic providers", () => {
     expect(session.supports("textDocument/hover", editor)).toBe(true);
     expect(session.supports("textDocument/completion", editor)).toBe(true);
     spyOn(manager, "activeSessionsForEditor").and.resolveTo([session]);
+    spyOn(manager, "sessionsForEditorWhenReady").and.returnValue([Promise.resolve(session)]);
     const hover = await new ContextHelpProvider(manager).getHelp(editor, new Point(0, 1));
     expect(hover.contents.value).toBe("C# documentation");
     const suggestions = await new CompletionProvider(manager).getSuggestions({

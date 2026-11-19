@@ -36,9 +36,9 @@ const makeSession = (respond) => ({
   capabilities: {},
   supports: () => true,
   requests: [],
-  request(method, params) {
-    this.requests.push({ method, params });
-    return Promise.resolve(respond(method, params));
+  request(method, params, options) {
+    this.requests.push({ method, params, options });
+    return Promise.resolve(respond(method, params, options));
   },
 });
 
@@ -73,6 +73,20 @@ describe("InlayHintsProvider", () => {
     ]);
     expect(provider.grammarScopes).toEqual(["source.js"]);
     expect(provider.priority).toBe(2);
+  });
+
+  it("forwards cancellation and discards an aborted reply", async () => {
+    let respond;
+    const reply = new Promise((resolve) => (respond = resolve));
+    const session = makeSession(() => reply);
+    provider = new InlayHintsProvider(makeManager(session));
+    const controller = new AbortController();
+    const pending = provider.inlayHints(editor, [0, 1], { signal: controller.signal });
+    await flush();
+    expect(session.requests[0].options.signal).toBe(controller.signal);
+    controller.abort();
+    respond([lspHint(0, 0, "stale")]);
+    expect(await pending).toBeNull();
   });
 
   it("translates the server's hints into the contract shape", async () => {

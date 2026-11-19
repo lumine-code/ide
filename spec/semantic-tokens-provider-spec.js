@@ -51,9 +51,9 @@ const makeSession = (
   supports: () => true,
   capabilityOptions: (method) => (method === "textDocument/semanticTokens" ? options : undefined),
   requests: [],
-  request(method, params) {
-    this.requests.push({ method, params });
-    return Promise.resolve(respond(method, params));
+  request(method, params, options) {
+    this.requests.push({ method, params, options });
+    return Promise.resolve(respond(method, params, options));
   },
 });
 
@@ -210,6 +210,35 @@ describe("SemanticTokensProvider", () => {
     );
     expect(delta.params.previousResultId).toBe("r1");
     expect(tokens).toEqual([{ row: 0, column: 0, length: 5, type: "string", modifiers: [] }]);
+  });
+
+  it("applies unsorted insertions and removals against the original delta base", () => {
+    provider = new SemanticTokensProvider(makeManager(null));
+    const data = [1, 2, 3, 4, 5, 6, 7];
+    expect(
+      provider.applyEdits(data, [
+        { start: 6, deleteCount: 1 },
+        { start: 1, deleteCount: 2, data: [8] },
+        { start: 4, deleteCount: 0, data: [9, 10] },
+      ]),
+    ).toEqual([1, 8, 4, 9, 10, 5, 6]);
+    expect(data).toEqual([1, 2, 3, 4, 5, 6, 7]);
+  });
+
+  it("can choose range before requesting full tokens and forwards its abort signal", async () => {
+    const reply = deferred();
+    const session = makeSession(() => reply.promise);
+    provider = new SemanticTokensProvider(makeManager(session));
+    const controller = new AbortController();
+    expect(await provider.semanticTokens(editor, { preferRange: true })).toBeNull();
+    expect(session.requests).toEqual([]);
+    const pending = provider.semanticTokensInRange(editor, [0, 1], { signal: controller.signal });
+    await flush();
+    expect(session.requests[0].method).toBe("textDocument/semanticTokens/range");
+    expect(session.requests[0].options.signal).toBe(controller.signal);
+    controller.abort();
+    reply.resolve({ data: [0, 0, 5, 0, 0] });
+    expect(await pending).toBeNull();
   });
 
   it("requests another full result when the previous response has no result id", async () => {

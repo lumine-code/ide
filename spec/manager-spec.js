@@ -102,6 +102,37 @@ describe("LanguageServerManager adapters", () => {
   afterEach(async () => manager.deactivate());
   it("validates adapters", () =>
     expect(() => manager.registerAdapter({ id: "bad" })).toThrowError(/grammarScopes/));
+
+  it("gates automatic startup before folder adoption while allowing an existing route", async () => {
+    const root = path.resolve("start-gate");
+    const grammar = { scopeName: "source.test" };
+    const editor = { getPath: () => path.join(root, "file.test"), getGrammar: () => grammar };
+    const adapter = {
+      id: "test",
+      displayName: "Test",
+      grammarScopes: [grammar.scopeName],
+      resolveServer: jasmine.createSpy("resolveServer"),
+      shouldStartForEditor: jasmine.createSpy("shouldStartForEditor").and.resolveTo(false),
+    };
+    manager.registerAdapter(adapter);
+    const existing = { state: "running" };
+    const route = spyOn(manager, "sessionForRoute").and.returnValue(null);
+    const adopt = spyOn(manager, "adoptFolder").and.resolveTo(existing);
+
+    expect(await manager.ensureSession(adapter, root, { editor })).toBeNull();
+    expect(adapter.shouldStartForEditor).toHaveBeenCalledOnceWith(editor, { rootPath: root });
+    expect(adopt).not.toHaveBeenCalled();
+    expect(adapter.resolveServer).not.toHaveBeenCalled();
+
+    route.and.returnValue(existing);
+    expect(await manager.ensureSession(adapter, root, { editor })).toBe(existing);
+    expect(adapter.shouldStartForEditor).toHaveBeenCalledTimes(1);
+
+    route.and.returnValue(null);
+    expect(await manager.ensureSession(adapter, root)).toBe(existing);
+    expect(adopt).toHaveBeenCalledOnceWith(adapter, root);
+  });
+
   it("validates whole-document symbol scopes as a subset of the served grammars", () => {
     const adapter = {
       id: "test",
@@ -933,6 +964,27 @@ describe("LanguageServerManager multi-root servers", () => {
   });
   afterEach(async () => manager.deactivate());
 
+  it("routes a descendant of the filesystem root to that project", () => {
+    const projectRoot = path.parse(path.resolve("project")).root;
+    spyOn(lumine.project, "getPaths").and.returnValue([projectRoot]);
+    expect(manager.rootForPath(path.join(projectRoot, "child", "file.test"), adapter)).toBe(
+      projectRoot,
+    );
+  });
+
+  if (process.platform === "win32") {
+    it("uses one route for case aliases of a Windows project", () => {
+      const projectRoot = path.resolve("Project");
+      spyOn(lumine.project, "getPaths").and.returnValue([projectRoot]);
+      expect(
+        manager.rootForPath(path.join(projectRoot.toLowerCase(), "child", "file.test"), adapter),
+      ).toBe(projectRoot);
+      expect(manager.keyFor(adapter, projectRoot.toLowerCase())).toBe(
+        manager.keyFor(adapter, projectRoot),
+      );
+    });
+  }
+
   it("hands a second folder to a server that declares multi-root support", async () => {
     const first = sessionAt(rootA, MULTI_ROOT);
     const adopted = await manager.adoptFolder(adapter, rootB);
@@ -948,6 +1000,29 @@ describe("LanguageServerManager multi-root servers", () => {
     ]);
     // Two keys, one server — everything that walks the sessions must see one.
     expect(manager.allSessions().length).toBe(1);
+  });
+
+  it("adopts folders after dynamic registration and stops after it is withdrawn", async () => {
+    const first = sessionAt(rootA, {});
+    const method = "workspace/didChangeWorkspaceFolders";
+    const registration = { id: "dynamic-folders", method };
+    manager.registerCapabilities(first, [registration]);
+    expect(await manager.adoptFolder(adapter, rootB)).toBe(first);
+    expect(notifications.map((entry) => entry.method)).toEqual([method]);
+    manager.unregisterCapabilities(first, [registration]);
+    expect(await manager.adoptFolder(adapter, path.join(path.sep, "tmp", "c"))).toBeNull();
+    expect(notifications.length).toBe(1);
+  });
+
+  it("withdraws a static workspace folder change notification by its ID", () => {
+    const first = sessionAt(rootA, {
+      workspace: { workspaceFolders: { supported: true, changeNotifications: "static-folders" } },
+    });
+    expect(manager.acceptsFolders(first)).toBe(true);
+    manager.unregisterCapabilities(first, [
+      { id: "static-folders", method: "workspace/didChangeWorkspaceFolders" },
+    ]);
+    expect(manager.acceptsFolders(first)).toBe(false);
   });
 
   it("splits adopted folders when a replacement loses multi-root support", async () => {
@@ -1161,6 +1236,30 @@ describe("LanguageServerManager capabilities", () => {
     expect(
       manager.dynamicSupport(session, "textDocument/formatting", pythonEditor),
     ).toBeUndefined();
+  });
+
+  it("honors the selector and unregister ID of a static document capability", () => {
+    const session = new ServerSession(
+      manager,
+      { grammarScopes: ["source.python", "source.js"] },
+      path.resolve("project"),
+      {},
+    );
+    const method = "textDocument/semanticTokens";
+    const capability = { id: "static", documentSelector: [{ language: "python" }], full: true };
+    session.capabilities = { semanticTokensProvider: capability };
+    const editor = (scopeName, file) => ({
+      getGrammar: () => ({ scopeName }),
+      getPath: () => file,
+    });
+    const python = editor("source.python", "a.py");
+    const js = editor("source.js", "a.js");
+    expect(session.supports(method, python)).toBe(true);
+    expect(session.supports(method, js)).toBe(false);
+    expect(session.capabilityOptions(method, js)).toBeUndefined();
+    manager.unregisterCapabilities(session, [{ id: "static", method }]);
+    expect(session.supports(method, python)).toBe(false);
+    expect(session.capabilityOptions(method, python)).toBeUndefined();
   });
 
   it("announces a capability that arrives after the session started", () => {

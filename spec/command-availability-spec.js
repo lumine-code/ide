@@ -28,7 +28,10 @@ describe("IDE session command availability", () => {
     const adapter = { id: "cached-route", grammarScopes: [editor.getGrammar().scopeName] };
     const session = { adapter, documents: new Map() };
     manager.adapters.set(adapter.id, adapter);
-    manager.controllerRoutes.set(adapter, new Map([[root, { session }]]));
+    manager.controllerRoutes.set(
+      adapter,
+      new Map([[manager.scopeKey(adapter, root), { session }]]),
+    );
     const ensure = spyOn(manager, "ensureSession").and.throwError("start server");
     try {
       expect(manager.peekSessionsForEditor(editor)).toEqual([session]);

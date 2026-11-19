@@ -3,6 +3,7 @@ const CodeFormatProvider = require("../lib/code-format-provider");
 const ReferencesProvider = require("../lib/references-provider");
 const RefactorProvider = require("../lib/refactor-provider");
 const IntentionsProvider = require("../lib/intentions-provider");
+const WorkspaceEdits = require("../lib/workspace-edits");
 
 const filePath = path.join(__dirname, "example.js");
 const fileUri = require("url").pathToFileURL(filePath).href;
@@ -21,7 +22,7 @@ const C = require("../lib/converters");
 const managerWith = (...args) => {
   const extras = args.length && !isSessionLike(args[args.length - 1]) ? args.pop() : {};
   const sessions = args.filter(Boolean);
-  return {
+  const manager = {
     addCapabilityFragment() {},
     allGrammarScopes: () => ["source.js"],
     activeSessionsForEditor: async () => sessions,
@@ -43,6 +44,8 @@ const managerWith = (...args) => {
     },
     ...extras,
   };
+  manager.workspaceEdits = new WorkspaceEdits({ documents: manager, fileOperations: {} });
+  return manager;
 };
 
 const isSessionLike = (value) => !value || typeof value.request === "function";
@@ -446,37 +449,51 @@ describe("multi-server capability routing", () => {
 });
 
 describe("RefactorProvider", () => {
-  it("flattens changes and documentChanges into a path map", async () => {
+  it("validates a versioned secondary target and keeps its snapshot through staging", async () => {
+    const target = lumine.workspace.buildTextEditor();
+    target.getBuffer().setPath(filePath);
+    target.setText("const value = 1;");
+    const document = { editor: target, uri: fileUri, version: 4 };
     const session = sessionWith(() => ({
-      changes: { [fileUri]: [{ range: lspRange(0, 6, 11), newText: "renamed" }] },
       documentChanges: [
         {
           textDocument: { uri: fileUri, version: 3 },
-          edits: [{ range: lspRange(2, 0, 5), newText: "renamed" }],
+          edits: [{ range: lspRange(0, 6, 11), newText: "renamed" }],
         },
       ],
     }));
-    const provider = new RefactorProvider(managerWith(session));
-    const { outcome, edits } = await provider.rename(
-      stubEditor(),
-      { row: 0, column: 8 },
-      "renamed",
-    );
-    expect(outcome).toBe("edits");
-    expect([...edits.keys()]).toEqual([filePath]);
-    expect(edits.get(filePath).length).toBe(2);
-    expect(edits.get(filePath)[0]).toEqual({
-      oldRange: [
-        [0, 6],
-        [0, 11],
-      ],
-      newText: "renamed",
-    });
+    session.documents = new Map([[C.uriKey(fileUri), document]]);
+    const manager = managerWith(session);
+    const provider = new RefactorProvider(manager);
+    const source = stubEditor();
+    const rename = () => provider.rename(source, { row: 0, column: 8 }, "renamed");
+    try {
+      await expectAsync(rename()).toBeRejectedWithError(/document version changed/);
+      document.version = 3;
+      const result = await rename();
+      expect(result.outcome).toBe("edits");
+      expect(result.edits.get(filePath)).toEqual([
+        {
+          oldRange: [
+            [0, 6],
+            [0, 11],
+          ],
+          newText: "renamed",
+        },
+      ]);
+      expect(result.isCurrent()).toBe(true);
+      target.insertText("// edited\n");
+      expect(result.isCurrent()).toBe(false);
+      result.dispose();
+      expect(target.getText()).not.toContain("renamed");
+    } finally {
+      manager.workspaceEdits.dispose();
+      target.destroy();
+    }
   });
   it("applies resource operations itself and reports them as applied", async () => {
     const applied = [];
     const session = sessionWith(() => ({
-      changes: { [fileUri]: [{ range: lspRange(0, 6, 11), newText: "next" }] },
       documentChanges: [{ kind: "rename", oldUri: fileUri, newUri: fileUri }],
     }));
     const manager = managerWith(session, {
@@ -503,11 +520,86 @@ describe("RefactorProvider", () => {
       outcome: "aborted",
     });
   });
+  it("allows remaining workspace edits after the initial mutation retires the source editor", async () => {
+    const session = sessionWith(() => ({
+      documentChanges: [{ kind: "rename", oldUri: fileUri, newUri: fileUri }],
+    }));
+    const controller = new AbortController();
+    const manager = managerWith(session, {
+      applyWorkspaceEdit: async (_edit, _label, _session, options) => {
+        expect(options.isCurrent()).toBe(true);
+        options.beforeMutation();
+        controller.abort();
+        expect(options.signal.aborted).toBe(false);
+        expect(options.isCurrent()).toBe(true);
+        return true;
+      },
+    });
+    const provider = new RefactorProvider(manager);
+    expect(
+      await provider.rename(stubEditor(), { row: 0, column: 8 }, "next", {
+        signal: controller.signal,
+        isCurrent: () => !controller.signal.aborted,
+      }),
+    ).toEqual({ outcome: "applied", paths: [filePath] });
+  });
+  it("preserves ordered batch coordinates for both preview and application", async () => {
+    const session = sessionWith(() => ({
+      documentChanges: [
+        {
+          textDocument: { uri: fileUri, version: null },
+          edits: [{ range: lspRange(0, 0, 0), newText: "// first\n" }],
+        },
+        {
+          textDocument: { uri: fileUri, version: null },
+          edits: [{ range: lspRange(1, 6, 11), newText: "renamed" }],
+        },
+      ],
+    }));
+    const manager = managerWith(session);
+    const provider = new RefactorProvider(manager);
+    try {
+      for (const dryRun of [true, false]) {
+        const result = await provider.rename(stubEditor(), { row: 0, column: 8 }, "next", {
+          dryRun,
+        });
+        expect(result.edits.size).toBe(0);
+        expect(result.orderedEdits.get(filePath)).toEqual([
+          [
+            {
+              oldRange: [
+                [0, 0],
+                [0, 0],
+              ],
+              newText: "// first\n",
+            },
+          ],
+          [
+            {
+              oldRange: [
+                [1, 6],
+                [1, 11],
+              ],
+              newText: "renamed",
+            },
+          ],
+        ]);
+        result.dispose?.();
+      }
+    } finally {
+      manager.workspaceEdits.dispose();
+    }
+  });
   it("computes edits without applying resource operations when dry running", async () => {
     const applied = [];
     const session = sessionWith(() => ({
-      changes: { [fileUri]: [{ range: lspRange(0, 6, 11), newText: "next" }] },
-      documentChanges: [{ kind: "rename", oldUri: fileUri, newUri: fileUri }],
+      documentChanges: [
+        {
+          textDocument: { uri: fileUri, version: null },
+          edits: [{ range: lspRange(0, 6, 11), newText: "next" }],
+        },
+        { kind: "rename", oldUri: fileUri, newUri: fileUri },
+      ],
     }));
     const manager = managerWith(session, {
       applyWorkspaceEdit: async () => {

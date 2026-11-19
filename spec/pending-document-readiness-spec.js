@@ -66,6 +66,21 @@ describe("Pending editor document readiness", () => {
     ready.resolve();
   }
 
+  it("exposes the ready attachment while a different session is still starting", async () => {
+    const slow = deferred();
+    const starting = { adapter: { id: "slow" }, state: "starting", ready: slow.promise };
+    manager.sessionsForEditor.and.returnValue([starting, session]);
+    const controller = new AbortController();
+    const [first, second] = manager.sessionsForEditorWhenReady(editor, {
+      signal: controller.signal,
+    });
+    finishStartup();
+    expect(await second).toBe(session);
+    controller.abort();
+    expect(await first).toBeNull();
+    slow.resolve();
+  });
+
   it("abandons a closed preview during startup and opens a later preview at the same URI", async () => {
     const request = manager.activeSessionsForEditor(editor);
     editor.destroy();

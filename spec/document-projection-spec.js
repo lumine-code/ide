@@ -569,6 +569,7 @@ describe("AST document projections", () => {
     session.capabilities.completionProvider = { resolveProvider: true };
     await session.openEditor(editor);
     spyOn(manager, "activeSessionsForEditor").and.resolveTo([session]);
+    spyOn(manager, "sessionsForEditorWhenReady").and.returnValue([Promise.resolve(session)]);
     const item = {
       label: "print",
       textEdit: textEdit || {

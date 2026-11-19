@@ -70,6 +70,25 @@ describe("RpcConnection", () => {
     await expectAsync(second).toBeRejectedWithError(/no/);
   });
 
+  it("rejects invalid outgoing requests without retiring the connection or pending work", async () => {
+    const pending = connection.request("answer");
+    const circular = {};
+    circular.self = circular;
+    await expectAsync(connection.request("invalid", circular)).toBeRejectedWithError(/circular/);
+    await expectAsync(
+      connection.request("oversized", { values: Array(100_001).fill(null) }),
+    ).toBeRejectedWithError(/transport allocation budget/);
+    expect(connection.disposed).toBe(false);
+
+    const next = connection.request("next", { value: 2 });
+    await waitUntil(() => sent(writer).length === 2);
+    const requests = sent(writer);
+    expect(requests.map(({ method }) => method)).toEqual(["answer", "next"]);
+    reader.write(frame({ jsonrpc: "2.0", id: requests[0].id, result: 1 }));
+    reader.write(frame({ jsonrpc: "2.0", id: requests[1].id, result: 2 }));
+    expect(await Promise.all([pending, next])).toEqual([1, 2]);
+  });
+
   it("omits params entirely when a request carries none", async () => {
     connection.request("shutdown").catch(() => {});
     await waitUntil(() => sent(writer).length === 1);

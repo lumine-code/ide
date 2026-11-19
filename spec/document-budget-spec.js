@@ -218,7 +218,7 @@ describe("language-server document allocation budgets", () => {
     expect(() => prepareMessage(number)).toThrowError(TypeError);
   });
 
-  it("clears settled completion source and items when size eligibility changes", async () => {
+  it("clears cached completion items when size eligibility changes", async () => {
     const completionSession = {
       supports: () => true,
       capabilityOptions: () => ({}),
@@ -235,7 +235,7 @@ describe("language-server document allocation budgets", () => {
       prefix: "s",
       activatedManually: true,
     });
-    expect(provider.cache.source).toBe("small source");
+    expect(provider.cache.entries.get(completionSession).items.length).toBe(1);
     editor.setText("x".repeat(MIB + 1));
     expect(provider.cache).toBeNull();
     expect(provider.cacheSubscription).toBeNull();

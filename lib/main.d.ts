@@ -309,6 +309,11 @@ export interface LanguageServerAdapter {
   documentSymbolScopes?: string[];
   documentSelector?: Array<{ language?: string; scheme?: string; pattern?: string }>;
   sessionScope?: "project-root" | "file-directory" | "workspace";
+  /** Gate automatic session creation or folder adoption for this editor. Existing sessions may still attach it. */
+  shouldStartForEditor?(
+    editor: TextEditor,
+    context: { rootPath: string },
+  ): boolean | Promise<boolean>;
   /** Select one applicable adapter in this group without excluding unrelated servers. */
   exclusiveGroup?: string;
   /** Higher wins within an exclusive group after configured preferred adapter IDs. */

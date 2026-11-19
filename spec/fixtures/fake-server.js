@@ -38,8 +38,10 @@ function reply(id, result) {
 function handle(message) {
   received.push(message);
   const { id, method, params } = message;
-  if (method === "initialize")
+  if (method === "initialize") {
+    if (config.hang?.includes(method)) return;
     return reply(id, { capabilities: config.capabilities || {}, serverInfo: config.serverInfo });
+  }
   if (method === "shutdown") return reply(id, null);
   if (method === "exit") {
     if (config.ignoreExit) return;

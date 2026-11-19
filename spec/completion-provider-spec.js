@@ -89,7 +89,7 @@ describe("CompletionProvider request ownership", () => {
     older.resolve([session]);
     expect(await first).toEqual([]);
     expect(session.requests.map(({ params }) => params.position.character)).toEqual([2]);
-    expect(provider.cache.items[0].displayText).toBe("console");
+    expect(provider.cache.entries.get(session).items[0].displayText).toBe("console");
   });
 
   for (const event of ["grammar", "path"]) {
@@ -103,13 +103,11 @@ describe("CompletionProvider request ownership", () => {
       editor.onDidChangePath = (callback) => emitter.on("path", callback);
       const real = editor.getGrammar();
       await provider.getSuggestions(requestFor(editor));
-      expect(provider.cache.source).toBe("co");
+      expect(provider.cache.entries.has(session)).toBeTrue();
       const resolving = (provider.resolveController = new AbortController());
-      provider.cacheRenewal = {};
       editor.getGrammar = () => lumine.grammars.nullGrammar;
       emitter.emit(event);
       expect(provider.cache).toBeNull();
-      expect(provider.cacheRenewal).toBeNull();
       expect(provider.cacheSubscription).toBeNull();
       expect(resolving.signal.aborted).toBeTrue();
       editor.getGrammar = () => real;
@@ -132,6 +130,63 @@ describe("CompletionProvider request ownership", () => {
     startup.resolve([session]);
     expect((await result).length).toBe(1);
     expect(session.requests[0].params.position.character).toBe(2);
+  });
+
+  it("publishes the ready server while another is starting and aborts on popup dismissal", async () => {
+    const startup = deferred(),
+      published = deferred();
+    const session = sessionWith(() => [{ label: "console" }]);
+    const slow = sessionWith(() => [{ label: "const" }]);
+    const manager = managerWith(session, slow);
+    const controller = new AbortController();
+    manager.sessionsForEditorWhenReady = (_editor, { signal }) => {
+      expect(signal.aborted).toBeFalse();
+      return [Promise.resolve(session), startup.promise];
+    };
+    provider = new CompletionProvider(manager);
+    const result = provider.getSuggestions({
+      ...requestFor(stubEditor()),
+      signal: controller.signal,
+      publishSuggestions: published.resolve,
+    });
+    expect((await published.promise).map(({ text }) => text)).toEqual(["console"]);
+    controller.abort();
+    expect(await result).toEqual([]);
+    expect(session.requests[0].options.signal.aborted).toBeTrue();
+    startup.resolve(slow);
+    await Promise.resolve();
+    expect(slow.requests.length).toBe(0);
+  });
+
+  it("retries only the incomplete or failed source and scopes incomplete triggers to the word", async () => {
+    const complete = sessionWith(() => [{ label: "console" }]);
+    const incomplete = sessionWith(() => ({ isIncomplete: true, items: [{ label: "const" }] }));
+    const failed = sessionWith(() => {
+      if (failed.requests.length === 1) throw new Error("indexing");
+      return [{ label: "continue" }];
+    });
+    provider = new CompletionProvider(managerWith(complete, incomplete, failed));
+    const editor = stubEditor("con con");
+    const automatic = (column, prefix) =>
+      provider.getSuggestions({
+        editor,
+        bufferPosition: { row: 0, column },
+        prefix,
+        triggerKind: 1,
+      });
+    await automatic(2, "co");
+    expect((await automatic(3, "con")).map(({ text }) => text)).toEqual([
+      "console",
+      "const",
+      "continue",
+    ]);
+    expect(complete.requests.length).toBe(1);
+    expect(incomplete.requests[1].params.context).toEqual({ triggerKind: 3 });
+    expect(failed.requests[1].params.context).toEqual({ triggerKind: 1 });
+    await automatic(7, "con");
+    expect(incomplete.requests[2].params.context).toEqual({ triggerKind: 1 });
+    await provider.getSuggestions({ ...requestFor(editor, 7), prefix: "con" });
+    expect(incomplete.requests[3].params.context).toEqual({ triggerKind: 1 });
   });
 
   it("abandons edited source even when the server ignores cancellation", async () => {
@@ -261,7 +316,7 @@ describe("CompletionProvider request ownership", () => {
     expect((await second).description).toBe("fresh");
     replies[0].resolve({ label: "console", documentation: "stale" });
     expect(await first).toBe(suggestion);
-    expect(provider.cache.items[0].description).toBeUndefined();
+    expect(provider.cache.entries.get(session).items[0].description).toBeUndefined();
   });
 });
 
@@ -518,9 +573,11 @@ describe("CompletionProvider resolve and commands", () => {
       expect(detailed.description).toBe(`(alias) const ${suggestion.displayText}: string`);
       expect(suggestion.leftLabel).toBeUndefined();
     }
-    expect(provider.cache.items.every((suggestion) => suggestion.leftLabel === undefined)).toBe(
-      true,
-    );
+    expect(
+      provider.cache.entries
+        .get(session)
+        .items.every((suggestion) => suggestion.leftLabel === undefined),
+    ).toBe(true);
     expect(
       session.requests.filter(({ method }) => method === "completionItem/resolve").length,
     ).toBe(2);

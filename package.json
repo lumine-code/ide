@@ -43,6 +43,10 @@
   "specPackages": [
     "language-ipython",
     "ide-basedpyright",
+    "ide-eslint",
+    "ide-graphql",
+    "ide-typescript",
+    "ide-vue",
     "documentation-view",
     "hover",
     "autocomplete"

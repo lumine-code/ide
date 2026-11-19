@@ -102,6 +102,13 @@ jobs:
         run: npm ci --ignore-scripts
       - name: Install declared spec packages
         run: node lumine/script/install-spec-packages.js --package ide --home "$RUNNER_TEMP/lumine-spec-home" --github-env "$GITHUB_ENV"
+      - name: Install adapter test dependencies
+        run: |
+          node -e 'const fs = require("node:fs"); const path = require("node:path"); fs.symlinkSync(path.resolve("ide"), path.join(process.env.LUMINE_HOME, "packages", "ide"), "junction");'
+          for adapter in ide-basedpyright ide-eslint ide-graphql ide-typescript ide-vue; do
+            npm --prefix "$LUMINE_HOME/packages/$adapter" ci --ignore-scripts
+          done
+          npm --prefix "$LUMINE_HOME/packages/ide-eslint" run pretest
       - name: Install editor dependencies
         working-directory: lumine
         run: |
@@ -115,16 +122,29 @@ jobs:
       - name: Rebuild native modules for Electron
         working-directory: lumine
         run: npm run build
-      - name: Run the Jasmine spec suite
+      - name: Run IDE and language adapter specs against the candidate client
         working-directory: lumine
-        timeout-minutes: 20
+        timeout-minutes: 30
         run: |
           export TEMP="$RUNNER_TEMP/ide-suite-temp"
           export TMP="$TEMP"
           export TMPDIR="$TEMP"
           mkdir -p "$TEMP"
-          if [ "$RUNNER_OS" = Linux ]; then
-            xvfb-run --auto-servernum npm start -- --test ../ide/spec
-          else
-            npm start -- --test ../ide/spec
+          export LUMINE_TEST_PACKAGES="ide $LUMINE_TEST_PACKAGES"
+          spec_home="$LUMINE_HOME"
+          if [ "$RUNNER_OS" = Windows ]; then
+            spec_home="$(cygpath -u "$spec_home")"
           fi
+          run_specs() {
+            if [ "$RUNNER_OS" = Linux ]; then
+              xvfb-run --auto-servernum npm start -- --test "$1"
+            else
+              npm start -- --test "$1"
+            fi
+          }
+          run_specs ../ide/spec
+          export LUMINE_TEST_PACKAGES=ide
+          for adapter in ide-basedpyright ide-eslint ide-graphql ide-typescript ide-vue; do
+            git -C "$spec_home/packages/$adapter" log -1 --format="$adapter %H"
+            run_specs "$spec_home/packages/$adapter/spec"
+          done

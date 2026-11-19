@@ -778,6 +778,33 @@ describe("ServerSession against a fake server", () => {
     expect(save.params.text).toBe("hidden\n");
   });
 
+  it("sends one didSave notification for a buffer shared by two editors", async () => {
+    const filePath = path.join(tempDir, "shared-save.js");
+    fs.writeFileSync(filePath, "start\n");
+    const session = await startSession({
+      capabilities: {
+        textDocumentSync: { openClose: true, change: 2, save: { includeText: true } },
+      },
+    });
+    const editor = await lumine.workspace.open(filePath);
+    const split = lumine.workspace.buildTextEditor({ buffer: editor.getBuffer() });
+    try {
+      await session.openEditor(editor);
+      await session.openEditor(split);
+      editor.setText("changed\n");
+      await editor.save();
+
+      const saves = (await receivedMessages(session)).filter(
+        ({ method }) => method === "textDocument/didSave",
+      );
+      expect(saves.map(({ params }) => params)).toEqual([
+        { textDocument: { uri: C.pathToUri(filePath) }, text: "changed\n" },
+      ]);
+    } finally {
+      split.destroy();
+    }
+  });
+
   it("pulls, refreshes, and clears diagnostics for a pull-only server", async () => {
     const filePath = path.join(tempDir, "diagnostic.js");
     const uri = require("url").pathToFileURL(filePath).href;
@@ -869,6 +896,87 @@ describe("ServerSession against a fake server", () => {
     expect(requests[1].params.previousResultIds).toEqual([{ uri, value: "w1" }]);
     expect(manager.diagnosticsFor(session, uri)).toEqual([diagnostic]);
     expect(session.previousWorkspaceDiagnosticResultIds()).toEqual([{ uri, value: "w2" }]);
+  });
+
+  it("retries cancelled diagnostics unless the server declines another request", async () => {
+    const filePath = path.join(tempDir, "retry.js");
+    const uri = C.pathToUri(filePath);
+    fs.writeFileSync(filePath, "const value = 1;\n");
+    const session = await startSession({
+      capabilities: { textDocumentSync: 2, diagnosticProvider: { identifier: "retry" } },
+      errorSequencesByIdentifier: {
+        "textDocument/diagnostic": {
+          retry: [
+            { code: -32802, message: "Loading project" },
+            null,
+            { code: -32802, message: "No retry", data: { retriggerRequest: false } },
+          ],
+        },
+      },
+      responses: { "textDocument/diagnostic": { kind: "full", resultId: "first", items: [] } },
+    });
+    const editor = await lumine.workspace.open(filePath);
+    await session.openEditor(editor);
+    const document = session.documents.get(uri);
+    await until(() => document.diagnosticResultId === "first");
+    await session.pullDiagnostics(document);
+    const requests = (await receivedMessages(session)).filter(
+      ({ method }) => method === "textDocument/diagnostic",
+    );
+    expect(requests.map(({ params }) => params.previousResultId)).toEqual([
+      undefined,
+      undefined,
+      "first",
+    ]);
+  });
+
+  it("retries workspace diagnostics with a fresh token and already accepted partial result IDs", async () => {
+    const uri = C.pathToUri(path.join(tempDir, "retry-workspace.js"));
+    const session = await startSession({
+      capabilities: { diagnosticProvider: { identifier: "retry", workspaceDiagnostics: true } },
+      errorSequencesByIdentifier: {
+        "workspace/diagnostic": { retry: [{ code: -32802, message: "Loading project" }, null] },
+      },
+      workspaceDiagnosticPartialsByIdentifier: {
+        retry: [
+          { items: [{ uri, version: null, kind: "full", resultId: "partial", items: [] }] },
+          null,
+        ],
+      },
+      responses: { "workspace/diagnostic": { items: [] } },
+    });
+    await until(async () => {
+      const requests = (await receivedMessages(session)).filter(
+        ({ method }) => method === "workspace/diagnostic",
+      );
+      return requests.length === 2 && !session.workspaceDiagnosticPromise;
+    });
+    const requests = (await receivedMessages(session)).filter(
+      ({ method }) => method === "workspace/diagnostic",
+    );
+    expect(requests[0].params.previousResultIds).toEqual([]);
+    expect(requests[1].params.previousResultIds).toEqual([{ uri, value: "partial" }]);
+    expect(requests[1].params.partialResultToken).not.toBe(requests[0].params.partialResultToken);
+  });
+
+  it("bounds previous workspace diagnostic IDs without evicting accepted results", async () => {
+    const session = await startSession({
+      responses: { "workspace/diagnostic": { items: [] } },
+    });
+    session.capabilities.diagnosticProvider = { workspaceDiagnostics: true };
+    const ids = session.workspaceDiagnosticState().resultIds;
+    for (let index = 0; index < 17_000; index++) {
+      const uri = `file:///workspace/${index}.js`;
+      ids.set(uri, { uri, value: `report-${index}` });
+    }
+    await session.pullWorkspaceDiagnostics();
+    const request = (await receivedMessages(session)).find(
+      ({ method }) => method === "workspace/diagnostic",
+    );
+    expect(request.params.previousResultIds.length).toBeGreaterThan(16_000);
+    expect(request.params.previousResultIds.length).toBeLessThan(ids.size);
+    expect(ids.size).toBe(17_000);
+    expect(session.connection.disposed).toBe(false);
   });
 
   it("publishes partial workspace diagnostic reports through the same funnel", async () => {
@@ -3496,6 +3604,18 @@ describe("ServerSession against a fake server", () => {
     await Promise.all([starting, stopping]);
 
     expect(session.state).toBe("stopped");
+  });
+
+  it("cleans up a server that never answers initialize", async () => {
+    const { setTimeout: nativeSetTimeout } = require("node:timers");
+    spyOn(global, "setTimeout").and.callFake((callback, timeout, ...args) =>
+      nativeSetTimeout(callback, timeout === 60_000 ? 50 : timeout, ...args),
+    );
+    const session = createSession({ hang: ["initialize"] });
+    await expectAsync(session.start()).toBeRejectedWithError(/initialize timed out/);
+    expect(session.state).toBe("stopped");
+    expect(session.processExited).toBe(true);
+    expect(session.connection.disposed).toBe(true);
   });
 
   it("allows a server with a one-second exit interceptor to leave naturally", async () => {
