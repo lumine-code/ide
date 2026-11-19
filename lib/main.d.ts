@@ -260,6 +260,7 @@ export interface Diagnostic {
 export type LanguageServerFeature =
   | "diagnostics"
   | "autocomplete"
+  | "inlineCompletion"
   | "hover"
   | "signature"
   | "definition"
@@ -506,6 +507,27 @@ export interface DocumentSymbolSource {
   score: 1;
   state: "ready" | "starting" | "unavailable";
   message?: string;
+}
+export interface InlineCompletion {
+  text: string;
+  snippet?: string;
+  range?: LumineRange | [[number, number], [number, number]];
+  filterText?: string;
+  isApplicable?(): boolean;
+  didAccept?(): void | Promise<void>;
+}
+export interface InlineCompletionProvider {
+  name: string;
+  packageName: string;
+  priority: number;
+  canProvideInlineCompletions(editor: TextEditor): boolean;
+  onDidInvalidateInlineCompletions(callback: (event: { editor?: TextEditor }) => void): Disposable;
+  getInlineCompletions(request: {
+    editor: TextEditor;
+    bufferPosition: Point;
+    triggerKind: "invoked" | "automatic" | 1 | 2;
+    signal?: AbortSignal;
+  }): Promise<InlineCompletion[]>;
 }
 export interface DocumentSymbolProvider {
   name: string;

@@ -31,8 +31,11 @@ global.lumine = {
   assert.equal(main.manager._activity, null);
   main.manager.setBusySignal(null);
   const completion = main.provideAutocomplete();
+  const inlineCompletion = main.provideInlineCompletion();
   const signature = main.provideHoverSignature();
   assert.deepEqual([...completion.triggerCharacters], []);
+  assert.equal(inlineCompletion.canProvideInlineCompletions({}), false);
+  inlineCompletion.onDidInvalidateInlineCompletions(() => {}).dispose();
   assert.deepEqual([...signature.triggerCharacters], []);
   assert.deepEqual([...signature.retriggerCharacters], []);
   main.manager.sessions.set("metadata", {
@@ -76,7 +79,7 @@ global.lumine = {
   registered.dispose();
   await main.deactivate();
   assert.throws(() => completion.triggerCharacters, { name: "AbortError" });
-  for (const filename of ${JSON.stringify(["server-session", "session-controller", "workspace-edits", "workspace-documents", "diagnostic-scope-cache", "server-activity", "converters", "linter-messages", "language-ids", "capabilities", "server-resolver", "managed-servers", "installation-store", "installation-controller", "installation-io", "file-operation-preparation", "workspace-file-operations-runtime", "language-server-manager-runtime", "completion-provider", "signature-provider", "documentation-code-block", "workspace-file-operations", "linter-bridge", "linter-bridge-runtime", "adapter-selection", "file-watchers", "provider-characters"].map((file) => require.resolve("../lib/" + file)))}) {
+  for (const filename of ${JSON.stringify(["server-session", "session-controller", "workspace-edits", "workspace-documents", "diagnostic-scope-cache", "server-activity", "converters", "linter-messages", "language-ids", "capabilities", "server-resolver", "managed-servers", "installation-store", "installation-controller", "installation-io", "file-operation-preparation", "workspace-file-operations-runtime", "language-server-manager-runtime", "completion-provider", "inline-completion-provider", "signature-provider", "documentation-code-block", "workspace-file-operations", "linter-bridge", "linter-bridge-runtime", "adapter-selection", "file-watchers", "provider-characters"].map((file) => require.resolve("../lib/" + file)))}) {
     assert.equal(require.cache[filename], undefined, filename + " loaded before an IDE operation");
   }
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -98,6 +98,7 @@ Tweak the server list, its details step, and the status-bar item from your style
 
 - [`ide`](docs/ide.md): provided to adapter packages to register language servers and reach sessions.
 - `autocomplete.provider`: provided to autocomplete to serve language-server completions.
+- `autocomplete.inline-provider`: provided to autocomplete to serve inline suggestions from a server with the LSP 3.18 capability.
 - `symbol.document-provider`: list applicable language-server sources through `getDocumentSymbolSources(editor, { signal })` and retrieve the exact `sourceId` through `getDocumentSymbols(editor, { sourceId, signal, timeoutMs })`. Each adapter has a stable `ide:<adapter.id>` source ID, its full display name, the `LS` label and score `1`; sources report ready, starting or unavailable state. Session, adapter, notebook, capability and feature changes invalidate affected document results.
 - `symbol.workspace-provider`: merge workspace symbols from supporting servers already running for the requested project roots. Searching never starts a server or opens a document; unavailable, starting, partial and failed sources are reported separately from an empty successful search.
 - `symbol.definition-provider`: resolve the symbol at the requested position through the first supporting language server.

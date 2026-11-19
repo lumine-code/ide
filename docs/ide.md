@@ -9,7 +9,7 @@ Registers a language server with the editor. The adapter says how to launch it a
 | Consumed by | `consumeIde(client)`                        |
 | Owner       | `ide`                                       |
 
-An adapter package is small — a manifest entry, a `resolveServer`, and a grammar list. Everything a language server can do then arrives in the editor at once, because `ide` implements the UI-facing services (`autocomplete.provider`, `symbol.document-provider`, `symbol.workspace-provider`, `symbol.definition-provider`, `context-help.provider`, `hyperclick.provider`, `refactor.provider`, `find-references.provider`, `intentions.list`, `code-lens.provider`, `inlay-hints.provider`, `semantic-tokens.provider`, and the four `code-format.*`) on every adapter's behalf. You do not implement any of them.
+An adapter package is small — a manifest entry, a `resolveServer`, and a grammar list. The `ide` hub implements UI-facing services on every adapter's behalf, including `autocomplete.provider`, `autocomplete.inline-provider`, `symbol.document-provider`, `symbol.workspace-provider`, `symbol.definition-provider`, `context-help.provider`, `hyperclick.provider`, `refactor.provider`, `find-references.provider`, `intentions.list`, `code-lens.provider`, `inlay-hints.provider`, `semantic-tokens.provider`, and the four `code-format.*`.
 
 None (`lumine.grammars.nullGrammar`) suspends document intelligence for that editor. The hub neither starts an adapter for it nor copies or synchronizes its text, and document requests return no session or result. Selecting None closes existing wire documents, withdraws their diagnostics and retires their pending work; choosing a grammar allows attachment again. This also applies to notebook cells, which leave and rejoin the notebook's synchronized cell list. Plain Text remains a separate grammar and can still receive services whose providers support it.
 
@@ -202,6 +202,12 @@ The configuration context is `{ rootPath, rootUri, launch, resolver, session? }`
 `getDocumentationCodeBlockProjection` receives a block's original text, fence language and resolved grammar scope. Return `null` to use the normal renderer, or `{ scopeName, text, regions, validation? }` to parse private source with the editor's grammar. Each region has UTF-16 `start` and `end` offsets in the original block, plus either `projectedStart` in the private source or explicit `scopes`. Text outside those regions stays neutral. An optional `validation` descriptor supplies an absolute syntax `module` path, exported `method` and serializable `params`. That method runs beside the parser with the read-only syntax context and returns additional scope regions, or `null` to reject the projection. The default requires an error-free tree with at least one named node. Syntax nodes and validation callbacks never cross into the renderer; colored text runs arrive in bounded packets. Failed hooks, invalid parses and unavailable grammars fall back to the normal renderer, and the temporary editor is always destroyed.
 
 Completion blocks belong to the session that supplied the item, including after resolve. Merged hover blocks retain the adapter of each surviving section; deduplicated sections keep their first owner. Identical blocks embedded in different sections from different servers use the normal renderer when their ownership is ambiguous.
+
+### Inline completions
+
+Servers can advertise `inlineCompletionProvider` at initialization or register `textDocument/inlineCompletion` dynamically. The hub routes automatic and explicit invocations through the first matching live session and passes returned strings, snippets, and filter text to `autocomplete.inline-provider@1.0.0`. Replacement ranges stay on the caret's line. With no explicit range, a suggestion that starts with the typed word prefix replaces that prefix. Other suggestions insert at the caret. For projected documents, the replacement must map to an editable range in the original buffer.
+
+The hub calls an item's advertised server command only after the editor has inserted the accepted suggestion and synchronized the change. The command remains bound to the session and document that returned the item. Session, capability and feature changes invalidate pending and displayed inline suggestions.
 
 ### Client service
 
@@ -564,7 +570,7 @@ The once-per-window flag is cleared as soon as a session for that adapter starts
 
 More than one adapter commonly covers one grammar — a type checker beside a linter — and for the requests whose answers cannot be merged the hub has to pick one server. Left to itself it picks whichever adapter registered first, which is package activation order and says nothing about which server the user wants. The feature switches are how that choice is expressed: a switched-off server is skipped, and the next one that can serve the request answers instead.
 
-The vocabulary is `diagnostics`, `autocomplete`, `hover`, `signature`, `definition`, `references`, `callHierarchy`, `typeHierarchy`, `symbols`, `format`, `rename`, `codeActions`, `inlayHints`, `codeLens`, and `semanticTokens`. The `format` switch covers all formatting requests, and `symbols` supplies go-to-symbol, the outline, and breadcrumbs from one document-symbol result.
+The vocabulary is `diagnostics`, `autocomplete`, `inlineCompletion`, `hover`, `signature`, `definition`, `references`, `callHierarchy`, `typeHierarchy`, `symbols`, `format`, `rename`, `codeActions`, `inlayHints`, `codeLens`, and `semanticTokens`. The `format` switch covers all formatting requests, and `symbols` supplies go-to-symbol, the outline, and breadcrumbs from one document-symbol result.
 
 Declare them in your `package.json` under `features`, listing **only what your server actually advertises** — a switch for a capability the server never had is a control that does nothing:
 

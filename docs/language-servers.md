@@ -1,6 +1,6 @@
 # Language servers
 
-The optional **`ide`** package is the editor's minimal Language Server Protocol 3.17 hub. It starts and synchronizes servers, coordinates protocol operations, and routes results to editor services; feature packages render those results, and separate optional infrastructure can perform filesystem changes. `ide` is not bundled.
+The optional **`ide`** package is the editor's Language Server Protocol hub. It uses a 3.17 baseline with selected 3.18 capabilities, including inline completions. It starts and synchronizes servers, coordinates protocol operations, and routes results to editor services. Feature packages render those results, and optional infrastructure can perform filesystem changes.
 
 ## Installation
 
