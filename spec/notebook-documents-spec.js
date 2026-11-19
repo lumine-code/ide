@@ -1155,6 +1155,48 @@ describe("NotebookDocuments against a fake server", () => {
     expect(manager.workspaceDocuments.resolveUri(uri)).toBeNull();
   });
 
+  it("materializes a deferred cell for an edit at its existing server version", async () => {
+    registerFakeAdapter({ capabilities: { notebookDocumentSync: RUFF_SYNC } });
+    const first = buildCellEditor("a\n");
+    const materialize = jasmine
+      .createSpy("materialize cell")
+      .and.callFake(() => buildCellEditor("b\n"));
+    const bridge = notebooks.open({
+      filePath: notebookPath,
+      editorForCell: materialize,
+      cells: [
+        { id: "first", kind: "code", editor: first, scopeName: "text.plain" },
+        { id: "deferred", kind: "code", text: "b\n", scopeName: "text.plain" },
+      ],
+    });
+    await bridge.attached;
+    const uri = bridge.uriForCell("deferred");
+    const session = theSession();
+    const document = session.documents.get(C.uriKey(uri));
+    expect(document.editor).toBeNull();
+    const result = await manager.applyWorkspaceEditDetailed(
+      {
+        documentChanges: [
+          {
+            textDocument: { uri, version: document.version },
+            edits: [
+              {
+                range: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } },
+                newText: "renamed",
+              },
+            ],
+          },
+        ],
+      },
+      "Rename variable",
+      session,
+    );
+
+    expect(result.applied).withContext(JSON.stringify(result)).toBe(true);
+    expect(materialize).toHaveBeenCalledOnceWith("deferred");
+    expect(document.editor.getText()).toBe("renamed\n");
+  });
+
   it("accepts cell diagnostics stamped with either the cell or the notebook version", async () => {
     // Servers disagree on which counter a cell publish carries: basedpyright
     // stamps the cell text document's version, ruff the notebook document's.

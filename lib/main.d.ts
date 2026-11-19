@@ -804,6 +804,8 @@ export interface NotebookDocumentDescriptor {
   metadata?: object;
   /** Reveals a cell for server-initiated navigation; range is cell-relative. */
   show?(target: { cellId: string; range?: [number, number][]; takeFocus?: boolean }): void;
+  /** Materializes a cell editor for a workspace edit, without focusing it. */
+  editorForCell?(cellId: string): TextEditor | null;
 }
 export interface NotebookBridge {
   notebookUri: string;
