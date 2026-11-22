@@ -252,7 +252,7 @@
     "picomatch": "^4.0.7",
     "semver": "^7.8.6",
     "tar": "^7.5.23",
-    "vscode-jsonrpc": "^10.0.0",
+    "vscode-jsonrpc": "^10.0.1",
     "xz-decompress": "^0.2.3",
     "yauzl": "^3.4.0"
   },
