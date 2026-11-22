@@ -31,6 +31,21 @@ const until = async (condition, timeout = 5000) => {
   throw new Error("Timed out waiting for condition");
 };
 
+const renameFixturePath = async (source, target, isDirectory) => {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await fs.promises.rename(source, target);
+      return;
+    } catch (error) {
+      // Windows can briefly deny a directory rename while a watcher or scanner
+      // inspects it. The fixture still requires the real rename to succeed.
+      if (process.platform !== "win32" || !isDirectory || error.code !== "EPERM" || attempt === 5)
+        throw error;
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  }
+};
+
 const createBusySignal = () => {
   const providers = [];
   return {
@@ -162,7 +177,7 @@ describe("ServerSession against a fake server", () => {
                 fs.rmSync(operation.newPath, { recursive: true, force: true });
               }
               const isDirectory = fs.statSync(operation.oldPath).isDirectory();
-              fs.renameSync(operation.oldPath, operation.newPath);
+              await renameFixturePath(operation.oldPath, operation.newPath, isDirectory);
               return {
                 status: "applied",
                 effects: [
