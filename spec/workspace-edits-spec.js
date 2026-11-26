@@ -76,6 +76,22 @@ describe("Workspace edit target lifetimes", () => {
     });
   });
 
+  it("collapses the recovery paths left by a file edit when there are several", async () => {
+    const cleanupPaths = [path.join(tempDir, ".recovery-1"), path.join(tempDir, ".recovery-2")];
+    filePlan.executeNext.and.resolveTo({ status: "applied", effects: [], cleanupPaths });
+    spyOn(lumine.window, "confirm").and.resolveTo(0);
+    const warning = spyOn(lumine.notifications, "addWarning");
+
+    const result = await manager.applyWorkspaceEditDetailed({ documentChanges: [deleteChange()] });
+
+    expect(result.applied).toBe(true);
+    expect(warning).toHaveBeenCalledOnceWith("A file operation left recovery paths", {
+      detail: cleanupPaths.join("\n"),
+      detailCollapsed: true,
+      dismissable: true,
+    });
+  });
+
   for (const replace of [false, true]) {
     it(`refuses a ${replace ? "replaced" : "closed"} document generation after confirmation`, async () => {
       const { editor, uri, document, session } = await openTarget();
