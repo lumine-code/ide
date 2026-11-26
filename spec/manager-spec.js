@@ -2906,6 +2906,17 @@ describe("LanguageServerManager server messages", () => {
     });
   });
 
+  it("collapses log output by default", () => {
+    const addInfo = spyOn(lumine.notifications, "addInfo");
+    const output = "First log line\nSecond log line";
+    manager.showMessage(4, output, session);
+    expect(addInfo).toHaveBeenCalledOnceWith("Language server log", {
+      detail: `Server: Test Language Server\n\n${output}`,
+      detailCollapsed: true,
+      dismissable: true,
+    });
+  });
+
   it("still identifies a server it has no session for", () => {
     manager.showMessage(1, "Something failed.", undefined);
     const [message, options] = lumine.notifications.addError.calls.mostRecent().args;
